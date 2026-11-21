@@ -35,8 +35,8 @@ try {
   </form>
 </header>
 <main id="content"
-      {% if autorefresh %}hx-get="{{ base }}{{ request.url.path }}{{ ('?' ~ request.url.query) if request.url.query }}"
-      hx-trigger="every 30s" hx-select="#content" hx-target="#content" hx-swap="outerHTML" hx-disinherit="*"{% endif %}>
+      {% if autorefresh and refresh %}hx-get="{{ base }}{{ request.url.path }}{{ ('?' ~ request.url.query) if request.url.query }}"
+      hx-trigger="every {{ refresh }}s" hx-select="#content" hx-target="#content" hx-swap="outerHTML" hx-disinherit="*"{% endif %}>
 {% if store.opts.demo %}<div class="banner">Demo režim – zobrazená data jsou vymyšlená.</div>{% endif %}
 {% block content %}{% endblock %}
 </main>

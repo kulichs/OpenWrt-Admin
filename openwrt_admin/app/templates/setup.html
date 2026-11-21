@@ -38,7 +38,27 @@ chmod 600 /etc/dropbear/authorized_keys</pre>
   <p class="muted small">Do seznamů se píše uživatelské jméno HA (Nastavení → Lidé → Uživatelé), případně zobrazované jméno; velikost písmen nehraje roli.</p>
 </div>
 <div class="panel">
-  <h2>4. JSON API</h2>
+  <h2>4. Obnovování stránky</h2>
+  <p>Stránky se samy načítají znovu po
+    {% if refresh %}<b>{{ refresh }} s</b>{% else %}<b>nikdy</b> (vypnuto){% endif %}
+    {% if refresh_own %}<span class="muted small">(vlastní nastavení tohoto prohlížeče)</span>{% else %}<span class="muted small">(výchozí z konfigurace add-onu, <code>refresh_interval</code>)</span>{% endif %}.</p>
+  <label class="inline">Pro tento prohlížeč:
+    <select id="refresh-select">
+      <option value="">výchozí z konfigurace ({{ store.opts.refresh_interval or 0 }} s)</option>
+      {% for v in refresh_choices %}<option value="{{ v }}" {{ 'selected' if refresh_own and v == refresh }}>{{ 'vypnuto' if v == 0 else (v ~ ' s' if v < 60 else (v // 60) ~ ' min') }}</option>{% endfor %}
+    </select>
+  </label>
+  <p class="muted small">Výchozí hodnotu pro všechny nastavíš v Home Assistantu v konfiguraci add-onu (<code>refresh_interval</code>, 0 = vypnuto). Volba tady platí jen v tomto prohlížeči.</p>
+  <script>
+  document.getElementById("refresh-select").addEventListener("change", function (e) {
+    var v = e.target.value;
+    document.cookie = "{{ refresh_cookie }}=" + (v || "") + "; path=/; SameSite=Lax" + (v ? "; max-age=31536000" : "; max-age=0");
+    location.reload();
+  });
+  </script>
+</div>
+<div class="panel">
+  <h2>5. JSON API</h2>
   <p>Aktuální stav je i ve strojově čitelné podobě: <a href="{{ base }}/api/state"><code>api/state</code></a>.</p>
 </div>
 {% endblock %}

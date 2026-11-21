@@ -1,11 +1,27 @@
-# Home Assistant add-ony
+# Home Assistant add-ons
+
+**[English](#english) · [Česky](#česky)**
+
+## English
+
+| Add-on | Description |
+|---|---|
+| [OpenWrt-Admin](openwrt_admin/) | Manage OpenWrt access points and Wi-Fi clients over SSH (`ubus`/`uci`): overview, clients, SSIDs, reboot, package updates, permissions per Home Assistant user |
+
+**Install:** Home Assistant → **Settings → Apps (Add-ons) → store → ⋮ → Repositories** → add the URL of this repository (or `ha store add <URL>` in the HA terminal). Not via *Marketplace → Add from link*, that one is GitHub/HACS only.
+
+Full documentation: [openwrt_admin/DOCS.md](openwrt_admin/DOCS.md) (also shown in HA on the add-on's **Documentation** tab).
+
+**New release:** bump `version` in `openwrt_admin/config.yaml`, add a `CHANGELOG.md` entry, `git push`. Home Assistant offers the update by itself.
+
+## Česky
 
 | Add-on | Popis |
 |---|---|
-| [OpenWrt-Admin](openwrt_admin/) | Správa OpenWrt AP a Wi-Fi klientů (SSH/ubus): přehled, SSID, restart, aktualizace, role podle uživatelů HA |
+| [OpenWrt-Admin](openwrt_admin/) | Správa OpenWrt AP a Wi-Fi klientů přes SSH (`ubus`/`uci`): přehled, klienti, SSID, restart, aktualizace balíčků, oprávnění podle uživatelů Home Assistantu |
 
-## Instalace do HA
+**Instalace:** Home Assistant → **Nastavení → Aplikace (Doplňky) → obchod → ⋮ → Repozitáře** → přidat URL tohoto repozitáře (nebo `ha store add <URL>` v terminálu HA). Ne přes *Marketplace → Přidat z odkazu*, ten bere jen GitHub/HACS.
 
-**Nastavení → Doplňky → Obchod s doplňky → ⋮ → Repozitáře** a přidat URL tohoto repozitáře.
+Celá dokumentace: [openwrt_admin/DOCS.md](openwrt_admin/DOCS.md) (v HA i na kartě **Dokumentace** u add-onu).
 
-Nová verze add-onu: zvednout `version` v `openwrt_admin/config.yaml` a doplnit `CHANGELOG.md`, pak `git push`. HA nabídne aktualizaci.
+**Nová verze:** zvednout `version` v `openwrt_admin/config.yaml`, doplnit `CHANGELOG.md`, `git push`. HA nabídne aktualizaci sám.

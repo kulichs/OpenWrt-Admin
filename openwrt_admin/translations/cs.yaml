@@ -1,0 +1,25 @@
+configuration:
+  ssh_user:
+    name: SSH uživatel
+    description: Uživatel, kterým se add-on přihlašuje na AP a router (obvykle root).
+  poll_interval:
+    name: Interval sběru dat (s)
+    description: Jak často se načítají data z AP, 10–600 sekund.
+  refresh_interval:
+    name: Obnovování stránky (s)
+    description: Jak často se otevřené stránky samy načtou znovu, v sekundách. 0 = vypnuto. Každý prohlížeč si to může změnit na stránce Nastavení.
+  dhcp_router:
+    name: DHCP router
+    description: Router s DHCP (jména a IP klientů), např. 192.168.1.1 nebo host:port. Prázdné = vypnuto.
+  demo:
+    name: Demo režim
+    description: Zobrazí vymyšlená data, bez SSH.
+  full_access:
+    name: Plný přístup
+    description: Uživatelská jména HA, která smí restartovat, aktualizovat balíčky a měnit SSID. Když jsou oba seznamy prázdné, má plný přístup každý.
+  read_access:
+    name: Jen čtení
+    description: Uživatelská jména HA, která smí jen prohlížet. Kdo není v žádném seznamu, nemá přístup.
+  aps:
+    name: Access pointy
+    description: Seznam OpenWrt AP (název, adresa, volitelně SSH port).

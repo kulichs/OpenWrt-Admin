@@ -40,7 +40,7 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 def load_options() -> dict:
     opts = {"aps": [], "ssh_user": "root", "poll_interval": 30, "dhcp_router": "", "demo": False,
-            "full_access": [], "read_access": []}
+            "full_access": [], "read_access": [], "refresh_interval": 30}
     if OPTIONS.exists():
         opts.update(json.loads(OPTIONS.read_text()))
     return opts
@@ -258,10 +258,28 @@ templates.env.filters.update(bytes=fmt_bytes, duration=fmt_duration, rate=fmt_ra
                              sigclass=signal_class, ago=ago)
 
 
+REFRESH_CHOICES = [0, 10, 15, 30, 60, 120, 300]
+REFRESH_COOKIE = "owadmin_refresh"
+
+
+def refresh_interval(request: Request) -> tuple[int, bool]:
+    """(interval v s, 0 = vypnuto; True = vlastni hodnota prohlizece z cookie)."""
+    c = request.cookies.get(REFRESH_COOKIE, "")
+    if c.isdigit() and int(c) in REFRESH_CHOICES:
+        return int(c), True
+    try:
+        v = int(store.opts.get("refresh_interval", 30))
+    except (TypeError, ValueError):
+        v = 30
+    return (0 if v <= 0 else max(5, v)), False
+
+
 def render(request: Request, name: str, **ctx):
     base = request.headers.get("X-Ingress-Path", "").rstrip("/")
+    refresh, refresh_own = refresh_interval(request)
     return templates.TemplateResponse(request, name, {
         "base": base, "store": store, "now": time.time(), "autorefresh": True,
+        "refresh": refresh, "refresh_own": refresh_own, "refresh_choices": REFRESH_CHOICES, "refresh_cookie": REFRESH_COOKIE,
         "user": request.state.user, "can_edit": request.state.user["role"] == "full", **ctx})
 
 

@@ -1,35 +1,55 @@
 # Changelog
 
-## 0.1.0
-- První verze, pouze čtení: přehled AP, rádia, SSID, klienti, detail AP, JSON API.
-- Jména a IP klientů z DHCP na routeru.
-- SSH klíč generovaný add-onem, Ingress (panel v HA), demo režim.
+Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
-## 0.1.1
-- Tmavý režim podle tématu Home Assistantu (profil → Motiv), jinak podle systému.
-
-## 0.1.2
-- Přejmenováno na OpenWrt-Admin (slug `openwrt_admin`).
-
-## 0.1.3
-- U klientů pásmo (2,4/5/6 GHz) a vyjednaný standard: Wi-Fi 4 (n), 5 (ac), 6 (ax), 7 (be), případně 802.11a/b/g.
-- Filtr klientů podle pásma, pásmo u SSID v detailu AP.
-
-## 0.2.0
-- Karta pro každý AP v horní liště (stav online/offline a počet klientů).
-- Akce na stránce AP: **Restart**, **Zkontrolovat aktualizace** (`apk update` + seznam), **Upgrade balíčků** (`apk upgrade`). Na starších AP s `opkg` automaticky přes `opkg`. Varování při málo místa na overlay.
-- Nová stránka **SSID**: změna názvu, hesla, skrytí a zapnutí/vypnutí najednou na více AP. Před zápisem náhled `uci` příkazů, pak `uci commit wireless && wifi reload`. Heslo se nikde nezobrazuje.
-- SSID se čtou z `uci show wireless`, takže jsou vidět i vypnutá.
-- Akce jdou spustit jen z rozhraní add-onu (ochrana proti CSRF), na jednom AP vždy jen jedna akce naráz.
-
-## 0.2.1
-- Oprava: add-on 0.2.0 nenastartoval, chyběla závislost `python-multipart` (formuláře SSID).
+## 0.4.0
+- Page refresh interval is configurable: `refresh_interval` in the add-on configuration (0 = off) and per browser on the Settings page.
+- Default configuration and demo data use example devices (AP-Living, AP-Office, 192.168.1.x) instead of real ones.
+- Documentation in English and Czech (DOCS.md, README.md, CHANGELOG.md); configuration options translated (`translations/en.yaml`, `cs.yaml`).
+---
+- Interval obnovování stránky jde nastavit: `refresh_interval` v konfiguraci add-onu (0 = vypnuto) a pro každý prohlížeč na stránce Nastavení.
+- Výchozí konfigurace a demo data používají ukázková zařízení (AP-Living, AP-Office, 192.168.1.x) místo skutečných.
+- Dokumentace anglicky a česky (DOCS.md, README.md, CHANGELOG.md), volby konfigurace přeložené (`translations/en.yaml`, `cs.yaml`).
 
 ## 0.3.0
-- **Uživatelé a oprávnění** podle přihlášeného uživatele Home Assistantu (hlavičky Ingressu): `full_access` (restart, apk, SSID), `read_access` (jen čtení), ostatní „Přístup odepřen“. Bez nastavení rolí mají plný přístup všichni (jako dřív).
-- Když Ingress nepošle jméno uživatele a role jsou nastavené, add-on přepne do režimu jen pro čtení.
-- Kontrola oprávnění na serveru, uživatel s právem jen pro čtení nevidí tlačítka akcí ani formuláře SSID.
-- `panel_admin: false`: panel vidí i běžní uživatelé HA, o přístupu rozhoduje add-on.
-- V horní liště je jméno a role, v Nastavení kdo je přihlášený a proč má danou roli.
-- V logu je u akcí jméno uživatele (např. `radim: Restart OpenWrt_Puda`).
+- Users and permissions based on the Home Assistant user (Ingress headers): `full_access`, `read_access`, everyone else gets "Access denied". With no roles configured everyone has full access. Without a username from Ingress: read-only. Enforced on the server; actions are logged with the user name. `panel_admin: false`.
+- Fix: radio band for APs with the older `hwmode` (11g/11a) is shown as 2.4/5 GHz.
+---
+- Oprávnění podle uživatele Home Assistantu (hlavičky Ingressu): `full_access`, `read_access`, ostatní „Přístup odepřen“. Bez nastavených rolí má plný přístup každý. Bez jména uživatele z Ingressu jen čtení. Kontrola na serveru, akce se logují se jménem uživatele. `panel_admin: false`.
 - Oprava: pásmo rádia u AP se starším `hwmode` (11g/11a) se zobrazuje jako 2,4/5 GHz.
+
+## 0.2.1
+- Fix: 0.2.0 did not start, missing dependency `python-multipart`.
+---
+- Oprava: 0.2.0 nenastartoval, chyběla závislost `python-multipart`.
+
+## 0.2.0
+- A tab for each AP in the top bar (online/offline, client count).
+- AP page: **Reboot**, **Check for updates**, **Upgrade packages** (`apk`, or `opkg` on older APs); warning when the overlay is almost full.
+- New **SSID** page: change name, password, hidden and on/off on several APs at once, with a preview of the `uci` commands; the password is never shown. SSIDs are read from `uci show wireless`, so disabled ones are visible too.
+- Actions only from the add-on UI (CSRF protection), one action per AP at a time.
+---
+- Karta pro každý AP v horní liště (online/offline, počet klientů).
+- Stránka AP: **Restart**, **Zkontrolovat aktualizace**, **Upgrade balíčků** (`apk`, na starších AP `opkg`), varování při plném overlay.
+- Nová stránka **SSID**: změna názvu, hesla, skrytí a zapnutí na více AP najednou s náhledem příkazů `uci`, heslo se nezobrazuje. SSID se čtou z `uci show wireless`, takže jsou vidět i vypnutá.
+- Akce jen z rozhraní add-onu (ochrana proti CSRF), na jednom AP jen jedna akce naráz.
+
+## 0.1.3
+- Client band (2.4/5/6 GHz) and negotiated standard (Wi-Fi 4/5/6/7, 802.11a/b/g); filter by band.
+---
+- U klientů pásmo (2,4/5/6 GHz) a vyjednaný standard (Wi-Fi 4/5/6/7, 802.11a/b/g), filtr podle pásma.
+
+## 0.1.2
+- Renamed to OpenWrt-Admin (slug `openwrt_admin`).
+---
+- Přejmenováno na OpenWrt-Admin (slug `openwrt_admin`).
+
+## 0.1.1
+- Dark mode following the Home Assistant theme, otherwise the system setting.
+---
+- Tmavý režim podle motivu Home Assistantu, jinak podle systému.
+
+## 0.1.0
+- First, read-only version: AP overview, radios, SSIDs, clients, AP details, JSON API, client names/IPs from the router's DHCP, SSH key generated by the add-on, Ingress panel, demo mode.
+---
+- První verze, jen čtení: přehled AP, rádia, SSID, klienti, detail AP, JSON API, jména a IP klientů z DHCP na routeru, SSH klíč generovaný add-onem, panel přes Ingress, demo režim.
