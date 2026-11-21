@@ -2,6 +2,11 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.10.1
+- Fix: since 0.10.0 static DHCP reservations made switched-off devices and Wi-Fi devices that were currently away show up under "LAN / other" on the map. Presence is now decided only by Wi-Fi, switch ports and ARP tables; reservations are used just for names. The router page shows inactive devices in a collapsed "Inactive" section.
+---
+- Oprava: od 0.10.0 se kvůli statickým rezervacím DHCP ukazovala v „LAN / ostatní“ na mapě i vypnutá zařízení a Wi-Fi zařízení, která zrovna nebyla připojená. O přítomnosti teď rozhoduje jen Wi-Fi, porty switche a ARP tabulky; rezervace slouží jen pro jména. Stránka routeru má neaktivní zařízení ve sbalené sekci „Neaktivní“.
+
 ## 0.10.0
 - Device names from more sources: `names` in the configuration (manual) → Home Assistant device registry by MAC (ESPHome, Shelly…; `homeassistant_api: true`, option `ha_names`) → DHCP lease → static DHCP reservation on the router. Names show a small tag with their source.
 - IPs for devices with a static address from the ARP tables of the router and APs; the router page lists all devices the router knows, marked "static IP".

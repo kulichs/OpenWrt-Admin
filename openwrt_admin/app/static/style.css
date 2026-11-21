@@ -138,3 +138,7 @@ svg.netmap.dragging { cursor: grabbing; }
 /* 0.10.0 – zdroj jmena */
 .tag.src-ha { color: var(--accent); border-color: var(--accent); }
 .tag.src-manual { color: var(--good); border-color: var(--good); }
+
+/* 0.10.1 – neaktivni zarizeni */
+details.offline-list { margin-top: 1rem; }
+details.offline-list summary { cursor: pointer; color: var(--muted); }

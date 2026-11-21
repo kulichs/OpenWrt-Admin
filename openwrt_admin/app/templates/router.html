@@ -54,19 +54,31 @@
     </table>
   </div>
 </section>
-<h2>{{ t("router.leases", n=(leases | length)) }}</h2>
+{% set on = leases | selectattr("online") | list %}
+{% set off = leases | rejectattr("online") | list %}
+<h2>{{ t("router.leases", n=(on | length)) }}</h2>
+{% macro lease_table(rows) %}
 <table class="list">
   <thead><tr><th>{{ t("col.device") }}</th><th>IP</th><th>MAC</th><th>{{ t("router.connection") }}</th></tr></thead>
-  {% for l in leases %}
-  <tr>
+  {% for l in rows %}
+  <tr class="{{ '' if l.online else 'row-off' }}">
     <td>{{ l.hostname or "–" }}{% if l.src in ('ha', 'manual', 'static') %} <span class="tag src-{{ l.src }}" title="{{ t('src.' ~ l.src ~ '_title') }}">{{ t('src.' ~ l.src) }}</span>{% endif %}</td>
     <td class="mono">{{ l.ip or "–" }}{% if l.static %} <span class="muted small">{{ t("router.static_ip") }}</span>{% endif %}</td>
     <td class="mono">{{ l.mac }}</td>
-    <td>{% if l.ap %}Wi-Fi · <a href="{{ base }}/ap/{{ l.ap | urlencode }}">{{ l.ap }}</a> · {{ l.ssid }} <span class="muted small">{{ l.band | band }}</span>{% elif l.cable_ap %}{{ t("router.cable_at") }} · <a href="{{ base }}/ap/{{ l.cable_ap | urlencode }}">{{ l.cable_ap }}</a> · port {{ l.cable_port }}{% if l.cable_stale %} <span class="muted small">({{ t("map.last_seen", ago=(l.cable_stale | ago)) }})</span>{% endif %}{% elif l.is_ap %}<span class="muted">{{ t("router.is_ap") }}</span>{% else %}<span class="muted">{{ t("router.not_wifi") }}</span>{% endif %}</td>
+    <td>{% if l.ap %}Wi-Fi · <a href="{{ base }}/ap/{{ l.ap | urlencode }}">{{ l.ap }}</a> · {{ l.ssid }} <span class="muted small">{{ l.band | band }}</span>{% elif l.cable_ap %}{{ t("router.cable_at") }} · <a href="{{ base }}/ap/{{ l.cable_ap | urlencode }}">{{ l.cable_ap }}</a> · port {{ l.cable_port }}{% if l.cable_stale %} <span class="muted small">({{ t("map.last_seen", ago=(l.cable_stale | ago)) }})</span>{% endif %}{% elif l.is_ap %}<span class="muted">{{ t("router.is_ap") }}</span>{% elif l.online %}<span class="muted">{{ t("router.not_wifi") }}</span>{% else %}<span class="muted">{{ t("router.offline") }}</span>{% endif %}</td>
   </tr>
   {% else %}
   <tr><td colspan="4" class="empty">{{ t("router.no_leases") }}</td></tr>
   {% endfor %}
 </table>
+{% endmacro %}
+{{ lease_table(on) }}
+{% if off %}
+<details class="offline-list">
+  <summary>{{ t("router.inactive", n=(off | length)) }}</summary>
+  <p class="muted small">{{ t("router.inactive_hint") }}</p>
+  {{ lease_table(off) }}
+</details>
+{% endif %}
 {% endif %}
 {% endblock %}

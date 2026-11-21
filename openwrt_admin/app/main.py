@@ -168,6 +168,10 @@ class Store:
                 self.ha_status = "ok"
                 if self.router:
                     self.router.arp = {f"192.168.1.{60 + i}": m for i, m in enumerate(nameless)}
+                    # rezervace pro zarizeni, ktera ted nejsou v siti (vypnuta / mimo Wi-Fi)
+                    self.router.static_hosts = {"02:00:00:00:20:01": {"name": "tv-bedroom", "ip": "192.168.1.207"},
+                                                "02:00:00:00:20:02": {"name": "phone-guest", "ip": "192.168.1.208"},
+                                                "02:00:00:00:20:03": {"name": "xbox", "ip": "192.168.1.218"}}
                 self.info = self.build_info()
                 self.wired_state = wiredmod.locate(self.aps, self.router, self.info, self.seen, known=self._known())
                 self.last_poll = time.time()
@@ -268,6 +272,18 @@ class Store:
                 e["hostname"], e["src"] = str(n["name"]), "manual"
         return info
 
+    def present(self, wired: dict | None = None) -> set[str]:
+        """MAC, ktere jsou ted opravdu v siti: ARP routeru/AP (kompletni zaznam), Wi-Fi klienti, MAC na portu
+        switche. Staticke rezervace a stare DHCP leases o pritomnosti nerikaji nic."""
+        p = {c["mac"] for a in self.aps for c in a.clients}
+        for a in [*self.aps, self.router]:
+            if a is not None:
+                p |= set(a.arp.values())
+        w = wired or self.wired_state or {}
+        for devs in (w.get("by_ap") or {}).values():
+            p |= {d["mac"] for d in devs if not d.get("stale")}
+        return p
+
     def _known(self) -> set[str]:
         """MAC, ktere router porad zna (DHCP lease nebo ARP) – pro drzeni 'naposledy videno'."""
         k = set(self.leases)
@@ -289,6 +305,7 @@ class Store:
         macs = set(self.leases)
         if self.router:
             macs |= set(self.router.arp.values()) | {m for m, h in self.router.static_hosts.items() if h.get("ip")}
+        present = self.present(wired)
         out = []
         for mac in macs:
             e = self.info.get(mac) or {"ip": "", "hostname": "", "src": "", "lease": mac in self.leases}
@@ -298,7 +315,7 @@ class Store:
                         "ap": c["ap"] if c else "", "ssid": c["ssid"] if c else "", "band": c.get("band", "") if c else "",
                         "cable_ap": cab[0] if cab else "", "cable_port": cab[1] if cab else "",
                         "cable_stale": cab[2] if cab else None,
-                        "is_ap": mac in wired["ap_macs"]})
+                        "is_ap": mac in wired["ap_macs"], "online": mac in present})
 
         def ipkey(x):
             try:
@@ -561,7 +578,8 @@ async def ap_page(request: Request, name: str):
 async def map_page(request: Request, clients: str = "1", empty: str = "0"):
     show_clients, show_empty = clients != "0", empty == "1"
     w = store.wired()
-    router_wired = [l for l in store.lease_list(w) if not l["ap"] and not l["cable_ap"] and not l["is_ap"]]
+    router_wired = [l for l in store.lease_list(w)
+                    if l["online"] and not l["ap"] and not l["cable_ap"] and not l["is_ap"]]
     topo = topology.build(store.router, store.aps, router_wired, request.state.t, clients=store.all_clients(),
                           show_clients=show_clients, show_empty=show_empty,
                           ap_wired=w["by_ap"], parent=w["parent"])

@@ -184,7 +184,7 @@
   "map.router": "router",
   "map.no_router": "no router configured",
   "map.wired": "LAN / other",
-  "map.wired_sub": "DHCP clients not on Wi-Fi or AP ports",
+  "map.wired_sub": "active devices not on Wi-Fi or AP ports",
   "map.clients": [
     "{n} client",
     "{n} clients"
@@ -234,5 +234,11 @@
   "setup.ha_off": "off (ha_names: false) or the add-on does not run in Home Assistant",
   "setup.names_manual": "Manual (names)",
   "setup.names_static": "Reservations on the router",
-  "setup.names_hint": "Names from Home Assistant are reloaded every 10 minutes and on add-on restart. Manual name: names → mac + name in the add-on configuration."
+  "setup.names_hint": "Names from Home Assistant are reloaded every 10 minutes and on add-on restart. Manual name: names → mac + name in the add-on configuration.",
+  "router.offline": "inactive",
+  "router.inactive": [
+    "Inactive ({n})",
+    "Inactive ({n})"
+  ],
+  "router.inactive_hint": "Devices the router knows (DHCP lease or reservation) that are not on the network now – not on Wi-Fi, on a switch port or in an ARP table."
 }

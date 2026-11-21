@@ -183,7 +183,7 @@
   "map.router": "router",
   "map.no_router": "router není nastavený",
   "map.wired": "LAN / ostatní",
-  "map.wired_sub": "DHCP klienti mimo Wi-Fi a porty AP",
+  "map.wired_sub": "aktivní zařízení mimo Wi-Fi a porty AP",
   "map.clients": [
     "{n} klient",
     "{n} klienti",
@@ -236,5 +236,12 @@
   "setup.ha_off": "vypnuto (ha_names: false) nebo add-on neběží v Home Assistantu",
   "setup.names_manual": "Ručně (names)",
   "setup.names_static": "Rezervace na routeru",
-  "setup.names_hint": "Jména z Home Assistantu se načítají každých 10 minut a při restartu add-onu. Ruční jméno: v konfiguraci add-onu names → mac + name."
+  "setup.names_hint": "Jména z Home Assistantu se načítají každých 10 minut a při restartu add-onu. Ruční jméno: v konfiguraci add-onu names → mac + name.",
+  "router.offline": "neaktivní",
+  "router.inactive": [
+    "Neaktivní ({n})",
+    "Neaktivní ({n})",
+    "Neaktivní ({n})"
+  ],
+  "router.inactive_hint": "Zařízení, která router zná (DHCP záznam nebo rezervace), ale teď nejsou v síti – nejsou na Wi-Fi, na portu switche ani v ARP tabulce."
 }

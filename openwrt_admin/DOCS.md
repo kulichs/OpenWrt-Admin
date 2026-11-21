@@ -104,7 +104,7 @@ Devices with a static IP (typically ESPHome) never ask the router for DHCP, so t
 3. **DHCP lease** on the router,
 4. **static DHCP reservation** on the router (`uci show dhcp`, `host` sections; tag *reservation*).
 
-IPs come from the DHCP lease, the reservation, or the ARP tables of the router and APs (marked *static IP*). The router page lists all devices the router knows (lease, reservation or ARP), not only DHCP clients. The Settings page shows how many names came from each source.
+IPs come from the DHCP lease, the reservation, or the ARP tables of the router and APs (marked *static IP*). The router page lists all devices the router knows (lease, reservation or ARP); those that are not on the network right now are in a collapsed **Inactive** section. A device counts as present when it is a Wi-Fi client, is seen on a switch port of an AP, or has a complete entry in the ARP table of the router or an AP – reservations and old DHCP leases alone do not count. The map shows only present devices. The Settings page shows how many names came from each source.
 
 ### Router
 
@@ -291,7 +291,7 @@ Zařízení s pevnou IP (typicky ESPHome) o DHCP nežádají, takže router jeji
 3. **DHCP** na routeru,
 4. **statická rezervace DHCP** na routeru (`uci show dhcp`, sekce `host`; štítek *rezervace*).
 
-IP se bere z DHCP, z rezervace, nebo z ARP tabulek routeru a AP (označeno *pevná IP*). Stránka routeru ukazuje všechna zařízení, která router zná (DHCP, rezervace nebo ARP), ne jen DHCP klienty. Na stránce Nastavení je vidět, kolik jmen přišlo z kterého zdroje.
+IP se bere z DHCP, z rezervace, nebo z ARP tabulek routeru a AP (označeno *pevná IP*). Stránka routeru ukazuje všechna zařízení, která router zná (DHCP, rezervace nebo ARP); ta, která teď v síti nejsou, jsou ve sbalené sekci **Neaktivní**. Zařízení je přítomné, když je Wi-Fi klientem, je vidět na portu switche AP, nebo má kompletní záznam v ARP tabulce routeru či AP – samotná rezervace nebo starý DHCP záznam nestačí. Mapa ukazuje jen přítomná zařízení. Na stránce Nastavení je vidět, kolik jmen přišlo z kterého zdroje.
 
 ### Router
 
