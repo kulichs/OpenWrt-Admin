@@ -12,8 +12,11 @@ configuration:
     name: Jazyk
     description: Jazyk webového rozhraní. auto = podle jazyka uživatele Home Assistantu (nebo prohlížeče). Každý prohlížeč si ho může změnit na stránce Nastavení.
   dhcp_router:
-    name: DHCP router
-    description: Router s DHCP (jména a IP klientů), např. 192.168.1.1 nebo host:port. Prázdné = vypnuto.
+    name: Router
+    description: OpenWrt router (LAN, bez Wi-Fi), např. 192.168.1.1 nebo host:port. Zobrazí se jako samostatné zařízení (rozhraní, DHCP klienti, restart, aktualizace) a bere se z něj jméno a IP klientů. Prázdné = vypnuto.
+  router_name:
+    name: Název routeru
+    description: Jak se router v add-onu jmenuje (karta a záložka), výchozí Router.
   demo:
     name: Demo režim
     description: Zobrazí vymyšlená data, bez SSH.

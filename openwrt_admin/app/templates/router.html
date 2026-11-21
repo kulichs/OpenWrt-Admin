@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<h1><span class="dot {{ 'on' if ap.online else 'off' }}"></span> {{ ap.name }} <span class="tag">{{ t("router.kind") }}</span> <span class="muted">{{ ap.host }}</span></h1>
+{% set act = base ~ "/ap/" ~ (ap.name | urlencode) %}
+{% if can_edit %}
+<div class="panel actions">
+  <h2>{{ t("ap.actions") }}</h2>
+  <div class="btns">
+    <button class="secondary" hx-post="{{ act }}/pkg-update" hx-target="#action-out" hx-disabled-elt=".btns button"
+            {{ 'disabled' if not ap.online }}>{{ t("ap.check_updates") }}</button>
+    <button class="warnbtn" hx-post="{{ act }}/pkg-upgrade" hx-target="#action-out" hx-disabled-elt=".btns button"
+            hx-confirm="{{ t('router.confirm_upgrade', pkg=(ap.pkg or 'apk'), ap=ap.name) }}"
+            {{ 'disabled' if not ap.online }}>{{ t("ap.upgrade") }}</button>
+    <button class="danger" hx-post="{{ act }}/reboot" hx-target="#action-out" hx-disabled-elt=".btns button"
+            hx-confirm="{{ t('router.confirm_reboot', ap=ap.name) }}"
+            {{ 'disabled' if not ap.online }}>{{ t("ap.reboot") }}</button>
+    <span class="htmx-indicator muted">{{ t("ap.running") }}</span>
+  </div>
+  <p class="muted small">{{ t("router.actions_note") }}</p>
+  <div id="action-out" hx-preserve="true"></div>
+</div>
+{% endif %}
+{% if not ap.online %}
+<p class="err">{{ t("ap.unreachable", error=(ap.error or t("ap.not_loaded"))) }}</p>
+{% else %}
+<section class="grid2">
+  <div class="panel">
+    <h2>{{ t("ap.system") }}</h2>
+    <dl>
+      <dt>{{ t("sys.hostname") }}</dt><dd>{{ ap.hostname }}</dd>
+      <dt>{{ t("sys.model") }}</dt><dd>{{ ap.model }}</dd>
+      <dt>{{ t("sys.firmware") }}</dt><dd>{{ ap.release }}</dd>
+      <dt>{{ t("sys.kernel") }}</dt><dd>{{ ap.kernel }}</dd>
+      <dt>{{ t("sys.uptime") }}</dt><dd>{{ ap.uptime | duration }}</dd>
+      <dt>{{ t("sys.load") }}</dt><dd>{{ ap.load }}</dd>
+      <dt>RAM</dt><dd>{{ t("sys.ram", free=(ap.mem_avail | bytes), total=(ap.mem_total | bytes)) }}</dd>
+      {% if ap.overlay_size %}<dt>{{ t("sys.overlay") }}</dt><dd>{{ t("sys.overlay_val", used=(ap.overlay_used | bytes), free=(ap.overlay_avail | bytes)) }}</dd>{% endif %}
+    </dl>
+  </div>
+  <div class="panel">
+    <h2>{{ t("router.interfaces") }}</h2>
+    <table class="list">
+      <thead><tr><th>{{ t("col.name") }}</th><th>{{ t("col.state") }}</th><th>{{ t("router.proto") }}</th><th>{{ t("router.device") }}</th><th>IPv4</th><th>{{ t("router.gateway") }}</th><th class="num">{{ t("router.up_for") }}</th></tr></thead>
+      {% for i in ap.interfaces %}
+      <tr><td><b>{{ i.name }}</b>{% if i.wan %} <span class="tag">WAN</span>{% endif %}</td>
+          <td><span class="dot {{ 'on' if i.up else 'off' }}"></span> {{ t("state.on") if i.up else t("state.down") }}</td>
+          <td>{{ i.proto }}</td><td class="mono">{{ i.device }}</td>
+          <td class="mono">{{ i.ipv4 or "–" }}{% if i.ipv6 %}<br><span class="muted small">{{ i.ipv6 }}</span>{% endif %}</td>
+          <td class="mono">{{ i.gateway or "–" }}</td>
+          <td class="num">{{ (i.uptime | duration) if i.up else "–" }}</td></tr>
+      {% else %}
+      <tr><td colspan="7" class="empty">–</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</section>
+<h2>{{ t("router.leases", n=(leases | length)) }}</h2>
+<table class="list">
+  <thead><tr><th>{{ t("col.device") }}</th><th>IP</th><th>MAC</th><th>{{ t("router.connection") }}</th></tr></thead>
+  {% for l in leases %}
+  <tr>
+    <td>{{ l.hostname or "–" }}</td>
+    <td class="mono">{{ l.ip }}</td>
+    <td class="mono">{{ l.mac }}</td>
+    <td>{% if l.ap %}Wi-Fi · <a href="{{ base }}/ap/{{ l.ap | urlencode }}">{{ l.ap }}</a> · {{ l.ssid }} <span class="muted small">{{ l.band | band }}</span>{% else %}<span class="muted">{{ t("router.not_wifi") }}</span>{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" class="empty">{{ t("router.no_leases") }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

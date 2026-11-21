@@ -19,8 +19,8 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
 from . import actions, i18n
-from .collector import APConfig, APState, band_of, collect_ap, collect_leases, norm_band
-from .demo import demo_states
+from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
+from .demo import demo_router, demo_states
 
 DATA = Path(os.environ.get("OWADMIN_DATA", "/data"))
 OPTIONS = DATA / "options.json"
@@ -40,7 +40,7 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 # ---------------------------------------------------------------- konfigurace a klic
 
 def load_options() -> dict:
-    opts = {"aps": [], "ssh_user": "root", "poll_interval": 30, "dhcp_router": "", "demo": False,
+    opts = {"aps": [], "ssh_user": "root", "poll_interval": 30, "dhcp_router": "", "router_name": "Router", "demo": False,
             "full_access": [], "read_access": [], "refresh_interval": 30, "language": "auto"}
     if OPTIONS.exists():
         opts.update(json.loads(OPTIONS.read_text()))
@@ -67,25 +67,47 @@ class Store:
         self.pubkey = self.key.export_public_key().decode().strip()
         self.aps: list[APState] = [APState(name=a["name"], host=a["host"]) for a in self.opts["aps"]]
         self.leases: dict[str, dict] = {}
-        self.router_ok = False
-        self.router_error: str | None = None
+        self.router: APState | None = (APState(name=self.router_name, host=self.opts["dhcp_router"], kind="router")
+                                       if self.opts.get("dhcp_router") else None)
         self.last_poll = 0.0
         self.lock = asyncio.Lock()
         self.ap_locks: dict[str, asyncio.Lock] = {}
         self.pending: dict[str, tuple[float, dict[str, list[actions.SsidChange]]]] = {}
 
+    @property
+    def router_name(self) -> str:
+        return str(self.opts.get("router_name") or "Router")
+
+    def router_cfg(self) -> APConfig | None:
+        if not self.opts.get("dhcp_router"):
+            return None
+        host, port = parse_host_port(str(self.opts["dhcp_router"]))
+        return APConfig(name=self.router_name, host=host, port=port, user=self.opts.get("ssh_user", "root"))
+
     def ap(self, name: str) -> APState:
-        ap = next((a for a in self.aps if a.name == name), None)
-        if not ap:
-            raise HTTPException(404, "AP nenalezen")
-        return ap
+        """AP nebo router podle jmena (vse, co ma stranku a akce)."""
+        for d in [*self.aps, self.router]:
+            if d is not None and d.name == name:
+                return d
+        raise HTTPException(404, "device not found")
 
     def cfg(self, name: str) -> APConfig:
+        rc = self.router_cfg()
+        if rc and rc.name == name:
+            return rc
         a = next((a for a in self.opts["aps"] if a["name"] == name), None)
         if not a:
-            raise HTTPException(404, "AP nenalezen")
+            raise HTTPException(404, "device not found")
         return APConfig(name=a["name"], host=a["host"], port=int(a.get("port") or 22),
                         user=self.opts.get("ssh_user", "root"))
+
+    @property
+    def router_ok(self) -> bool:
+        return bool(self.router and self.router.online)
+
+    @property
+    def router_error(self) -> str | None:
+        return self.router.error if self.router else None
 
     def ap_lock(self, name: str) -> asyncio.Lock:
         return self.ap_locks.setdefault(name, asyncio.Lock())
@@ -108,20 +130,20 @@ class Store:
         async with self.lock:
             if self.opts.get("demo"):
                 self.aps, self.leases = demo_states()
-                self.router_ok, self.router_error = bool(self.opts.get("dhcp_router")), None
+                if self.router:
+                    self.router = demo_router(self.router_name, self.router.host)
                 self.last_poll = time.time()
                 return
             user = self.opts.get("ssh_user", "root")
             cfgs = [APConfig(name=a["name"], host=a["host"], port=int(a.get("port") or 22), user=user)
                     for a in self.opts["aps"]]
             tasks = [collect_ap(c, self.key) for c in cfgs]
-            router = self.opts.get("dhcp_router")
-            if router:
-                tasks.append(collect_leases(router, user, self.key))
+            rc = self.router_cfg()
+            if rc:
+                tasks.append(collect_router(rc, self.key))
             res = await asyncio.gather(*tasks)
-            if router:
-                leases, err = res.pop()
-                self.router_ok, self.router_error = err is None, err
+            if rc:
+                self.router, leases = res.pop()
                 self.leases = leases or self.leases
             self.aps = list(res)
             self.last_poll = time.time()
@@ -129,9 +151,25 @@ class Store:
     def devices(self) -> list[dict]:
         """Vsechna spravovana zarizeni (AP + router) pro souhrn na prehledu."""
         out = [{"name": a.name, "online": a.online} for a in self.aps]
-        if self.opts.get("dhcp_router"):
-            out.append({"name": "router " + str(self.opts["dhcp_router"]), "online": self.router_ok})
+        if self.router:
+            out.insert(0, {"name": self.router.name, "online": self.router.online})
         return out
+
+    def lease_list(self) -> list[dict]:
+        """DHCP leases z routeru, u Wi-Fi klientu doplneno AP/SSID/pasmo, ostatni = kabel/nepripojeno."""
+        wifi = {c["mac"]: c for a in self.aps for c in a.clients}
+        out = []
+        for mac, l in self.leases.items():
+            c = wifi.get(mac)
+            out.append({"mac": mac, "ip": l.get("ip", ""), "hostname": l.get("hostname", ""),
+                        "ap": c["ap"] if c else "", "ssid": c["ssid"] if c else "", "band": c.get("band", "") if c else ""})
+
+        def ipkey(x):
+            try:
+                return (0, tuple(int(p) for p in x["ip"].split(".")))
+            except ValueError:
+                return (1, x["ip"])
+        return sorted(out, key=ipkey)
 
     def all_clients(self) -> list[dict]:
         out = []
@@ -370,6 +408,8 @@ async def clients_page(request: Request, q: str = "", ssid: str = "", ap: str = 
 @app.get("/ap/{name}", response_class=HTMLResponse)
 async def ap_page(request: Request, name: str):
     ap = store.ap(name)
+    if ap.kind == "router":
+        return render(request, "router.html", page="ap:" + name, ap=ap, leases=store.lease_list())
     clients = [c for c in store.all_clients() if c["ap"] == name]
     return render(request, "ap.html", page="ap:" + name, ap=ap, clients=clients)
 
@@ -395,7 +435,10 @@ async def api_state():
         "last_poll": store.last_poll,
         "aps": [{k: v for k, v in asdict(a).items() if k != "clients"} | {"client_count": a.client_count}
                 for a in store.aps],
+        "router": {k: v for k, v in asdict(store.router).items() if k not in ("clients", "radios", "ssids", "wifi_ifaces")}
+                  if store.router else None,
         "clients": store.all_clients(),
+        "leases": store.lease_list(),
     }
 
 

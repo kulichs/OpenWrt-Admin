@@ -1,5 +1,5 @@
 name: OpenWrt-Admin
-version: "0.5.0"
+version: "0.6.0"
 slug: openwrt_admin
 description: Manage OpenWrt access points and Wi-Fi clients over SSH (overview, SSIDs, reboot, package updates)
 arch:
@@ -19,6 +19,7 @@ options:
   refresh_interval: 30
   language: auto
   dhcp_router: 192.168.1.1
+  router_name: Router
   demo: false
   full_access: []
   read_access: []
@@ -33,6 +34,7 @@ schema:
   refresh_interval: int(0,3600)?
   language: list(auto|cs|en)?
   dhcp_router: str?
+  router_name: str?
   demo: bool
   full_access:
     - str

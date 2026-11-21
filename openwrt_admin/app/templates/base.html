@@ -33,6 +33,9 @@ try {
     <a href="{{ base }}/clients" class="{{ 'active' if page == 'clients' }}">{{ t("nav.clients") }}</a>
     <a href="{{ base }}/ssids" class="{{ 'active' if page == 'ssids' }}">{{ t("nav.ssid") }}</a>
     <span class="nav-sep"></span>
+    {% if store.router %}{% set r = store.router %}
+    <a href="{{ base }}/ap/{{ r.name | urlencode }}" class="ap-tab router-tab {{ 'active' if page == 'ap:' ~ r.name }}" title="{{ t('router.kind') }}"><span class="dot {{ 'on' if r.online else 'off' }}"></span>{{ r.name }}<span class="cnt" title="{{ t('router.leases_title') }}">{{ store.leases | length }}</span></a>
+    {% endif %}
     {% for a in store.aps %}
     <a href="{{ base }}/ap/{{ a.name | urlencode }}" class="ap-tab {{ 'active' if page == 'ap:' ~ a.name }}"><span class="dot {{ 'on' if a.online else 'off' }}"></span>{{ a.name | replace('OpenWrt_', '') }}<span class="cnt">{{ a.client_count }}</span></a>
     {% endfor %}

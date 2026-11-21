@@ -2,6 +2,13 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.6.0
+- The router is a device of its own: tab, overview card and page with system info, interfaces (WAN/LAN/VLANs from `network.interface dump`) and all DHCP leases including wired devices (Wi-Fi clients show their AP/SSID). Reboot and package updates work on the router too. One SSH connection per poll.
+- New option `router_name` (default Router).
+---
+- Router je samostatné zařízení: záložka, karta na přehledu a stránka s informacemi o systému, rozhraními (WAN/LAN/VLANy z `network.interface dump`) a všemi DHCP klienty včetně zařízení na kabelu (u Wi-Fi klientů AP/SSID). Restart a aktualizace balíčků fungují i na routeru. Jedno SSH spojení na jeden sběr dat.
+- Nová volba `router_name` (výchozí Router).
+
 ## 0.5.0
 - Web UI translated: English and Czech, texts in dictionaries `app/i18n/<lang>.json` (a new language = a new file). Language: per-browser choice on the Settings page → `language` option → Home Assistant user's language → browser → English.
 - Overview: "AP online" became "devices online" and includes the DHCP router; router status on the Settings page.

@@ -86,3 +86,8 @@ tr.row-off td { opacity: .6; }
 .user-badge.role-read { border-color: var(--ok); color: var(--ok); }
 .user-badge.role-none { border-color: var(--bad); color: var(--bad); }
 label.inline { display: inline-flex; gap: .5rem; align-items: center; }
+
+/* 0.6.0 – router */
+nav a.router-tab { font-weight: 600; }
+.router-card { border-left: 3px solid var(--accent); }
+h1 .tag, .card-head .tag { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }

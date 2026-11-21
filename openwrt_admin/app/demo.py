@@ -75,4 +75,27 @@ def demo_states() -> tuple[list[APState], dict]:
     for i, cl in enumerate(a.clients + b.clients):
         if i % 3 != 2:
             leases[cl["mac"]] = {"ip": f"192.168.1.{100 + i}", "hostname": names[i % len(names)]}
+    # zarizeni na kabelu (jen v DHCP routeru)
+    for i, (mac, name) in enumerate([("02:00:00:00:10:01", "nas"), ("02:00:00:00:10:02", "homeassistant"),
+                                     ("02:00:00:00:10:03", "printer"), ("02:00:00:00:10:04", "")]):
+        leases[mac] = {"ip": f"192.168.1.{10 + i}", "hostname": name}
     return [a, b, c], leases
+
+
+def demo_router(name: str, host: str) -> APState:
+    r = APState(name=name, host=host, kind="router", online=True, updated=time.time(),
+                hostname="router", model="Xunlong Orange Pi R1 Plus LTS",
+                release="OpenWrt 25.12.2 r30000", kernel="6.6.110", uptime=1_950_000, load=0.12,
+                mem_total=990 * 2**20, mem_avail=760 * 2**20,
+                overlay_size=6 * 2**30, overlay_used=310 * 2**20, overlay_avail=5600 * 2**20, pkg="apk")
+    r.interfaces = [
+        {"name": "wan", "up": True, "proto": "dhcp", "device": "eth0", "ipv4": "203.0.113.25/24", "ipv6": "",
+         "gateway": "203.0.113.1", "dns": "203.0.113.53", "uptime": 1_949_000, "wan": True},
+        {"name": "lan", "up": True, "proto": "static", "device": "br-lan", "ipv4": "192.168.1.1/24",
+         "ipv6": "fd00:1::1/60", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False},
+        {"name": "guest", "up": True, "proto": "static", "device": "br-lan.30", "ipv4": "192.168.30.1/24",
+         "ipv6": "", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False},
+        {"name": "iot", "up": True, "proto": "static", "device": "br-lan.10", "ipv4": "192.168.10.1/24",
+         "ipv6": "", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False},
+    ]
+    return r

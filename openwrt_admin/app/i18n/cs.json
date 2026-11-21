@@ -83,7 +83,11 @@
   "clients.all_aps": "Všechny AP",
   "clients.all_bands": "Všechna pásma",
   "clients.filter": "Filtrovat",
-  "clients.count": ["{n} klient", "{n} klienti", "{n} klientů"],
+  "clients.count": [
+    "{n} klient",
+    "{n} klienti",
+    "{n} klientů"
+  ],
   "clients.none": "Žádní klienti",
   "ssid.intro": "Změna se zapíše přes uci na všechny zaškrtnuté AP. Prázdné pole = beze změny. Před zápisem se zobrazí náhled.",
   "ssid.readonly": "Máš přístup jen pro čtení, SSID nelze měnit.",
@@ -131,7 +135,11 @@
   "setup.devices_title": "Zařízení",
   "setup.devices_text": "AP, uživatel, intervaly a router s DHCP se nastavují v Home Assistantu: Nastavení → Aplikace (Doplňky) → OpenWrt-Admin → Konfigurace.",
   "setup.dhcp_router": "DHCP router",
-  "setup.leases": ["{n} záznam", "{n} záznamy", "{n} záznamů"],
+  "setup.leases": [
+    "{n} záznam",
+    "{n} záznamy",
+    "{n} záznamů"
+  ],
   "setup.users_title": "Uživatelé a oprávnění",
   "setup.users_text": "Přihlášení řeší Home Assistant, add-on podle jména uživatele HA rozhoduje, co smí.",
   "setup.logged_in_as": "Přihlášen jako",
@@ -152,5 +160,20 @@
   "setup.language_browser": "Jazyk v tomto prohlížeči:",
   "setup.lang_auto": "automaticky (podle Home Assistantu)",
   "setup.display_hint": "Výchozí hodnoty pro všechny se nastavují v konfiguraci add-onu (refresh_interval, language). Volby tady platí jen v tomto prohlížeči.",
-  "setup.api_text": "Aktuální stav je i ve strojově čitelné podobě:"
+  "setup.api_text": "Aktuální stav je i ve strojově čitelné podobě:",
+  "router.kind": "router",
+  "router.leases_title": "Počet DHCP záznamů",
+  "router.dhcp": "DHCP",
+  "router.interfaces": "Rozhraní",
+  "router.proto": "Protokol",
+  "router.device": "Zařízení",
+  "router.gateway": "Brána",
+  "router.up_for": "Běží",
+  "router.leases": "DHCP klienti ({n})",
+  "router.connection": "Připojení",
+  "router.not_wifi": "kabel nebo nepřipojeno k Wi-Fi",
+  "router.no_leases": "Žádné DHCP záznamy",
+  "router.confirm_reboot": "Restartovat router {ap}? Na 1–2 minuty spadne celá síť i internet.",
+  "router.confirm_upgrade": "Spustit {pkg} upgrade na routeru {ap}? Upgrade balíčků může rozbít síť; bezpečnější je sysupgrade.",
+  "router.actions_note": "Restart routeru odpojí celou síť i internet (Home Assistant běží dál, ale na chvíli nedosáhne na nic mimo LAN)."
 }

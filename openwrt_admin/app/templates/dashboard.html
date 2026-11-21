@@ -13,6 +13,34 @@
 {% endif %}
 
 <section class="cards">
+{% if store.router %}{% set r = store.router %}
+  <a class="card router-card {{ 'offline' if not r.online }}" href="{{ base }}/ap/{{ r.name | urlencode }}">
+    <div class="card-head">
+      <span class="dot {{ 'on' if r.online else 'off' }}"></span>
+      <strong>{{ r.name }}</strong> <span class="tag">{{ t("router.kind") }}</span>
+      <span class="muted">{{ r.host }}</span>
+    </div>
+    {% if r.online %}
+    <div class="muted small">{{ r.model }} · {{ r.release }}</div>
+    <dl>
+      <dt>{{ t("sys.uptime") }}</dt><dd>{{ r.uptime | duration }}</dd>
+      <dt>{{ t("sys.load") }}</dt><dd>{{ r.load }}</dd>
+      <dt>{{ t("dash.ram_free") }}</dt><dd>{{ r.mem_avail | bytes }} / {{ r.mem_total | bytes }}</dd>
+      {% for i in r.interfaces if i.wan %}
+      <dt>{{ i.name | upper }}</dt><dd><span class="{{ '' if i.up else 'err' }}">{{ i.ipv4 or (t("state.on") if i.up else t("state.down")) }}</span></dd>
+      {% endfor %}
+      <dt>{{ t("router.dhcp") }}</dt><dd>{{ t("setup.leases", n=(store.leases | length)) }}</dd>
+    </dl>
+    <table class="mini">
+      {% for i in r.interfaces if not i.wan %}
+      <tr><td>{{ i.name }}</td><td class="muted">{{ i.ipv4 }}</td><td class="num"><span class="dot {{ 'on' if i.up else 'off' }}"></span></td></tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="err">{{ t("ap.unreachable", error=(r.error or t("ap.not_loaded"))) }}</p>
+    {% endif %}
+  </a>
+{% endif %}
 {% for ap in store.aps %}
   <a class="card {{ 'offline' if not ap.online }}" href="{{ base }}/ap/{{ ap.name | urlencode }}">
     <div class="card-head">

@@ -12,8 +12,11 @@ configuration:
     name: Language
     description: Web UI language. auto = language of the Home Assistant user (or the browser). Each browser can override it on the Settings page.
   dhcp_router:
-    name: DHCP router
-    description: Router with DHCP leases (client names and IPs), e.g. 192.168.1.1 or host:port. Empty = off.
+    name: Router
+    description: OpenWrt router (LAN, no Wi-Fi), e.g. 192.168.1.1 or host:port. Shown as its own device (interfaces, DHCP leases, reboot, updates) and used for client names and IPs. Empty = off.
+  router_name:
+    name: Router name
+    description: Name of the router in the add-on (tab and card), default Router.
   demo:
     name: Demo mode
     description: Show made-up data, no SSH connections.

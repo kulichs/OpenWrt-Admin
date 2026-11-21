@@ -46,6 +46,9 @@ class APState:
     # wifi-iface sekce z uci (vcetne vypnutych SSID), bez hesel
     wifi_ifaces: list[dict[str, Any]] = field(default_factory=list)
     pkg: str = ""  # "apk" / "opkg"
+    kind: str = "ap"  # "ap" / "router"
+    # router: rozhrani z `ubus call network.interface dump`
+    interfaces: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def client_count(self) -> int:
@@ -164,6 +167,36 @@ def parse_wifi_ifaces(text: str) -> list[dict]:
     return sorted(out, key=lambda i: (i["ssid"], i["device"]))
 
 
+async def _read_system(conn, st: APState, timeout: float) -> None:
+    """Spolecne pro AP i router: model, verze, uptime, RAM, overlay, spravce balicku."""
+    board, info, df_out, pkg = await asyncio.gather(
+        _ubus(conn, "system", "board", timeout),
+        _ubus(conn, "system", "info", timeout),
+        _run(conn, "df -k /overlay 2>/dev/null | tail -n 1", timeout),
+        _run(conn, "command -v apk >/dev/null && echo apk || (command -v opkg >/dev/null && echo opkg)", timeout),
+    )
+    st.pkg = pkg.strip()
+
+    if board:
+        st.hostname = board.get("hostname", "")
+        st.model = board.get("model", "")
+        st.kernel = board.get("kernel", "")
+        rel = board.get("release") or {}
+        st.release = rel.get("description") or rel.get("version", "")
+    if info:
+        st.uptime = int(info.get("uptime", 0))
+        load = info.get("load") or [0]
+        st.load = round(load[0] / 65536, 2)
+        mem = info.get("memory") or {}
+        st.mem_total = int(mem.get("total", 0))
+        st.mem_avail = int(mem.get("available", mem.get("free", 0)))
+    parts = df_out.split()
+    if len(parts) >= 4 and parts[1].isdigit():
+        st.overlay_size = int(parts[1]) * 1024
+        st.overlay_used = int(parts[2]) * 1024
+        st.overlay_avail = int(parts[3]) * 1024
+
+
 # ---------------------------------------------------------------- AP
 
 async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0) -> APState:
@@ -177,36 +210,15 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
             known_hosts=None,  # host klice se meni pri sysupgrade -n; jen LAN a jen cteni
             connect_timeout=timeout,
         ) as conn:
-            board, info, wstatus, df_out, hostapd_list, uci_wl, pkg = await asyncio.gather(
-                _ubus(conn, "system", "board", timeout),
-                _ubus(conn, "system", "info", timeout),
-                _ubus(conn, "network.wireless", "status", timeout),
-                _run(conn, "df -k /overlay 2>/dev/null | tail -n 1", timeout),
-                _run(conn, "ubus list 'hostapd.*'", timeout),
-                _run(conn, "uci -q show wireless", timeout),
-                _run(conn, "command -v apk >/dev/null && echo apk || (command -v opkg >/dev/null && echo opkg)", timeout),
+            (wstatus, hostapd_list, uci_wl), _ = await asyncio.gather(
+                asyncio.gather(
+                    _ubus(conn, "network.wireless", "status", timeout),
+                    _run(conn, "ubus list 'hostapd.*'", timeout),
+                    _run(conn, "uci -q show wireless", timeout),
+                ),
+                _read_system(conn, st, timeout),
             )
-            st.pkg = pkg.strip()
             st.wifi_ifaces = parse_wifi_ifaces(uci_wl)
-
-            if board:
-                st.hostname = board.get("hostname", "")
-                st.model = board.get("model", "")
-                st.kernel = board.get("kernel", "")
-                rel = board.get("release") or {}
-                st.release = rel.get("description") or rel.get("version", "")
-            if info:
-                st.uptime = int(info.get("uptime", 0))
-                load = info.get("load") or [0]
-                st.load = round(load[0] / 65536, 2)
-                mem = info.get("memory") or {}
-                st.mem_total = int(mem.get("total", 0))
-                st.mem_avail = int(mem.get("available", mem.get("free", 0)))
-            parts = df_out.split()
-            if len(parts) >= 4 and parts[1].isdigit():
-                st.overlay_size = int(parts[1]) * 1024
-                st.overlay_used = int(parts[2]) * 1024
-                st.overlay_avail = int(parts[3]) * 1024
 
             # mapovani ifname -> SSID / sit / radio z netifd
             iface_meta: dict[str, dict] = {}
@@ -284,31 +296,75 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
     return st
 
 
-# ---------------------------------------------------------------- DHCP leases z routeru
+# ---------------------------------------------------------------- router (LAN, bez Wi-Fi)
 
-async def collect_leases(host: str, user: str, key: asyncssh.SSHKey, timeout: float = 10.0) -> tuple[dict[str, dict], str | None]:
+def parse_host_port(host: str) -> tuple[str, int]:
+    if host.count(":") == 1:  # "host:port" (IPv6 bez portu necha byt)
+        h, p = host.split(":")
+        return h, int(p)
+    return host, 22
+
+
+def parse_interfaces(dump) -> list[dict]:
+    """`ubus call network.interface dump` -> seznam rozhrani (lan, wan, vlany...)."""
+    out = []
+    for i in (dump or {}).get("interface") or []:
+        name = i.get("interface", "")
+        if not name or name == "loopback":
+            continue
+        v4 = [f"{a.get('address')}/{a.get('mask')}" for a in i.get("ipv4-address") or [] if a.get("address")]
+        v6 = [f"{a.get('address')}/{a.get('mask')}" for a in i.get("ipv6-address") or [] if a.get("address")]
+        gw = next((r.get("nexthop") for r in i.get("route") or []
+                   if r.get("target") == "0.0.0.0" and r.get("mask") == 0 and r.get("nexthop")), "")
+        out.append({
+            "name": name,
+            "up": bool(i.get("up")),
+            "proto": i.get("proto", ""),
+            "device": i.get("l3_device") or i.get("device", ""),
+            "ipv4": ", ".join(v4),
+            "ipv6": ", ".join(v6),
+            "gateway": gw,
+            "dns": ", ".join(i.get("dns-server") or []),
+            "uptime": i.get("uptime"),
+            "wan": name.startswith("wan") or bool(gw),
+        })
+    return sorted(out, key=lambda x: (not x["wan"], x["name"]))
+
+
+async def _read_leases(conn, timeout: float) -> dict[str, dict]:
     """MAC -> {ip, hostname}. Zkusi luci-rpc (dnsmasq i odhcpd), pak /tmp/dhcp.leases."""
     leases: dict[str, dict] = {}
-    port = 22
-    if host.count(":") == 1:  # "host:port"
-        host, p = host.split(":")
-        port = int(p)
+    data = await _ubus(conn, "luci-rpc", "getDHCPLeases", timeout)
+    if data:
+        for l in data.get("dhcp_leases") or []:
+            mac = (l.get("macaddr") or "").lower()
+            if mac:
+                leases[mac] = {"ip": l.get("ipaddr", ""), "hostname": l.get("hostname") or ""}
+    if not leases:
+        out = await _run(conn, "cat /tmp/dhcp.leases 2>/dev/null", timeout)
+        for line in out.splitlines():
+            p = line.split()
+            if len(p) >= 4:
+                leases[p[1].lower()] = {"ip": p[2], "hostname": "" if p[3] == "*" else p[3]}
+    return leases
+
+
+async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0) -> tuple[APState, dict[str, dict]]:
+    """Router: system jako u AP + rozhrani + DHCP leases, jedno SSH spojeni."""
+    st = APState(name=cfg.name, host=cfg.host, kind="router")
+    leases: dict[str, dict] = {}
     try:
-        async with asyncssh.connect(host, port=port, username=user, client_keys=[key],
+        async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=timeout) as conn:
-            data = await _ubus(conn, "luci-rpc", "getDHCPLeases", timeout)
-            if data:
-                for l in data.get("dhcp_leases") or []:
-                    mac = (l.get("macaddr") or "").lower()
-                    if mac:
-                        leases[mac] = {"ip": l.get("ipaddr", ""), "hostname": l.get("hostname") or ""}
-            if not leases:
-                out = await _run(conn, "cat /tmp/dhcp.leases 2>/dev/null", timeout)
-                for line in out.splitlines():
-                    p = line.split()
-                    if len(p) >= 4:
-                        leases[p[1].lower()] = {"ip": p[2], "hostname": "" if p[3] == "*" else p[3]}
+            _, dump, leases = await asyncio.gather(
+                _read_system(conn, st, timeout),
+                _ubus(conn, "network.interface", "dump", timeout),
+                _read_leases(conn, timeout),
+            )
+            st.interfaces = parse_interfaces(dump)
+            st.online = True
     except (OSError, asyncssh.Error, asyncio.TimeoutError) as e:
-        log.warning("DHCP leases z %s: %s", host, e)
-        return leases, (f"{type(e).__name__}: {e}" if str(e) else type(e).__name__)
-    return leases, None
+        st.error = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+        log.warning("%s (%s): %s", cfg.name, cfg.host, st.error)
+    st.updated = time.time()
+    return st, leases

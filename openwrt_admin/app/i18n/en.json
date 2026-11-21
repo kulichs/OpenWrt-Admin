@@ -83,7 +83,10 @@
   "clients.all_aps": "All APs",
   "clients.all_bands": "All bands",
   "clients.filter": "Filter",
-  "clients.count": ["{n} client", "{n} clients"],
+  "clients.count": [
+    "{n} client",
+    "{n} clients"
+  ],
   "clients.none": "No clients",
   "ssid.intro": "Changes are written with uci to all ticked APs. Empty field = unchanged. A preview is shown before writing.",
   "ssid.readonly": "You have read-only access, SSIDs cannot be changed.",
@@ -100,7 +103,10 @@
   "preview.commands": "Commands",
   "preview.key_changed": "password: changed",
   "preview.reload_note": "After wifi reload, clients on the affected APs disconnect for a few seconds.",
-  "preview.apply": ["Apply to {n} AP", "Apply to {n} APs"],
+  "preview.apply": [
+    "Apply to {n} AP",
+    "Apply to {n} APs"
+  ],
   "preview.apply_title": "Apply",
   "preview.writing": "writing…",
   "result.done": "done",
@@ -131,7 +137,10 @@
   "setup.devices_title": "Devices",
   "setup.devices_text": "APs, user, intervals and the DHCP router are set in Home Assistant: Settings → Apps (Add-ons) → OpenWrt-Admin → Configuration.",
   "setup.dhcp_router": "DHCP router",
-  "setup.leases": ["{n} lease", "{n} leases"],
+  "setup.leases": [
+    "{n} lease",
+    "{n} leases"
+  ],
   "setup.users_title": "Users and permissions",
   "setup.users_text": "Login is handled by Home Assistant; the add-on decides what each HA user may do.",
   "setup.logged_in_as": "Logged in as",
@@ -152,5 +161,20 @@
   "setup.language_browser": "Language in this browser:",
   "setup.lang_auto": "automatic (from Home Assistant)",
   "setup.display_hint": "Defaults for everyone are set in the add-on configuration (refresh_interval, language). The choices here apply to this browser only.",
-  "setup.api_text": "The current state is also available as JSON:"
+  "setup.api_text": "The current state is also available as JSON:",
+  "router.kind": "router",
+  "router.leases_title": "Number of DHCP leases",
+  "router.dhcp": "DHCP",
+  "router.interfaces": "Interfaces",
+  "router.proto": "Protocol",
+  "router.device": "Device",
+  "router.gateway": "Gateway",
+  "router.up_for": "Up for",
+  "router.leases": "DHCP leases ({n})",
+  "router.connection": "Connection",
+  "router.not_wifi": "wired or not on Wi-Fi",
+  "router.no_leases": "No DHCP leases",
+  "router.confirm_reboot": "Reboot the router {ap}? The whole network and the internet will be down for 1–2 minutes.",
+  "router.confirm_upgrade": "Run {pkg} upgrade on the router {ap}? Upgrading packages can break networking; sysupgrade is safer.",
+  "router.actions_note": "Rebooting the router takes the whole network and internet down (Home Assistant keeps running but cannot reach anything outside the LAN for a moment)."
 }

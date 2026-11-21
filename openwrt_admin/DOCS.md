@@ -30,7 +30,8 @@ ssh_user: root
 poll_interval: 30            # s, 10–600: how often data is collected from the APs
 refresh_interval: 30         # s, 0 = off: how often open pages reload (each browser can override it)
 language: auto               # auto | en | cs – web UI language (auto = HA user's language)
-dhcp_router: 192.168.1.1     # router with DHCP leases (client names/IPs); empty = off; "host:port" works too
+dhcp_router: 192.168.1.1     # OpenWrt router (LAN, no Wi-Fi): own device + client names/IPs; empty = off; "host:port" works too
+router_name: Router          # name of the router in the add-on
 demo: false                  # true = made-up data, no SSH
 full_access:                 # HA usernames with full access (reboot, packages, SSIDs)
   - alice
@@ -61,7 +62,7 @@ chmod 600 /etc/dropbear/authorized_keys
 
 | Action | Where | Command on the AP |
 |---|---|---|
-| Reboot | AP page | `reboot` |
+| Reboot | AP or router page | `reboot` |
 | Check for updates | AP page | `apk update && apk list --upgradable` (older APs: `opkg`) |
 | Upgrade packages | AP page | `apk upgrade` (older APs: `opkg upgrade …`) |
 | SSID name, password, hidden, on/off | SSID page | `uci set wireless.<section>.… && uci commit wireless && wifi reload` |
@@ -86,9 +87,19 @@ Login is handled by Home Assistant (Ingress); the add-on has no passwords of its
 - Permissions are enforced on the server, not only hidden in the UI. Actions are logged with the user name.
 - The panel is visible to all HA users (`panel_admin: false`). Hiding the panel alone would not be enough: HA does not block the ingress URL for regular users.
 
+### Router
+
+The router (`dhcp_router`) is a device of its own, without radios and SSIDs. It has its own tab, card on the overview and page with:
+- system info (model, firmware, uptime, load, RAM, overlay),
+- **interfaces** from `ubus call network.interface dump`: WAN/LAN/VLANs, state, protocol, IPv4/IPv6, gateway, uptime,
+- **DHCP leases**: every device with an IP from the router, Wi-Fi clients with their AP/SSID/band, the rest marked as wired or not on Wi-Fi,
+- the same actions as APs: reboot, check for updates, upgrade packages. Rebooting the router takes the whole network and the internet down for a moment.
+
+The add-on's SSH key must be on the router too.
+
 ### Overview tiles
 
-The first tile shows **devices online**: all configured APs plus the DHCP router (if `dhcp_router` is set; the router counts as online when its DHCP leases could be read). Hover over it to see the list.
+The first tile shows **devices online**: the router and all configured APs. Hover over it to see the list.
 
 ### Page refresh
 
@@ -104,6 +115,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | radios, SSID → network/VLAN | `ubus call network.wireless status` |
 | SSIDs incl. disabled ones | `uci -q show wireless` (without passwords) |
 | clients (signal, rate, traffic) | `ubus call hostapd.<if> get_clients` |
+| router interfaces | `ubus call network.interface dump` |
 | client names and IPs (router) | `ubus call luci-rpc getDHCPLeases`, else `/tmp/dhcp.leases` |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
@@ -165,7 +177,8 @@ ssh_user: root
 poll_interval: 30            # s, 10–600: jak často se sbírají data z AP
 refresh_interval: 30         # s, 0 = vypnuto: jak často se otevřené stránky obnovují (prohlížeč si může změnit)
 language: auto               # auto | en | cs – jazyk webového rozhraní (auto = podle uživatele HA)
-dhcp_router: 192.168.1.1     # router s DHCP (jména/IP klientů); prázdné = vypnuto; lze i "host:port"
+dhcp_router: 192.168.1.1     # OpenWrt router (LAN, bez Wi-Fi): samostatné zařízení + jména/IP klientů; prázdné = vypnuto; lze i "host:port"
+router_name: Router          # jak se router v add-onu jmenuje
 demo: false                  # true = vymyšlená data, bez SSH
 full_access:                 # uživatelská jména HA s plným přístupem (restart, balíčky, SSID)
   - alice
@@ -196,7 +209,7 @@ chmod 600 /etc/dropbear/authorized_keys
 
 | Akce | Kde | Příkaz na AP |
 |---|---|---|
-| Restart | stránka AP | `reboot` |
+| Restart | stránka AP nebo routeru | `reboot` |
 | Zkontrolovat aktualizace | stránka AP | `apk update && apk list --upgradable` (starší AP: `opkg`) |
 | Upgrade balíčků | stránka AP | `apk upgrade` (starší AP: `opkg upgrade …`) |
 | Název, heslo, skrytí, zapnutí SSID | stránka SSID | `uci set wireless.<sekce>.… && uci commit wireless && wifi reload` |
@@ -221,9 +234,19 @@ Přihlášení řeší Home Assistant (Ingress), add-on vlastní hesla nemá. Po
 - Kontroluje se na serveru, ne jen v zobrazení. Akce se logují se jménem uživatele.
 - Panel vidí všichni uživatelé HA (`panel_admin: false`). Samotné schování panelu by nestačilo, HA ingress adresu u běžného uživatele neblokuje.
 
+### Router
+
+Router (`dhcp_router`) je samostatné zařízení, bez rádií a SSID. Má vlastní záložku, kartu na přehledu a stránku s:
+- informacemi o systému (model, firmware, uptime, load, RAM, overlay),
+- **rozhraními** z `ubus call network.interface dump`: WAN/LAN/VLANy, stav, protokol, IPv4/IPv6, brána, jak dlouho běží,
+- **DHCP klienty**: všechna zařízení, která mají IP od routeru; Wi-Fi klienti s AP/SSID/pásmem, ostatní jako kabel nebo nepřipojeno k Wi-Fi,
+- stejnými akcemi jako AP: restart, kontrola aktualizací, upgrade balíčků. Restart routeru na chvíli odpojí celou síť i internet.
+
+SSH klíč add-onu musí být i na routeru.
+
 ### Dlaždice na přehledu
 
-První dlaždice ukazuje **zařízení online**: všechny nastavené AP a k tomu DHCP router (když je vyplněný `dhcp_router`; router je online, když se z něj podařilo načíst DHCP leases). Po najetí myší se ukáže seznam.
+První dlaždice ukazuje **zařízení online**: router a všechny nastavené AP. Po najetí myší se ukáže seznam.
 
 ### Obnovování stránky
 
@@ -239,6 +262,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | rádia, SSID → síť/VLAN | `ubus call network.wireless status` |
 | SSID včetně vypnutých | `uci -q show wireless` (bez hesel) |
 | klienti (signál, rychlost, data) | `ubus call hostapd.<if> get_clients` |
+| rozhraní routeru | `ubus call network.interface dump` |
 | jména a IP klientů (router) | `ubus call luci-rpc getDHCPLeases`, jinak `/tmp/dhcp.leases` |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).
