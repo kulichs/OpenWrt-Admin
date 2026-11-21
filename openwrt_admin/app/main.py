@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, i18n, topology
+from . import actions, i18n, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_states
 
@@ -172,14 +172,22 @@ class Store:
             out.insert(0, {"name": self.router.name, "online": self.router.online})
         return out
 
-    def lease_list(self) -> list[dict]:
-        """DHCP leases z routeru, u Wi-Fi klientu doplneno AP/SSID/pasmo, ostatni = kabel/nepripojeno."""
+    def wired(self) -> dict:
+        return wiredmod.locate(self.aps, self.router, self.leases)
+
+    def lease_list(self, wired: dict | None = None) -> list[dict]:
+        """DHCP leases z routeru, u Wi-Fi klientu doplneno AP/SSID/pasmo, u kabelovych AP a port."""
         wifi = {c["mac"]: c for a in self.aps for c in a.clients}
+        wired = wired or self.wired()
+        cable = {d["mac"]: (ap, d["port"]) for ap, devs in wired["by_ap"].items() for d in devs}
         out = []
         for mac, l in self.leases.items():
             c = wifi.get(mac)
+            cab = cable.get(mac)
             out.append({"mac": mac, "ip": l.get("ip", ""), "hostname": l.get("hostname", ""),
-                        "ap": c["ap"] if c else "", "ssid": c["ssid"] if c else "", "band": c.get("band", "") if c else ""})
+                        "ap": c["ap"] if c else "", "ssid": c["ssid"] if c else "", "band": c.get("band", "") if c else "",
+                        "cable_ap": cab[0] if cab else "", "cable_port": cab[1] if cab else "",
+                        "is_ap": mac in wired["ap_macs"]})
 
         def ipkey(x):
             try:
@@ -435,9 +443,11 @@ async def ap_page(request: Request, name: str):
 @app.get("/map", response_class=HTMLResponse)
 async def map_page(request: Request, clients: str = "1", empty: str = "0"):
     show_clients, show_empty = clients != "0", empty == "1"
-    wired = [l for l in store.lease_list() if not l["ap"]]
-    topo = topology.build(store.router, store.aps, wired, request.state.t, clients=store.all_clients(),
-                          show_clients=show_clients, show_empty=show_empty)
+    w = store.wired()
+    router_wired = [l for l in store.lease_list(w) if not l["ap"] and not l["cable_ap"] and not l["is_ap"]]
+    topo = topology.build(store.router, store.aps, router_wired, request.state.t, clients=store.all_clients(),
+                          show_clients=show_clients, show_empty=show_empty,
+                          ap_wired=w["by_ap"], parent=w["parent"])
     return render(request, "map.html", page="map", topo=topo, show_clients=show_clients, show_empty=show_empty)
 
 

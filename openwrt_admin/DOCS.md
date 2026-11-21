@@ -108,6 +108,9 @@ The **Map** page draws the network as a tree: Internet → router → access poi
 - **Clients** are shown with name (or MAC) and signal (green ≥ −60 dBm, orange ≥ −72 dBm, red below); wired devices with their IP. The **Clients** toggle switches them off (then SSIDs show only the count).
 - **SSIDs without clients are hidden** by default; the **SSIDs without clients** toggle shows them.
 - **Zoom and pan:** mouse wheel zooms around the cursor, dragging moves the map, buttons **+ / − / Fit**. The position is kept when the page refreshes itself.
+- **APs working as switches:** wired devices plugged into an AP's ports are shown under that AP in a **Wired** group with the port number, and an AP plugged into another AP is drawn under it (elbow line). Source: the switch MAC table on each AP (`swconfig dev switch0 get arl_table`); the uplink is the port where the router's MAC is seen (from the AP's ARP table), the CPU port is the one tagged in all `switch_vlan`s. If the same MAC is seen on several chained APs, it belongs to the last one. Wired devices that are on no AP port stay under the router (**Wired / other**); the router page shows for each DHCP lease whether it is on Wi-Fi, on an AP port, or elsewhere.
+- Works only where the switch can list its MAC table (swconfig chips such as Atheros/Qualcomm AR8xxx, MediaTek). Unmanaged switches in between are not visible: devices behind them appear at the nearest OpenWrt AP.
+- Lines to Wi-Fi clients are dotted, wired lines are solid.
 
 - **Line types:** WAN (grey, thick), LAN untagged (thin), LAN + VLANs = trunk (thick; the tagged VLANs are shown as coloured chips in the AP node), Wi-Fi (dotted). Offline devices: red dashed line.
 - **Colours = networks:** the untagged LAN and every VLAN have their own colour, the same on the router, APs and SSIDs. The legend lists the VLAN IDs and the interface names used for them on each device.
@@ -134,6 +137,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | radios, SSID → network/VLAN | `ubus call network.wireless status` |
 | SSIDs incl. disabled ones | `uci -q show wireless` (without passwords) |
 | clients (signal, rate, traffic) | `ubus call hostapd.<if> get_clients` |
+| switch MAC table (wired devices on AP ports) | `swconfig dev <switch> get arl_table`, `/proc/net/arp` |
 | interfaces and VLANs (router, APs) | `ubus call network.interface dump`, `ubus call network.device status` |
 | client names and IPs (router) | `ubus call luci-rpc getDHCPLeases`, else `/tmp/dhcp.leases` |
 
@@ -274,6 +278,9 @@ Stránka **Mapa** kreslí síť jako strom: Internet → router → access point
 - **Klienti** jsou se jménem (nebo MAC) a signálem (zeleně ≥ −60 dBm, oranžově ≥ −72 dBm, červeně slabší); zařízení na kabelu s IP. Přepínač **Klienti** je vypne (SSID pak ukazují jen počet).
 - **SSID bez klientů se skrývají**, přepínač **SSID bez klientů** je zobrazí.
 - **Zoom a posun:** kolečko myši přibližuje kolem kurzoru, tažením se mapa posouvá, tlačítka **+ / − / Vše**. Pozice zůstane i po automatickém obnovení stránky.
+- **AP jako switch:** zařízení zapojená kabelem do portů AP se ukážou pod tím AP ve skupině **Kabel** s číslem portu a AP zapojený přes jiný AP se nakreslí pod ním (lomená čára). Zdroj: tabulka MAC adres switche na každém AP (`swconfig dev switch0 get arl_table`); uplink je port, na kterém je MAC routeru (z ARP tabulky AP), CPU port je ten tagovaný ve všech `switch_vlan`. Když stejnou MAC vidí víc AP zapojených za sebou, patří poslednímu. Kabelová zařízení, která nejsou na portu žádného AP, zůstávají u routeru (**Kabel / ostatní**); stránka routeru u každého DHCP klienta ukazuje, jestli je na Wi-Fi, na portu AP, nebo jinde.
+- Funguje jen tam, kde switch umí vypsat tabulku MAC adres (swconfig čipy jako Atheros/Qualcomm AR8xxx, MediaTek). Hloupé switche mezi zařízeními vidět nejsou: zařízení za nimi se ukážou u nejbližšího OpenWrt AP.
+- Čáry ke klientům na Wi-Fi jsou tečkované, kabelové plné.
 
 - **Druhy spojnic:** WAN (šedá, silná), LAN netagovaná (tenká), LAN + VLANy = trunk (silná; tagované VLANy jsou barevné štítky v uzlu AP), Wi-Fi (tečkovaná). Offline zařízení: červená přerušovaná.
 - **Barvy = sítě:** netagovaná LAN a každá VLAN mají vlastní barvu, stejnou u routeru, AP i SSID. Legenda ukazuje VLAN ID a názvy rozhraní, pod kterými je síť na zařízeních.
@@ -300,6 +307,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | rádia, SSID → síť/VLAN | `ubus call network.wireless status` |
 | SSID včetně vypnutých | `uci -q show wireless` (bez hesel) |
 | klienti (signál, rychlost, data) | `ubus call hostapd.<if> get_clients` |
+| tabulka MAC adres switche (kabel na portech AP) | `swconfig dev <switch> get arl_table`, `/proc/net/arp` |
 | rozhraní a VLANy (router, AP) | `ubus call network.interface dump`, `ubus call network.device status` |
 | jména a IP klientů (router) | `ubus call luci-rpc getDHCPLeases`, jinak `/tmp/dhcp.leases` |
 

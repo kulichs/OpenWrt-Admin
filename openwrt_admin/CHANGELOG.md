@@ -2,6 +2,15 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.9.0
+- Map: wired devices on AP ports (APs that also work as switches) are shown under that AP in a "Wired" group with the port number; an AP connected through another AP is drawn under it. Source: switch MAC table (`swconfig … get arl_table`), uplink = port with the router's MAC, CPU port = tagged in all `switch_vlan`s.
+- Router page: for each DHCP lease shows the AP and port it is wired to.
+- Lines to Wi-Fi clients are dotted, wired ones solid.
+---
+- Mapa: kabelová zařízení na portech AP (AP fungují i jako switch) se ukážou pod tím AP ve skupině „Kabel“ s číslem portu; AP zapojený přes jiný AP se nakreslí pod ním. Zdroj: tabulka MAC adres switche (`swconfig … get arl_table`), uplink = port s MAC routeru, CPU port = tagovaný ve všech `switch_vlan`.
+- Stránka routeru: u DHCP klientů je vidět, ke kterému AP a portu jsou připojení kabelem.
+- Čáry ke klientům na Wi-Fi jsou tečkované, kabelové plné.
+
 ## 0.8.0
 - Map: clients as their own nodes (name/MAC + signal, wired devices with IP, tooltip with IP/MAC/band), SSIDs without clients hidden by default (toggle), clients can be switched off.
 - Map can be zoomed (mouse wheel around the cursor, + / − / Fit) and panned by dragging; position is kept across automatic refresh.

@@ -198,7 +198,7 @@
   "map.network": "Network",
   "map.names": "Interface names",
   "map.untagged": "untagged",
-  "map.note": "Lines show logical connections: the AP is in the router's network and carries the listed VLANs. Switches and physical ports are not visible from OpenWrt (ubus). VLAN IDs come from device names (eth0.30, br-lan.10) and bridge members.",
+  "map.note": "Lines show logical connections: the AP is in the router's network and carries the listed VLANs. Wired devices and APs connected through another AP are detected from the AP switch MAC table (swconfig arl_table); where the switch cannot provide it, they stay under the router. Unmanaged switches in between are not visible. VLAN IDs come from device names (eth0.30, br-lan.10), bridge members and uci.",
   "map.show_clients": "Clients",
   "map.show_empty": "SSIDs without clients",
   "map.hidden_empty": [
@@ -208,5 +208,11 @@
   "map.zoom_in": "Zoom in",
   "map.zoom_out": "Zoom out",
   "map.fit": "Fit",
-  "map.drag_hint": "wheel = zoom, drag = pan"
+  "map.drag_hint": "wheel = zoom, drag = pan",
+  "map.cable": "Wired",
+  "map.ports": "port {ports}",
+  "map.legend_cable": "cable on an AP port",
+  "map.legend_via": "AP connected through another AP",
+  "router.cable_at": "wired",
+  "router.is_ap": "access point"
 }

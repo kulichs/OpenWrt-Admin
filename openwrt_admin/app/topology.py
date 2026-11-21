@@ -66,10 +66,41 @@ def _client_node(c: dict, x: float, y: float, color: str, wired: bool, t) -> dic
             "href": ""}
 
 
+INDENT = 36
+
+
+def _tree_order(aps: list[APState], parent: dict[str, str]) -> list[tuple[APState, int]]:
+    """AP v poradi stromu (podrizene hned pod nadrazenym) s hloubkou zanoreni."""
+    names = {a.name for a in aps}
+    kids: dict[str, list[APState]] = {}
+    roots = []
+    for a in aps:
+        p = parent.get(a.name)
+        (kids.setdefault(p, []) if p in names else roots).append(a)
+    out, seen = [], set()
+
+    def walk(a, d):
+        if a.name in seen:
+            return
+        seen.add(a.name)
+        out.append((a, d))
+        for k in kids.get(a.name, []):
+            walk(k, d + 1)
+    for r in roots:
+        walk(r, 0)
+    for a in aps:  # cykly / zbytek
+        walk(a, 0)
+    return out
+
+
 def build(router: APState | None, aps: list[APState], wired: list[dict], t, clients: list[dict] | None = None,
-          show_clients: bool = True, show_empty: bool = False) -> dict:
-    """wired: DHCP leases mimo Wi-Fi; clients: vsichni Wi-Fi klienti (ap, ifname, ...)."""
+          show_clients: bool = True, show_empty: bool = False,
+          ap_wired: dict[str, list[dict]] | None = None, parent: dict[str, str] | None = None) -> dict:
+    """wired: kabelova zarizeni u routeru (neumistena na zadny AP); clients: vsichni Wi-Fi klienti;
+    ap_wired: {ap: [kabelova zarizeni na portech AP]}; parent: {ap: AP, pres ktery je zapojeny}."""
     clients = clients or []
+    ap_wired = ap_wired or {}
+    parent = parent or {}
     wired_count = len(wired)
     # ---- site (podle VLAN ID), nazvy primarne z routeru
     nets: dict[str, dict] = {}
@@ -126,13 +157,19 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
     y = TOP
     ap_nodes = []
     hidden = 0
-    for ap in aps:
+    for ap, depth in _tree_order(aps, parent):
         ssids = ap.ssids if ap.online else []
+        cab = ap_wired.get(ap.name, []) if ap.online else []
         if not show_empty:
             hidden += sum(1 for s in ssids if not s.get("clients"))
             ssids = [s for s in ssids if s.get("clients")]
         block_top = y
         children = []
+        if cab:
+            cl = cab if show_clients else []
+            h = max(ROW, len(cl) * CROW + (ROW - CROW))
+            children.append(({"cable": True}, cl, y, h))
+            y += h
         for s in ssids:
             cl = by_if.get((ap.name, s["ifname"]), []) if show_clients else []
             h = max(ROW, len(cl) * CROW + (ROW - CROW))
@@ -141,12 +178,29 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
         if not children:
             y += ROW
         block_h = y - block_top
-        apn = {"id": "ap:" + ap.name, "kind": "ap", "x": COL_X["ap"], "y": block_top + (block_h - ROW) / 2 + (ROW - NODE_H) / 2,
-               "w": NODE_W["ap"], "title": ap.name, "sub": ap.host, "online": ap.online, "href": "/ap/" + quote(ap.name),
+        apn = {"id": "ap:" + ap.name, "kind": "ap", "x": COL_X["ap"] + depth * INDENT,
+               "y": block_top + (block_h - ROW) / 2 + (ROW - NODE_H) / 2, "depth": depth,
+               "w": NODE_W["ap"] - depth * INDENT, "title": ap.name, "sub": ap.host, "online": ap.online, "href": "/ap/" + quote(ap.name),
                "extra": t("map.clients", n=ap.client_count) if ap.online else t("map.offline")}
         nodes.append(apn)
         ap_nodes.append((ap, apn))
         for s, cl, top, h in children:
+            if s.get("cable"):
+                lanc = nets["lan"]["color"]
+                ports = sorted({d["port"] for d in cab}, key=int)
+                gn = {"id": f"cable:{ap.name}", "kind": "cable", "x": COL_X["ssid"], "y": top + (h - ROW) / 2 + (ROW - NODE_H) / 2,
+                      "w": NODE_W["ssid"], "title": t("map.cable"), "sub": t("map.ports", ports=", ".join(ports)),
+                      "extra": t("map.clients", n=len(cab)), "online": True, "color": lanc, "href": ""}
+                nodes.append(gn)
+                edges.append({"from": apn, "to": gn, "kind": "lan", "color": lanc})
+                for k, c in enumerate(cl):
+                    cn = _client_node({**c, "port": c["port"]}, COL_X["client"],
+                                      top + (ROW - CROW) / 2 + k * CROW + (CROW - CLIENT_H) / 2, lanc, True, t)
+                    cn["extra"] = f"port {c['port']}" + (f" · {c['ip']}" if c.get("ip") else "")
+                    cn["tip"] = " · ".join(v for v in [c.get("hostname") or c["mac"], c.get("ip", ""), c["mac"], f"port {c['port']}"] if v)
+                    nodes.append(cn)
+                    edges.append({"from": gn, "to": cn, "kind": "cable", "color": lanc})
+                continue
             n = net_of_ap_network(ap, s.get("network", ""))
             sn = {"id": f"ssid:{ap.name}:{s['ifname']}", "kind": "ssid", "x": COL_X["ssid"],
                   "y": top + (h - ROW) / 2 + (ROW - NODE_H) / 2,
@@ -200,11 +254,14 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
         edges.append({"from": inet, "to": rn, "kind": "wan", "color": "", "up": bool(wan)})
 
     lan_color = nets["lan"]["color"]
+    ap_by_name = {a.name: n for a, n in ap_nodes}
     for ap, apn in ap_nodes:
         vl = sorted({v for v in ap_ifvlan.get(ap.name, {}).values() if v is not None})
         chips = [{"label": nets[_net_key(v)]["label"], "color": nets[_net_key(v)]["color"]} for v in vl]
         apn["chips"] = _chips(apn, chips)
-        edges.append({"from": rn, "to": apn, "kind": "trunk" if vl else "lan", "color": lan_color, "up": ap.online})
+        src = ap_by_name.get(parent.get(ap.name)) or rn
+        edges.append({"from": src, "to": apn, "kind": "trunk" if vl else "lan", "color": lan_color, "up": ap.online,
+                      "via": src is not rn})
     if router:
         rv = sorted({v for v in router_vl.values() if v is not None})
         rn["chips"] = _chips(rn, [{"label": nets[_net_key(v)]["label"], "color": nets[_net_key(v)]["color"]} for v in rv])
@@ -214,6 +271,13 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
     # ---- geometrie spojnic (bezier z praveho okraje rodice do leveho okraje potomka)
     for e in edges:
         a, b = e["from"], e["to"]
+        if e.get("via"):  # AP zapojeny pres jiny AP: lomena cara z dolni hrany nadrazeneho do leveho boku
+            x1, y1 = a["x"] + 18, a["y"] + a.get("h", NODE_H)
+            x2, y2 = b["x"], b["y"] + b.get("h", NODE_H) / 2
+            r = min(12, (y2 - y1) / 2, (x2 - x1) / 2) if y2 > y1 and x2 > x1 else 0
+            e["d"] = f"M{x1:.0f},{y1:.0f} V{y2 - r:.0f} Q{x1:.0f},{y2:.0f} {x1 + r:.0f},{y2:.0f} H{x2:.0f}"
+            e["mx"], e["my"] = x1, y2
+            continue
         x1, y1 = a["x"] + a["w"], a["y"] + a.get("h", NODE_H) / 2
         x2, y2 = b["x"], b["y"] + b.get("h", NODE_H) / 2
         dx = (x2 - x1) / 2

@@ -198,7 +198,7 @@
   "map.network": "Síť",
   "map.names": "Názvy rozhraní",
   "map.untagged": "netagovaná",
-  "map.note": "Spojnice ukazují logické propojení: AP je ve stejné síti jako router a nese uvedené VLANy. Switche a konkrétní porty z OpenWrt (ubus) vidět nejsou. VLAN ID se zjišťuje z názvů zařízení (eth0.30, br-lan.10) a ze členů bridge.",
+  "map.note": "Spojnice ukazují logické propojení: AP je ve stejné síti jako router a nese uvedené VLANy. Kabelová zařízení a AP zapojené přes jiný AP se zjišťují z tabulky MAC adres switche v AP (swconfig arl_table); kde ji switch neumí, zůstanou u routeru. Hloupé switche mezi zařízeními vidět nejsou. VLAN ID se zjišťuje z názvů zařízení (eth0.30, br-lan.10), členů bridge a uci.",
   "map.show_clients": "Klienti",
   "map.show_empty": "SSID bez klientů",
   "map.hidden_empty": [
@@ -209,5 +209,11 @@
   "map.zoom_in": "Přiblížit",
   "map.zoom_out": "Oddálit",
   "map.fit": "Vše",
-  "map.drag_hint": "kolečko = zoom, tažení = posun"
+  "map.drag_hint": "kolečko = zoom, tažení = posun",
+  "map.cable": "Kabel",
+  "map.ports": "port {ports}",
+  "map.legend_cable": "kabel na portu AP",
+  "map.legend_via": "AP zapojený přes jiný AP",
+  "router.cable_at": "kabel",
+  "router.is_ap": "access point"
 }

@@ -84,6 +84,18 @@ def demo_states() -> tuple[list[APState], dict]:
     for i, cl in enumerate(a.clients + b.clients):
         if i % 3 != 2:
             leases[cl["mac"]] = {"ip": f"192.168.1.{100 + i}", "hostname": names[i % len(names)]}
+    # switch v AP-Office: uplink port 2 (router), CPU port 0, NAS a tiskarna na portu 3, AP-Living zapojeny pres port 4
+    router_mac, living_mac = "02:00:00:00:00:01", "02:00:00:00:00:12"
+    a.mac, b.mac = living_mac, "02:00:00:00:00:13"
+    for ap in (a, b, c):
+        ap.arp = {router_mac: "192.168.1.1"}
+    b.switch_vlans = ["0t 2 3 4", "0t 2t", "0t 2t"]
+    b.arl = {"switch0:0": [b.mac] + [x["mac"] for x in b.clients],
+             "switch0:2": [router_mac, "02:00:00:00:10:02"],
+             "switch0:3": ["02:00:00:00:10:01", "02:00:00:00:10:03", "02:00:00:00:10:05"],
+             "switch0:4": [living_mac] + [x["mac"] for x in a.clients]}
+    b.arp["02:00:00:00:10:05"] = "192.168.1.50"
+
     # zarizeni na kabelu (jen v DHCP routeru)
     for i, (mac, name) in enumerate([("02:00:00:00:10:01", "nas"), ("02:00:00:00:10:02", "homeassistant"),
                                      ("02:00:00:00:10:03", "printer"), ("02:00:00:00:10:04", "")]):

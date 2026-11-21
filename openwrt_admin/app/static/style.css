@@ -127,3 +127,6 @@ svg.netmap.dragging { cursor: grabbing; }
 .netmap .c-extra { fill: var(--muted); font-size: 11px; }
 .netmap .c-extra.sig-good { fill: var(--good); } .netmap .c-extra.sig-ok { fill: var(--ok); } .netmap .c-extra.sig-bad { fill: var(--bad); }
 .edge-client, .edge-cable { stroke-width: 1.3 !important; opacity: .75; }
+
+/* 0.9.0 – Wi-Fi ke klientum prerusovane, kabel plne */
+.edge-client { stroke-dasharray: 3 4; stroke-linecap: round; }

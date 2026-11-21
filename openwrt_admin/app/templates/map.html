@@ -102,6 +102,8 @@
     <span><svg width="44" height="10"><path d="M2,5 H42" class="edge edge-lan" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_lan") }}</span>
     <span><svg width="44" height="10"><path d="M2,5 H42" class="edge edge-trunk" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_trunk") }}</span>
     <span><svg width="44" height="10"><path d="M2,5 H42" class="edge edge-wifi" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_wifi") }}</span>
+    <span><svg width="44" height="10"><path d="M2,5 H42" class="edge edge-cable" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_cable") }}</span>
+    <span><svg width="44" height="14"><path d="M4,1 V9 Q4,13 8,13 H42" class="edge edge-lan" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_via") }}</span>
   </div>
   <table class="list">
     <thead><tr><th>{{ t("map.network") }}</th><th>VLAN</th><th>{{ t("map.names") }}</th></tr></thead>

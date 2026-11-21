@@ -50,6 +50,11 @@ class APState:
     kind: str = "ap"  # "ap" / "router"
     # router: rozhrani z `ubus call network.interface dump`
     interfaces: list[dict[str, Any]] = field(default_factory=list)
+    # switch (swconfig): MAC adresy podle portu, ARP tabulka, vlastni MAC, porty switch_vlan z uci
+    mac: str = ""
+    arl: dict[str, list[str]] = field(default_factory=dict)   # "switch0:2" -> [mac, ...]
+    arp: dict[str, str] = field(default_factory=dict)          # mac -> ip
+    switch_vlans: list[str] = field(default_factory=list)      # ["0t 2 3 4 5", "0t 2t", ...]
 
     @property
     def client_count(self) -> int:
@@ -211,7 +216,7 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
             known_hosts=None,  # host klice se meni pri sysupgrade -n; jen LAN a jen cteni
             connect_timeout=timeout,
         ) as conn:
-            (wstatus, hostapd_list, uci_wl, ifdump, devstatus, ucinet), _ = await asyncio.gather(
+            (wstatus, hostapd_list, uci_wl, ifdump, devstatus, ucinet, arl, arp), _ = await asyncio.gather(
                 asyncio.gather(
                     _ubus(conn, "network.wireless", "status", timeout),
                     _run(conn, "ubus list 'hostapd.*'", timeout),
@@ -219,11 +224,16 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
                     _ubus(conn, "network.interface", "dump", timeout),
                     _ubus(conn, "network.device", "status", timeout),
                     _run(conn, "uci -q show network", timeout),
+                    _run(conn, ARL_CMD, timeout),
+                    _run(conn, "cat /proc/net/arp", timeout),
                 ),
                 _read_system(conn, st, timeout),
             )
+            st.arl, st.arp, st.switch_vlans = parse_arl(arl), parse_arp(arp), switch_vlan_ports(ucinet)
             st.wifi_ifaces = parse_wifi_ifaces(uci_wl)
             st.interfaces = parse_interfaces(ifdump, devstatus, uci_vlans(ucinet), gw_is_wan=False)
+            lan_dev = next((i["device"] for i in st.interfaces if i["name"] == "lan"), "br-lan")
+            st.mac = (((devstatus or {}).get(lan_dev) or {}).get("macaddr") or "").lower()
 
             # mapovani ifname -> SSID / sit / radio z netifd
             iface_meta: dict[str, dict] = {}
@@ -324,6 +334,39 @@ def vlan_of(device: str, devstatus: dict | None = None) -> int | None:
         if m and not mem.startswith(("phy", "wlan")):
             return int(m.group(1))
     return None
+
+
+ARL_RE = re.compile(r"Port\s+(\d+)\s*:\s*MAC\s+([0-9a-fA-F:]{17})")
+ARL_CMD = ("for s in $(swconfig list 2>/dev/null | sed -n 's/^Found: \\([^ ]*\\).*/\\1/p'); do "
+           "echo \"== $s\"; swconfig dev $s get arl_table 2>/dev/null; done")
+
+
+def parse_arl(text: str) -> dict[str, list[str]]:
+    """Vystup `swconfig dev X get arl_table` (pro vsechny switche) -> {"switch0:2": [mac, ...]}."""
+    out: dict[str, list[str]] = {}
+    sw = "switch0"
+    for line in (text or "").splitlines():
+        if line.startswith("== "):
+            sw = line[3:].strip()
+            continue
+        m = ARL_RE.search(line)
+        if m:
+            out.setdefault(f"{sw}:{m.group(1)}", []).append(m.group(2).lower())
+    return out
+
+
+def parse_arp(text: str) -> dict[str, str]:
+    out = {}
+    for line in (text or "").splitlines()[1:]:
+        p = line.split()
+        if len(p) >= 4 and p[3] != "00:00:00:00:00:00" and p[2] != "0x0":
+            out[p[3].lower()] = p[0]
+    return out
+
+
+def switch_vlan_ports(text: str) -> list[str]:
+    return [str(sec.get("ports", "")) for sec in parse_uci_show(text or "").values()
+            if sec.get(".type") == "switch_vlan" and sec.get("ports")]
 
 
 def uci_vlans(text: str) -> dict[str, int]:
