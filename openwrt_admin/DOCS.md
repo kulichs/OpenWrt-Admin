@@ -97,6 +97,15 @@ The router (`dhcp_router`) is a device of its own, without radios and SSIDs. It 
 
 The add-on's SSH key must be on the router too.
 
+### Network map
+
+The **Map** page draws the network as a tree: Internet → router → access points → SSIDs, plus a node for wired/other DHCP clients. Each node links to its page (SSID nodes to the filtered client list).
+
+- **Line types:** WAN (grey, thick), LAN untagged (thin), LAN + VLANs = trunk (thick; the tagged VLANs are shown as coloured chips in the AP node), Wi-Fi (dotted). Offline devices: red dashed line.
+- **Colours = networks:** the untagged LAN and every VLAN have their own colour, the same on the router, APs and SSIDs. The legend lists the VLAN IDs and the interface names used for them on each device.
+- **VLAN IDs** come from device names (`eth0.30`, `br-lan.10`) and bridge members (`br-host` → `eth0.30`), read with `ubus call network.interface dump` and `ubus call network.device status`. Works with swconfig and DSA.
+- The map shows **logical** connections: switches and physical ports are not visible from OpenWrt.
+
 ### Overview tiles
 
 The first tile shows **devices online**: the router and all configured APs. Hover over it to see the list.
@@ -115,7 +124,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | radios, SSID → network/VLAN | `ubus call network.wireless status` |
 | SSIDs incl. disabled ones | `uci -q show wireless` (without passwords) |
 | clients (signal, rate, traffic) | `ubus call hostapd.<if> get_clients` |
-| router interfaces | `ubus call network.interface dump` |
+| interfaces and VLANs (router, APs) | `ubus call network.interface dump`, `ubus call network.device status` |
 | client names and IPs (router) | `ubus call luci-rpc getDHCPLeases`, else `/tmp/dhcp.leases` |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
@@ -244,6 +253,15 @@ Router (`dhcp_router`) je samostatné zařízení, bez rádií a SSID. Má vlast
 
 SSH klíč add-onu musí být i na routeru.
 
+### Mapa sítě
+
+Stránka **Mapa** kreslí síť jako strom: Internet → router → access pointy → SSID, k tomu uzel pro DHCP klienty na kabelu a ostatní. Každý uzel je odkaz na svou stránku (SSID na vyfiltrovaný seznam klientů).
+
+- **Druhy spojnic:** WAN (šedá, silná), LAN netagovaná (tenká), LAN + VLANy = trunk (silná; tagované VLANy jsou barevné štítky v uzlu AP), Wi-Fi (tečkovaná). Offline zařízení: červená přerušovaná.
+- **Barvy = sítě:** netagovaná LAN a každá VLAN mají vlastní barvu, stejnou u routeru, AP i SSID. Legenda ukazuje VLAN ID a názvy rozhraní, pod kterými je síť na zařízeních.
+- **VLAN ID** se bere z názvů zařízení (`eth0.30`, `br-lan.10`) a ze členů bridge (`br-host` → `eth0.30`), přes `ubus call network.interface dump` a `ubus call network.device status`. Funguje se swconfig i DSA.
+- Mapa ukazuje **logické** propojení: switche a fyzické porty z OpenWrt vidět nejsou.
+
 ### Dlaždice na přehledu
 
 První dlaždice ukazuje **zařízení online**: router a všechny nastavené AP. Po najetí myší se ukáže seznam.
@@ -262,7 +280,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | rádia, SSID → síť/VLAN | `ubus call network.wireless status` |
 | SSID včetně vypnutých | `uci -q show wireless` (bez hesel) |
 | klienti (signál, rychlost, data) | `ubus call hostapd.<if> get_clients` |
-| rozhraní routeru | `ubus call network.interface dump` |
+| rozhraní a VLANy (router, AP) | `ubus call network.interface dump`, `ubus call network.device status` |
 | jména a IP klientů (router) | `ubus call luci-rpc getDHCPLeases`, jinak `/tmp/dhcp.leases` |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).

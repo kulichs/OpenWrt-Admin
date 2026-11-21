@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, i18n
+from . import actions, i18n, topology
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_states
 
@@ -412,6 +412,13 @@ async def ap_page(request: Request, name: str):
         return render(request, "router.html", page="ap:" + name, ap=ap, leases=store.lease_list())
     clients = [c for c in store.all_clients() if c["ap"] == name]
     return render(request, "ap.html", page="ap:" + name, ap=ap, clients=clients)
+
+
+@app.get("/map", response_class=HTMLResponse)
+async def map_page(request: Request):
+    wired = sum(1 for l in store.lease_list() if not l["ap"])
+    topo = topology.build(store.router, store.aps, wired, request.state.t)
+    return render(request, "map.html", page="map", topo=topo)
 
 
 @app.get("/setup", response_class=HTMLResponse)

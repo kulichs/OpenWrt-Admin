@@ -2,6 +2,13 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.7.0
+- New **Map** page: network tree Internet → router → APs → SSIDs (+ wired clients). Lines distinguish WAN, untagged LAN, trunk with VLANs (VLAN chips in AP nodes) and Wi-Fi; colours per network (LAN / VLAN ID), legend with interface names. Offline devices shown dashed red. Nodes link to their pages.
+- APs now also read `network.interface dump` and `network.device status`; VLAN IDs detected from device names and bridge members (swconfig and DSA).
+---
+- Nová stránka **Mapa**: strom sítě Internet → router → AP → SSID (+ klienti na kabelu). Spojnice rozlišují WAN, netagovanou LAN, trunk s VLANy (štítky VLAN v uzlu AP) a Wi-Fi; barvy podle sítě (LAN / VLAN ID), legenda s názvy rozhraní. Offline zařízení červeně přerušovaně. Uzly jsou odkazy na své stránky.
+- AP nově čtou i `network.interface dump` a `network.device status`; VLAN ID se zjišťuje z názvů zařízení a členů bridge (swconfig i DSA).
+
 ## 0.6.0
 - The router is a device of its own: tab, overview card and page with system info, interfaces (WAN/LAN/VLANs from `network.interface dump`) and all DHCP leases including wired devices (Wi-Fi clients show their AP/SSID). Reboot and package updates work on the router too. One SSH connection per poll.
 - New option `router_name` (default Router).

@@ -91,3 +91,24 @@ label.inline { display: inline-flex; gap: .5rem; align-items: center; }
 nav a.router-tab { font-weight: 600; }
 .router-card { border-left: 3px solid var(--accent); }
 h1 .tag, .card-head .tag { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+/* 0.7.0 – mapa site */
+.map-wrap { overflow-x: auto; }
+svg.netmap { display: block; max-width: 100%; height: auto; font: 13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.netmap .edge, .legend .edge { fill: none; stroke: var(--muted); stroke-width: 2.5; }
+.edge-wan { stroke: var(--muted) !important; stroke-width: 4 !important; }
+.edge-trunk { stroke-width: 4 !important; }
+.edge-wifi { stroke-dasharray: 3 5; stroke-linecap: round; stroke-width: 2.5; }
+.edge-down { stroke: var(--bad) !important; stroke-dasharray: 6 6; opacity: .6; }
+.netmap .node rect:first-of-type { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
+.netmap .node-router rect:first-of-type { stroke: var(--accent); stroke-width: 2.5; }
+.netmap .node-internet rect:first-of-type { stroke-dasharray: 4 3; }
+.netmap .node-off { opacity: .55; }
+.netmap a:hover .node rect:first-of-type { stroke: var(--accent); }
+.netmap .n-title { fill: var(--fg); font-weight: 600; }
+.netmap .n-sub, .netmap .n-extra { fill: var(--muted); font-size: 11.5px; }
+.netmap .st-on { fill: var(--good); } .netmap .st-off { fill: var(--bad); }
+.netmap .chip text { fill: #fff; font-size: 10px; font-weight: 600; }
+.legend { display: flex; gap: 1.4rem; flex-wrap: wrap; margin-bottom: .8rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: .4rem; }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: middle; }

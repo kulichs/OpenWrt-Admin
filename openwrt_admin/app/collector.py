@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import json
 import logging
 import shlex
@@ -210,15 +211,18 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
             known_hosts=None,  # host klice se meni pri sysupgrade -n; jen LAN a jen cteni
             connect_timeout=timeout,
         ) as conn:
-            (wstatus, hostapd_list, uci_wl), _ = await asyncio.gather(
+            (wstatus, hostapd_list, uci_wl, ifdump, devstatus), _ = await asyncio.gather(
                 asyncio.gather(
                     _ubus(conn, "network.wireless", "status", timeout),
                     _run(conn, "ubus list 'hostapd.*'", timeout),
                     _run(conn, "uci -q show wireless", timeout),
+                    _ubus(conn, "network.interface", "dump", timeout),
+                    _ubus(conn, "network.device", "status", timeout),
                 ),
                 _read_system(conn, st, timeout),
             )
             st.wifi_ifaces = parse_wifi_ifaces(uci_wl)
+            st.interfaces = parse_interfaces(ifdump, devstatus)
 
             # mapovani ifname -> SSID / sit / radio z netifd
             iface_meta: dict[str, dict] = {}
@@ -305,7 +309,23 @@ def parse_host_port(host: str) -> tuple[str, int]:
     return host, 22
 
 
-def parse_interfaces(dump) -> list[dict]:
+VLAN_RE = re.compile(r"\.(\d{1,4})$")
+
+
+def vlan_of(device: str, devstatus: dict | None = None) -> int | None:
+    """VLAN ID rozhrani: z nazvu (eth0.30, br-lan.10) nebo z clenu bridge (br-host -> eth0.30). None = netagovane."""
+    m = VLAN_RE.search(device or "")
+    if m:
+        return int(m.group(1))
+    members = ((devstatus or {}).get(device) or {}).get("bridge-members") or []
+    for mem in members:
+        m = VLAN_RE.search(mem)
+        if m and not mem.startswith(("phy", "wlan")):
+            return int(m.group(1))
+    return None
+
+
+def parse_interfaces(dump, devstatus: dict | None = None) -> list[dict]:
     """`ubus call network.interface dump` -> seznam rozhrani (lan, wan, vlany...)."""
     out = []
     for i in (dump or {}).get("interface") or []:
@@ -327,6 +347,7 @@ def parse_interfaces(dump) -> list[dict]:
             "dns": ", ".join(i.get("dns-server") or []),
             "uptime": i.get("uptime"),
             "wan": name.startswith("wan") or bool(gw),
+            "vlan": vlan_of(i.get("l3_device") or i.get("device", ""), devstatus),
         })
     return sorted(out, key=lambda x: (not x["wan"], x["name"]))
 
@@ -356,12 +377,13 @@ async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 1
     try:
         async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=timeout) as conn:
-            _, dump, leases = await asyncio.gather(
+            _, dump, devstatus, leases = await asyncio.gather(
                 _read_system(conn, st, timeout),
                 _ubus(conn, "network.interface", "dump", timeout),
+                _ubus(conn, "network.device", "status", timeout),
                 _read_leases(conn, timeout),
             )
-            st.interfaces = parse_interfaces(dump)
+            st.interfaces = parse_interfaces(dump, devstatus)
             st.online = True
     except (OSError, asyncssh.Error, asyncio.TimeoutError) as e:
         st.error = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__

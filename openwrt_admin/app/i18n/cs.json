@@ -175,5 +175,28 @@
   "router.no_leases": "Žádné DHCP záznamy",
   "router.confirm_reboot": "Restartovat router {ap}? Na 1–2 minuty spadne celá síť i internet.",
   "router.confirm_upgrade": "Spustit {pkg} upgrade na routeru {ap}? Upgrade balíčků může rozbít síť; bezpečnější je sysupgrade.",
-  "router.actions_note": "Restart routeru odpojí celou síť i internet (Home Assistant běží dál, ale na chvíli nedosáhne na nic mimo LAN)."
+  "router.actions_note": "Restart routeru odpojí celou síť i internet (Home Assistant běží dál, ale na chvíli nedosáhne na nic mimo LAN).",
+  "nav.map": "Mapa",
+  "map.title": "Mapa sítě",
+  "map.internet": "Internet",
+  "map.lan": "LAN",
+  "map.router": "router",
+  "map.no_router": "router není nastavený",
+  "map.wired": "Kabel / ostatní",
+  "map.wired_sub": "DHCP klienti mimo Wi-Fi",
+  "map.clients": [
+    "{n} klient",
+    "{n} klienti",
+    "{n} klientů"
+  ],
+  "map.offline": "offline",
+  "map.legend": "Legenda",
+  "map.legend_wan": "WAN (internet)",
+  "map.legend_lan": "LAN, netagovaná",
+  "map.legend_trunk": "LAN + VLANy (trunk), štítky = tagované VLANy",
+  "map.legend_wifi": "Wi-Fi (SSID), barva = síť",
+  "map.network": "Síť",
+  "map.names": "Názvy rozhraní",
+  "map.untagged": "netagovaná",
+  "map.note": "Spojnice ukazují logické propojení: AP je ve stejné síti jako router a nese uvedené VLANy. Switche a konkrétní porty z OpenWrt (ubus) vidět nejsou. VLAN ID se zjišťuje z názvů zařízení (eth0.30, br-lan.10) a ze členů bridge."
 }

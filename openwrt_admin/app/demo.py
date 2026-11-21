@@ -62,6 +62,15 @@ def demo_states() -> tuple[list[APState], dict]:
                 error="TimeoutError: connect timed out")
 
     for ap in (a, b):
+        ap.interfaces = [
+            {"name": "lan", "up": True, "proto": "static", "device": "br-lan", "ipv4": ap.host + "/24", "ipv6": "",
+             "gateway": "", "dns": "", "uptime": ap.uptime, "wan": False, "vlan": None},
+            {"name": "guest", "up": True, "proto": "none", "device": "br-guest", "ipv4": "", "ipv6": "",
+             "gateway": "", "dns": "", "uptime": ap.uptime, "wan": False, "vlan": 30},
+            {"name": "iot", "up": True, "proto": "none", "device": "br-iot", "ipv4": "", "ipv6": "",
+             "gateway": "", "dns": "", "uptime": ap.uptime, "wan": False, "vlan": 10},
+        ]
+    for ap in (a, b):
         ap.pkg = "apk"
         ap.wifi_ifaces = [{"section": f"wifi_{s['ifname'].replace('-', '_')}", "device": s["radio"], "mode": "ap",
                            "ssid": s["ssid"], "network": s["network"], "encryption": "psk2+ccmp",
@@ -90,12 +99,12 @@ def demo_router(name: str, host: str) -> APState:
                 overlay_size=6 * 2**30, overlay_used=310 * 2**20, overlay_avail=5600 * 2**20, pkg="apk")
     r.interfaces = [
         {"name": "wan", "up": True, "proto": "dhcp", "device": "eth0", "ipv4": "203.0.113.25/24", "ipv6": "",
-         "gateway": "203.0.113.1", "dns": "203.0.113.53", "uptime": 1_949_000, "wan": True},
+         "gateway": "203.0.113.1", "dns": "203.0.113.53", "uptime": 1_949_000, "wan": True, "vlan": None},
         {"name": "lan", "up": True, "proto": "static", "device": "br-lan", "ipv4": "192.168.1.1/24",
-         "ipv6": "fd00:1::1/60", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False},
+         "ipv6": "fd00:1::1/60", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False, "vlan": None},
         {"name": "guest", "up": True, "proto": "static", "device": "br-lan.30", "ipv4": "192.168.30.1/24",
-         "ipv6": "", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False},
+         "ipv6": "", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False, "vlan": 30},
         {"name": "iot", "up": True, "proto": "static", "device": "br-lan.10", "ipv4": "192.168.10.1/24",
-         "ipv6": "", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False},
+         "ipv6": "", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False, "vlan": 10},
     ]
     return r

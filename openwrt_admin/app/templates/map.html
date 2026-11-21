@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("map.title") }}</h1>
+{% set H = topo.node_h %}
+<div class="panel map-wrap">
+<svg class="netmap" viewBox="0 0 {{ topo.width }} {{ topo.height }}" width="{{ topo.width }}" height="{{ topo.height }}" role="img" aria-label="{{ t('map.title') }}">
+  {% for e in topo.edges %}
+  <path d="{{ e.d }}" class="edge edge-{{ e.kind }} {{ 'edge-down' if e.up is defined and not e.up }}"
+        {% if e.color %}style="stroke: {{ e.color }}"{% endif %}/>
+  {% endfor %}
+  {% for n in topo.nodes %}
+  {% if n.href %}<a href="{{ base }}{{ n.href }}">{% endif %}
+  <g class="node node-{{ n.kind }} {{ 'node-off' if not n.online }}">
+    <rect x="{{ n.x }}" y="{{ n.y }}" width="{{ n.w }}" height="{{ H }}" rx="10"
+          {% if n.color %}style="stroke: {{ n.color }}"{% endif %}/>
+    {% if n.kind in ('ap', 'router', 'internet') %}<circle cx="{{ n.x + 14 }}" cy="{{ n.y + 17 }}" r="4.5" class="{{ 'st-on' if n.online else 'st-off' }}"/>{% endif %}
+    {% if n.color %}<rect x="{{ n.x }}" y="{{ n.y }}" width="6" height="{{ H }}" rx="3" style="fill: {{ n.color }}"/>{% endif %}
+    <text x="{{ n.x + (26 if n.kind in ('ap', 'router', 'internet') else 16) }}" y="{{ n.y + 21 }}" class="n-title">{{ n.title }}</text>
+    <text x="{{ n.x + n.w - 10 }}" y="{{ n.y + 21 }}" text-anchor="end" class="n-extra">{{ n.extra }}</text>
+    {% for c in n.chips or [] %}
+    <g class="chip"><rect x="{{ c.x }}" y="{{ c.y }}" width="{{ c.w }}" height="16" rx="8" style="fill: {{ c.color }}"/>
+      <text x="{{ c.x + c.w / 2 }}" y="{{ c.y + 12 }}" text-anchor="middle">{{ c.label }}</text></g>
+    {% endfor %}
+    <text x="{{ n.x + (26 if n.kind in ('ap', 'router', 'internet') else 16) }}" y="{{ n.y + 39 }}" class="n-sub">{{ (n.sub | band) if n.kind == 'ssid' else n.sub }}{% if n.net %} · {{ n.net }}{% endif %}</text>
+  </g>
+  {% if n.href %}</a>{% endif %}
+  {% endfor %}
+</svg>
+</div>
+
+<div class="panel">
+  <h2>{{ t("map.legend") }}</h2>
+  <div class="legend">
+    <span><svg width="44" height="10"><path d="M2,5 H42" class="edge edge-wan"/></svg> {{ t("map.legend_wan") }}</span>
+    <span><svg width="44" height="10"><path d="M2,5 H42" class="edge edge-lan" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_lan") }}</span>
+    <span><svg width="44" height="10"><path d="M2,5 H42" class="edge edge-trunk" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_trunk") }}</span>
+    <span><svg width="44" height="10"><path d="M2,5 H42" class="edge edge-wifi" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_wifi") }}</span>
+  </div>
+  <table class="list">
+    <thead><tr><th>{{ t("map.network") }}</th><th>VLAN</th><th>{{ t("map.names") }}</th></tr></thead>
+    {% for n in topo.networks %}
+    <tr><td><span class="swatch" style="background: {{ n.color }}"></span> {{ n.label }}</td><td>{{ n.vlan if n.vlan is not none else t("map.untagged") }}</td><td class="mono">{{ n.names_str }}</td></tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">{{ t("map.note") }}</p>
+</div>
+{% endblock %}

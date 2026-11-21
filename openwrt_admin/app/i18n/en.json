@@ -176,5 +176,27 @@
   "router.no_leases": "No DHCP leases",
   "router.confirm_reboot": "Reboot the router {ap}? The whole network and the internet will be down for 1–2 minutes.",
   "router.confirm_upgrade": "Run {pkg} upgrade on the router {ap}? Upgrading packages can break networking; sysupgrade is safer.",
-  "router.actions_note": "Rebooting the router takes the whole network and internet down (Home Assistant keeps running but cannot reach anything outside the LAN for a moment)."
+  "router.actions_note": "Rebooting the router takes the whole network and internet down (Home Assistant keeps running but cannot reach anything outside the LAN for a moment).",
+  "nav.map": "Map",
+  "map.title": "Network map",
+  "map.internet": "Internet",
+  "map.lan": "LAN",
+  "map.router": "router",
+  "map.no_router": "no router configured",
+  "map.wired": "Wired / other",
+  "map.wired_sub": "DHCP clients not on Wi-Fi",
+  "map.clients": [
+    "{n} client",
+    "{n} clients"
+  ],
+  "map.offline": "offline",
+  "map.legend": "Legend",
+  "map.legend_wan": "WAN (internet)",
+  "map.legend_lan": "LAN, untagged",
+  "map.legend_trunk": "LAN + VLANs (trunk), chips = tagged VLANs",
+  "map.legend_wifi": "Wi-Fi (SSID), colour = network",
+  "map.network": "Network",
+  "map.names": "Interface names",
+  "map.untagged": "untagged",
+  "map.note": "Lines show logical connections: the AP is in the router's network and carries the listed VLANs. Switches and physical ports are not visible from OpenWrt (ubus). VLAN IDs come from device names (eth0.30, br-lan.10) and bridge members."
 }
