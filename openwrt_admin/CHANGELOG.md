@@ -2,6 +2,13 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.13.1
+- Ports: only switch ports used in `switch_vlan` are shown – the switch chip often has more ports than the device (UniFi AP LR: 5 chip ports, 1 jack; AR8327: port 6 is a second CPU port). Without `switch_vlan` the switch is unused and the device's own ports are shown (e.g. `eth0`), only those used by the network.
+- Map: 1 Gb/s speeds are green.
+---
+- Porty: zobrazují se jen porty switche použité ve `switch_vlan` – čip switche má často víc portů, než je na krabici (UniFi AP LR: 5 portů čipu, 1 zásuvka; AR8327: port 6 je druhý CPU port). Bez `switch_vlan` se switch nepoužívá a ukážou se porty zařízení (např. `eth0`), jen ty, které síť používá.
+- Mapa: rychlost 1 Gb/s je zeleně.
+
 ## 0.13.0
 - Port speeds: AP and router pages have a new **Ports** panel – every physical port with its state, negotiated speed (1 Gb/s, 100 Mb/s…) and duplex, role (uplink, CPU, LAN, WAN) and the devices on it. Source: `swconfig dev <switch> show` (switch ports) or `ubus call network.device status` (DSA ports, separate network cards).
 - Map: the line to each AP shows the speed of its uplink port (e.g. "1G", "100M"), wired devices on AP ports show their port speed. Below 1 Gb/s is orange (often a bad or 4-wire cable).

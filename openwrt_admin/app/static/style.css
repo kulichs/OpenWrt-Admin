@@ -158,6 +158,7 @@ button.small { padding: .15rem .55rem; font-size: .8rem; }
 /* 0.13.0: rychlost portu */
 .netmap .edge-speed { font-size: 10.5px; font-weight: 600; fill: var(--muted); paint-order: stroke; stroke: var(--card); stroke-width: 3px; }
 .netmap .edge-speed.slow, .netmap .c-extra.slow { fill: var(--ok); }
+.netmap .edge-speed.fast, .netmap .c-extra.fast { fill: var(--good); }
 .tag.sp-1000 { color: var(--good); border-color: var(--good); }
 .tag.sp-100 { color: var(--ok); border-color: var(--ok); }
 .tag.sp-10 { color: var(--bad); border-color: var(--bad); }

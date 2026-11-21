@@ -91,10 +91,10 @@ chmod 600 /etc/dropbear/authorized_keys
 
 AP and router pages have a **Ports** panel: every physical port with its state, negotiated speed and duplex, its role and the devices plugged into it (from the switch MAC table).
 
-- **swconfig** devices (switch chips such as Atheros/Qualcomm AR8xxx, MediaTek): ports of the switch from `swconfig dev <switch> show` (`link: port:N link:up speed:1000baseT full-duplex`). The CPU port is the AP itself, the uplink is the port towards the router.
-- **DSA** devices and devices without a switch (e.g. UniFi AP with one `eth0`, a router with two network cards): physical devices (`lan1`, `wan`, `eth0`…) from `ubus call network.device status` (`speed: "1000F"`). Without a switch the only connected port counts as the uplink.
+- **swconfig** devices (switch chips such as Atheros/Qualcomm AR8xxx, MediaTek): ports of the switch from `swconfig dev <switch> show` (`link: port:N link:up speed:1000baseT full-duplex`). The CPU port is the AP itself, the uplink is the port towards the router. Only ports used in `switch_vlan` are shown (the chip often has more ports than the device has jacks); without `switch_vlan` the switch is unused and the device ports below are shown.
+- **DSA** devices and devices without a switch (e.g. UniFi AP with one `eth0`, a router with two network cards): physical devices (`lan1`, `wan`, `eth0`…) from `ubus call network.device status` (`speed: "1000F"`). Only devices the network uses (bridge members, interface devices, `wan*`) are shown. Without a switch the only connected port counts as the uplink.
 - Colours: green 1 Gb/s and more, orange 100 Mb/s, red 10 Mb/s, dashed = disconnected; half-duplex is flagged. **100 Mb/s instead of 1 Gb/s** usually means a damaged or 4-wire cable, or a device that cannot do more.
-- On the **map** the line to each AP is labelled with the speed of its uplink port, and wired devices on AP ports show their port speed (orange below 1 Gb/s).
+- On the **map** the line to each AP is labelled with the speed of its uplink port, and wired devices on AP ports show their port speed (green 1 Gb/s, orange below).
 
 ### New devices on the network
 
@@ -340,10 +340,10 @@ chmod 600 /etc/dropbear/authorized_keys
 
 Stránka AP i routeru má panel **Porty**: každý fyzický port se stavem, vyjednanou rychlostí a duplexem, rolí a zařízeními, která jsou do něj zapojená (z tabulky MAC adres switche).
 
-- Zařízení se **swconfig** (switch čipy jako Atheros/Qualcomm AR8xxx, MediaTek): porty switche z `swconfig dev <switch> show` (`link: port:N link:up speed:1000baseT full-duplex`). CPU port je samotné AP, uplink je port směrem k routeru.
-- Zařízení s **DSA** a bez switche (např. UniFi AP s jediným `eth0`, router se dvěma síťovkami): fyzická zařízení (`lan1`, `wan`, `eth0`…) z `ubus call network.device status` (`speed: "1000F"`). Bez switche se za uplink bere jediný připojený port.
+- Zařízení se **swconfig** (switch čipy jako Atheros/Qualcomm AR8xxx, MediaTek): porty switche z `swconfig dev <switch> show` (`link: port:N link:up speed:1000baseT full-duplex`). CPU port je samotné AP, uplink je port směrem k routeru. Zobrazují se jen porty použité ve `switch_vlan` (čip má často víc portů, než má zařízení zásuvek); bez `switch_vlan` se switch nepoužívá a ukážou se porty zařízení níže.
+- Zařízení s **DSA** a bez switche (např. UniFi AP s jediným `eth0`, router se dvěma síťovkami): fyzická zařízení (`lan1`, `wan`, `eth0`…) z `ubus call network.device status` (`speed: "1000F"`). Ukážou se jen zařízení, která síť používá (členové bridge, zařízení rozhraní, `wan*`). Bez switche se za uplink bere jediný připojený port.
 - Barvy: zeleně 1 Gb/s a víc, oranžově 100 Mb/s, červeně 10 Mb/s, čárkovaně = odpojeno; half-duplex je označený. **100 Mb/s místo 1 Gb/s** bývá poškozený nebo 4žilový kabel, případně zařízení, které víc neumí.
-- Na **mapě** je u čáry ke každému AP rychlost jeho uplink portu a kabelová zařízení na portech AP mají rychlost svého portu (pod 1 Gb/s oranžově).
+- Na **mapě** je u čáry ke každému AP rychlost jeho uplink portu a kabelová zařízení na portech AP mají rychlost svého portu (1 Gb/s zeleně, pod 1 Gb/s oranžově).
 
 ### Nová zařízení v síti
 

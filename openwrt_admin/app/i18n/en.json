@@ -332,5 +332,5 @@
   "ports.role_lan": "LAN",
   "ports.hint": "Negotiated speed and duplex from the switch (swconfig) or network card (ubus network.device). 100 Mb/s instead of 1 Gb/s is often a faulty or 4-wire cable, or a device that cannot do more.",
   "ports.uplink_speed": "connected at {s}",
-  "map.legend_speed": "port speed (AP uplink, wired devices); orange below 1 Gb/s"
+  "map.legend_speed": "port speed (AP uplink, wired devices): green 1 Gb/s, orange slower"
 }

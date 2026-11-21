@@ -244,8 +244,8 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
                     sp = speed_label(c.get("speed", 0))
                     cn["extra"] = f"port {c['port']}" + (f" · {sp}" if sp else "") + (f" · {c['ip']}" if c.get("ip") else "")
                     cn["tip"] = " · ".join(v for v in [c.get("hostname") or c["mac"], c.get("ip", ""), c["mac"], f"port {c['port']}", sp] if v)
-                    if c.get("speed") and c["speed"] < 1000:
-                        cn["slow"] = True
+                    if c.get("speed"):
+                        cn["speedcls"] = "fast" if c["speed"] >= 1000 else "slow"
                     if c.get("stale"):
                         cn["stale"] = True
                         cn["extra"] = f"port {c['port']} · {_ago(c['stale'], t)}"
@@ -325,7 +325,7 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
         src = ap_by_name.get(parent.get(ap.name)) or rn
         edges.append({"from": src, "to": apn, "kind": "trunk" if vl else "lan", "color": lan_color, "up": ap.online,
                       "via": src is not rn, "speed": speed_label(speeds.get(ap.name, 0)) if ap.online else "",
-                      "slow": 0 < speeds.get(ap.name, 0) < 1000})
+                      "speedcls": ("fast" if speeds.get(ap.name, 0) >= 1000 else "slow") if speeds.get(ap.name) else ""})
     if router:
         rv = sorted({v for v in router_vl.values() if v is not None})
         rn["chips"] = _chips(rn, [{"label": nets[_net_key(v)]["label"], "color": nets[_net_key(v)]["color"]} for v in rv])

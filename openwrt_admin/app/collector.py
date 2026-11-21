@@ -249,9 +249,10 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
                 _read_system(conn, st, timeout),
             )
             st.arl, st.arp, st.switch_vlans = parse_arl(arl), parse_arp(arp), switch_vlan_ports(ucinet)
-            st.ports = merge_ports(parse_swconfig_ports(swports), parse_dev_ports(devstatus))
             st.wifi_ifaces = parse_wifi_ifaces(uci_wl)
             st.interfaces = parse_interfaces(ifdump, devstatus, uci_vlans(ucinet), gw_is_wan=False)
+            st.ports = merge_ports(parse_swconfig_ports(swports), parse_dev_ports(devstatus, used_devices(devstatus, st.interfaces)),
+                                   st.switch_vlans)
             lan_dev = next((i["device"] for i in st.interfaces if i["name"] == "lan"), "br-lan")
             st.mac = (((devstatus or {}).get(lan_dev) or {}).get("macaddr") or "").lower()
 
@@ -389,11 +390,26 @@ def parse_swconfig_ports(text: str) -> list[dict]:
     return out
 
 
-def parse_dev_ports(devstatus: dict | None) -> list[dict]:
-    """`ubus call network.device status` -> fyzicke porty (DSA lan1…, wan, eth0…) se `speed` "1000F"."""
+def used_devices(devstatus: dict | None, interfaces: list[dict] | None = None) -> set[str]:
+    """Fyzicka zarizeni, ktera sit opravdu pouziva: cleny bridge a zarizeni rozhrani (bez VLAN pripony .N)."""
+    used = set()
+    for d in (devstatus or {}).values():
+        if isinstance(d, dict):
+            used |= {VLAN_RE.sub("", m) for m in d.get("bridge-members") or []}
+    for i in interfaces or []:
+        if i.get("device"):
+            used.add(VLAN_RE.sub("", i["device"]))
+    return used
+
+
+def parse_dev_ports(devstatus: dict | None, used: set[str] | None = None) -> list[dict]:
+    """`ubus call network.device status` -> fyzicke porty (DSA lan1…, wan, eth0…) se `speed` "1000F".
+    used: jen zarizeni pouzita v siti (UniFi AP LR ma eth1 do nepouziteho switche)."""
     out = []
     for name, d in (devstatus or {}).items():
         if not PHYS_RE.match(name) or not isinstance(d, dict) or "speed" not in d and "carrier" not in d:
+            continue
+        if used and name not in used and not name.startswith("wan"):
             continue
         up = bool(d.get("carrier"))
         sp = str(d.get("speed") or "")
@@ -403,8 +419,12 @@ def parse_dev_ports(devstatus: dict | None) -> list[dict]:
     return sorted(out, key=lambda p: (not p["num"].startswith(("wan",)), p["num"]))
 
 
-def merge_ports(sw: list[dict], dev: list[dict]) -> list[dict]:
-    """Se swconfig switchem jsou porty switche; eth0 je jen spoj do CPU. Bez switche (DSA, router se 2 NIC) porty zarizeni."""
+def merge_ports(sw: list[dict], dev: list[dict], switch_vlans: list[str] | None = None) -> list[dict]:
+    """Se swconfig switchem jsou porty switche; eth0 je jen spoj do CPU. Bez switche (DSA, router se 2 NIC) porty zarizeni.
+    Jen porty pouzite v `switch_vlan`: cip ma casto vic portu, nez je na krabici (UniFi AP LR: 5 portu, venku 1;
+    AR8327: port 6 = druhy CPU port). Bez `switch_vlan` se switch nepouziva -> porty zarizeni (eth0)."""
+    used = {m.group(1) for ports in (switch_vlans or []) for m in (re.match(r"^(\d+)", p) for p in ports.split()) if m}
+    sw = [p for p in sw if p["num"] in used]
     return sw if sw else dev
 
 
@@ -575,8 +595,10 @@ async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 1
                 _run(conn, PORTS_CMD, timeout),
             )
             st.static_hosts = parse_static_hosts(ucidhcp)
-            st.ports = merge_ports(parse_swconfig_ports(swports), parse_dev_ports(devstatus))
             st.interfaces = parse_interfaces(dump, devstatus, uci_vlans(ucinet))
+            st.switch_vlans = switch_vlan_ports(ucinet)
+            st.ports = merge_ports(parse_swconfig_ports(swports), parse_dev_ports(devstatus, used_devices(devstatus, st.interfaces)),
+                                   st.switch_vlans)
             # ARP jen z LAN/VLAN: brana poskytovatele na WAN ani VPN peery nejsou klienti
             skip = {i["device"] for i in st.interfaces if i.get("device") and not is_l2_iface(i)}
             full = parse_arp_full(arp)
