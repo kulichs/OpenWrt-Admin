@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<h1><span class="dot {{ 'on' if ap.online else 'off' }}"></span> {{ ap.name }} <span class="tag">{{ t("switch.kind") }}</span> <span class="muted">{{ ap.host }}</span></h1>
+{% if not ap.online %}
+<p class="err">{{ t("ap.unreachable", error=(ap.error or t("ap.not_loaded"))) }}</p>
+<p class="muted small">{{ t("switch.snmp_hint") }}</p>
+{% else %}
+<section class="grid2">
+  <div class="panel">
+    <h2>{{ t("ap.system") }}</h2>
+    <dl>
+      <dt>{{ t("sys.model") }}</dt><dd>{{ ap.model or "–" }}</dd>
+      <dt>{{ t("sys.firmware") }}</dt><dd>{{ ap.release or "–" }}</dd>
+      {% if ap.hostname %}<dt>{{ t("sys.hostname") }}</dt><dd>{{ ap.hostname }}</dd>{% endif %}
+      <dt>{{ t("sys.uptime") }}</dt><dd>{{ ap.uptime | duration }}</dd>
+      <dt>MAC</dt><dd class="mono">{{ ap.mac or "–" }}</dd>
+      <dt>{{ t("switch.source") }}</dt><dd>SNMP v2c{% if sw.port and sw.port != 161 %} · port {{ sw.port }}{% endif %} <span class="muted small">({{ t("switch.readonly") }})</span></dd>
+    </dl>
+  </div>
+  <div class="panel">
+    <h2>{{ t("switch.summary") }}</h2>
+    <dl>
+      <dt>{{ t("switch.ports_up") }}</dt><dd>{{ ports | selectattr("up") | list | length }} / {{ ports | length }}</dd>
+      <dt>{{ t("switch.macs") }}</dt><dd>{{ ap.arl.values() | map("length") | sum }}</dd>
+      {% set slow = ports | selectattr("up") | selectattr("speed", "lt", 1000) | selectattr("speed", "gt", 0) | list %}
+      <dt>{{ t("switch.slow") }}</dt><dd>{% for p in slow %}<span class="tag sp-100">{{ p.num }}: {{ p.label }}</span>{% else %}–{% endfor %}</dd>
+    </dl>
+  </div>
+</section>
+{% include "_ports.html" %}
+{% if diag %}
+<details class="offline-list diag">
+  <summary>{{ t("diag.title") }}</summary>
+  <p class="muted small">{{ t("diag.gateway", ip=diag.gw_ip) }}
+    {% if not diag.gw_found %}<span class="warn">{{ t("switch.gw_missing") }}</span>
+    {% elif not diag.uplink %}<span class="warn">{{ t("diag.no_uplink") }}</span>{% endif %}</p>
+  <table class="list">
+    <thead><tr><th>{{ t("diag.port") }}</th><th>{{ t("diag.role") }}</th><th>MAC</th><th>{{ t("col.device") }}</th><th>IP</th></tr></thead>
+    {% for p in diag.ports %}{% for m in p.macs %}
+    <tr>
+      {% if loop.first %}<td rowspan="{{ p.macs | length }}"><b>{{ p.num }}</b></td>
+      <td rowspan="{{ p.macs | length }}"><span class="tag">{{ t("diag.role_" ~ p.role) }}</span></td>{% endif %}
+      <td class="mono">{{ m.mac }}</td>
+      <td>{{ m.name or "–" }}{% if m.gw %} <span class="tag">{{ t("diag.router") }}</span>{% endif %}{% if m.ap %} <span class="tag">AP</span>{% endif %}{% if m.wifi %} <span class="muted small">Wi-Fi</span>{% endif %}</td>
+      <td class="mono">{{ m.ip or "–" }}</td>
+    </tr>
+    {% endfor %}{% endfor %}
+  </table>
+</details>
+{% endif %}
+{% endif %}
+{% endblock %}

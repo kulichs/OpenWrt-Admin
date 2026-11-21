@@ -55,6 +55,10 @@ aps:                         # all managed devices – the add-on uses only thes
   - name: AP-Office
     host: 192.168.1.3
     port: 22                 # optional
+switches:                    # optional: managed switches read over SNMP (read-only)
+  - name: Switch-Core
+    host: 192.168.1.5
+    community: public        # SNMP v2c read community (default public)
 ```
 
 `dhcp_router` and `router_name` from versions up to 0.7.0 still work but are deprecated: if `dhcp_router` is set and no device has `type: router`, the device with the same IP becomes the router (so it is never shown twice); otherwise a router is created from `dhcp_router`. Recommended: remove `dhcp_router` and set `type: router` on the router.
@@ -86,6 +90,23 @@ chmod 600 /etc/dropbear/authorized_keys
 - SSID changes edit **existing** SSIDs (`wifi-iface` sections), they do not create new ones. Tick the APs/radios (bands) the change applies to. A preview of the `uci` commands is shown first; the change is written only after confirming. The password is never shown.
 - Reboot and upgrade ask for confirmation.
 - **Upgrading packages** is generally discouraged on OpenWrt: new versions go to the overlay and small APs (8 MB flash) may run out of space. For bigger changes build a new image and `sysupgrade`.
+
+### Managed switches (SNMP)
+
+Managed switches (Netgear GS7xxT, TP-Link, Cisco SG, Zyxel, HP…) can be added under `switches`. They are read over **SNMP v2c, read-only** – nothing is changed on the switch and nothing is installed. Standard MIBs are used, so any switch with SNMP works:
+
+| Data | MIB / OID |
+|---|---|
+| model, firmware, uptime | SNMPv2-MIB `system` |
+| ports: state, speed, duplex, name, description | IF-MIB `ifOperStatus`, `ifHighSpeed`, `ifName`, `ifAlias`; EtherLike-MIB |
+| MAC addresses on ports (per VLAN) | Q-BRIDGE-MIB `dot1qTpFdbPort` (fallback BRIDGE-MIB `dot1dTpFdbPort`) |
+| VLANs on ports (untagged / tagged) | Q-BRIDGE-MIB `dot1qVlanStaticEgressPorts`, `…UntaggedPorts` |
+
+- **Map:** the switch is a node of its own. Its uplink is the port where the router's MAC is seen; APs plugged into it are drawn under it (with the port speed), wired devices on its ports are shown in a **Ports** group, coloured by their network (LAN, IoT, DMZ…). Devices behind an AP stay under that AP (the deepest device that sees a MAC locally wins).
+- **Switch page:** system info, the **Ports** panel (all ports as boxes; the table lists connected ports with speed, VLANs `U:`/`T:` and devices) and the switch diagnostics (MAC table by port).
+- **Setting up SNMP on the switch** (Netgear GS724Tv4: System → SNMP → SNMP V1/V2 → Community Configuration): Management Station IP = Home Assistant address (or the LAN, e.g. `192.168.1.0` / `255.255.255.0`), Community String = your community, Access Mode **Read Only**, Status **Enable**, then **Add** (not Apply).
+- Test from any Linux machine: `snmpwalk -v2c -c <community> <switch> 1.3.6.1.2.1.17.7.1.2.2.1.2`.
+- LLDP is not needed – the MAC table is enough.
 
 ### Ports and link speed
 
@@ -243,6 +264,7 @@ Missing keys fall back to English.
 | `TimeoutError` / `ConnectionRefused` | AP off, wrong IP, or dropbear not listening on LAN. |
 | Clients without name/IP | `dhcp_router` not set, key not on the router, or a static IP. |
 | No SSIDs | Wi-Fi disabled on the AP (`ubus list 'hostapd.*'` is empty). |
+| Switch: `SnmpError: SNMP timeout` | Wrong IP or community, SNMP not enabled, or the Home Assistant address is not allowed (Management Station IP). |
 | No notification about a new device | `notify_new_devices` off, the device was already known (first start = baseline), or the call to HA failed (Settings page shows the error). |
 | Backup fails | `sysupgrade -b` missing or `/tmp` full on the device; the error is shown after **Back up now** and in the add-on log. |
 | Wired device under the router instead of its AP | Open the AP page → **Switch diagnostics**: is the uplink detected, is the MAC on a local port, is it in "last seen"? Quiet devices are found within a few minutes (router ping). |
@@ -304,6 +326,10 @@ aps:                         # všechna spravovaná zařízení – add-on použ
   - name: AP-Office
     host: 192.168.1.3
     port: 22                 # volitelné
+switches:                    # volitelně: spravované switche čtené přes SNMP (jen čtení)
+  - name: Switch-Core
+    host: 192.168.1.5
+    community: public        # read community SNMP v2c (výchozí public)
 ```
 
 `dhcp_router` a `router_name` z verzí do 0.7.0 fungují dál, ale jsou zastaralé: když je `dhcp_router` vyplněný a žádné zařízení nemá `type: router`, router se stane zařízení se stejnou IP (nikdy se tedy nezobrazí dvakrát); jinak se router vytvoří z `dhcp_router`. Doporučeno: `dhcp_router` smazat a routeru dát `type: router`.
@@ -335,6 +361,23 @@ chmod 600 /etc/dropbear/authorized_keys
 - Změna SSID upravuje **existující** SSID (sekce `wifi-iface`), nová nepřidává. Zaškrtnutím se vybírají AP a rádia (pásma), kterých se změna týká. Nejdřív se zobrazí náhled příkazů `uci`, zapíše se až po potvrzení. Heslo se nikde nezobrazuje.
 - Restart a upgrade se potvrzují.
 - **Upgrade balíčků** OpenWrt obecně nedoporučuje: nové verze jdou do overlay a na malých AP (8 MB flash) může místo dojít. Pro větší změny je lepší nový image a `sysupgrade`.
+
+### Spravované switche (SNMP)
+
+Do `switches` lze přidat spravované switche (Netgear GS7xxT, TP-Link, Cisco SG, Zyxel, HP…). Čtou se přes **SNMP v2c jen pro čtení** – na switchi se nic nemění ani neinstaluje. Používají se standardní MIB, takže funguje jakýkoli switch se SNMP:
+
+| Data | MIB / OID |
+|---|---|
+| model, firmware, uptime | SNMPv2-MIB `system` |
+| porty: stav, rychlost, duplex, název, popis | IF-MIB `ifOperStatus`, `ifHighSpeed`, `ifName`, `ifAlias`; EtherLike-MIB |
+| MAC adresy na portech (po VLAN) | Q-BRIDGE-MIB `dot1qTpFdbPort` (záložně BRIDGE-MIB `dot1dTpFdbPort`) |
+| VLANy na portech (netagované / tagované) | Q-BRIDGE-MIB `dot1qVlanStaticEgressPorts`, `…UntaggedPorts` |
+
+- **Mapa:** switch je samostatný uzel. Jeho uplink je port, na kterém je MAC routeru; AP zapojená do switche se kreslí pod ním (s rychlostí portu), kabelová zařízení na jeho portech jsou ve skupině **Porty**, obarvená podle sítě (LAN, IoT, DMZ…). Zařízení za AP zůstávají u toho AP (MAC patří nejhlubšímu zařízení, které ji vidí lokálně).
+- **Stránka switche:** systém, panel **Porty** (všechny porty jako políčka; tabulka připojených portů s rychlostí, VLANy `U:`/`T:` a zařízeními) a diagnostika switche (tabulka MAC podle portů).
+- **Nastavení SNMP na switchi** (Netgear GS724Tv4: System → SNMP → SNMP V1/V2 → Community Configuration): Management Station IP = adresa Home Assistantu (nebo LAN, např. `192.168.1.0` / `255.255.255.0`), Community String = vlastní community, Access Mode **Read Only**, Status **Enable**, pak **Add** (ne Apply).
+- Test z libovolného Linuxu: `snmpwalk -v2c -c <community> <switch> 1.3.6.1.2.1.17.7.1.2.2.1.2`.
+- LLDP není potřeba – stačí tabulka MAC adres.
 
 ### Porty a rychlost spojení
 
@@ -492,6 +535,7 @@ Chybějící klíče se vezmou z angličtiny.
 | `TimeoutError` / `ConnectionRefused` | AP vypnutý, špatná IP, nebo dropbear neposlouchá na LAN. |
 | Klienti bez jména/IP | `dhcp_router` nenastaven, klíč není na routeru, nebo statická IP. |
 | Žádná SSID | Wi-Fi na AP vypnutá (`ubus list 'hostapd.*'` je prázdné). |
+| Switch: `SnmpError: SNMP timeout` | Špatná IP nebo community, SNMP není zapnuté, nebo adresa Home Assistantu není povolená (Management Station IP). |
 | Nepřišlo upozornění na nové zařízení | `notify_new_devices` vypnuté, zařízení už bylo známé (první spuštění = výchozí stav), nebo selhalo volání HA (chybu ukáže stránka Nastavení). |
 | Záloha selže | Na zařízení chybí `sysupgrade -b` nebo je plné `/tmp`; chyba se ukáže po **Zálohovat teď** a v logu add-onu. |
 | Kabelové zařízení u routeru místo u svého AP | Stránka AP → **Diagnostika switche**: je poznaný uplink, je MAC na lokálním portu, je v „naposledy viděno“? Tichá zařízení se najdou do pár minut (ping z routeru). |

@@ -53,3 +53,6 @@ configuration:
   aps:
     name: Zařízení
     description: "Všechna spravovaná OpenWrt zařízení – add-on používá jen tato. Každé má název, adresu, volitelně SSH port a type ap (výchozí) nebo router. Router (jeden) se zobrazí s rozhraními a DHCP klienty a dává jména a IP klientů."
+  switches:
+    name: Switche (SNMP)
+    description: "Volitelně spravované switche (Netgear, TP-Link, Cisco SG…), které se čtou přes SNMP v2c jen pro čtení: porty, rychlosti, VLANy a MAC adresy na portech – na mapě se ukážou se vším, co je do nich zapojené. Každý má název, adresu, community (výchozí public) a volitelně port (výchozí 161)."

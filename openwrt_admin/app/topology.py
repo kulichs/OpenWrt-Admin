@@ -30,7 +30,7 @@ def _chips(node: dict, chips: list[dict]) -> list[dict]:
         return []
     room = node["w"] - 120  # vlevo je IP adresa
     w, gap = 48, 4
-    if len(chips) * (w + gap) > room:
+    if len(chips) * (w + gap) > room or any(len(c["label"]) > 7 for c in chips) and len(chips) > 2:
         w = max(24, min(34, room // len(chips) - gap))
         chips = [{**c, "label": c["label"].replace("VLAN ", "")} for c in chips]
     x0 = node["x"] + node["w"] - 10 - len(chips) * (w + gap) + gap
@@ -223,10 +223,17 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
         if not children:
             y += ROW
         block_h = y - block_top
-        apn = {"id": "ap:" + ap.name, "kind": "ap", "x": COL_X["ap"] + depth * INDENT,
+        is_sw = ap.kind == "switch"
+        if not ap.online:
+            extra = t("map.offline")
+        elif is_sw:
+            extra = t("map.ports_up", up=sum(1 for p in ap.ports if p["up"]), n=len(ap.ports))
+        else:
+            extra = t("map.clients", n=ap.client_count)
+        apn = {"id": "ap:" + ap.name, "kind": "switch" if is_sw else "ap", "x": COL_X["ap"] + depth * INDENT,
                "y": block_top + (block_h - ROW) / 2 + (ROW - NODE_H) / 2, "depth": depth,
                "w": NODE_W["ap"] - depth * INDENT, "title": ap.name, "sub": ap.host, "online": ap.online, "href": "/ap/" + quote(ap.name),
-               "extra": t("map.clients", n=ap.client_count) if ap.online else t("map.offline")}
+               "extra": extra}
         nodes.append(apn)
         ap_nodes.append((ap, apn))
         for s, cl, top, h in children:
@@ -234,13 +241,15 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
                 lanc = nets["lan"]["color"]
                 ports = sorted({d["port"] for d in cab}, key=int)
                 gn = {"id": f"cable:{ap.name}", "kind": "cable", "x": COL_X["ssid"], "y": top + (h - ROW) / 2 + (ROW - NODE_H) / 2,
-                      "w": NODE_W["ssid"], "title": t("map.cable"), "sub": t("map.ports", ports=", ".join(ports)),
+                      "w": NODE_W["ssid"], "title": t("ports.title") if ap.kind == "switch" else t("map.cable"),
+                      "sub": t("map.ports", ports=", ".join(ports)),
                       "extra": t("map.clients", n=len(cab)), "online": True, "color": lanc, "href": ""}
                 nodes.append(gn)
                 edges.append({"from": apn, "to": gn, "kind": "lan", "color": lanc})
                 for k, c in enumerate(cl):
+                    cc = nets[_net_key(c["vlan"])]["color"] if "vlan" in c and _net_key(c["vlan"]) in nets else lanc
                     cn = _client_node({**c, "port": c["port"]}, COL_X["client"],
-                                      top + (ROW - CROW) / 2 + k * CROW + (CROW - CLIENT_H) / 2, lanc, True, t)
+                                      top + (ROW - CROW) / 2 + k * CROW + (CROW - CLIENT_H) / 2, cc, True, t)
                     sp = speed_label(c.get("speed", 0))
                     cn["extra"] = f"port {c['port']}" + (f" · {sp}" if sp else "") + (f" · {c['ip']}" if c.get("ip") else "")
                     cn["tip"] = " · ".join(v for v in [c.get("hostname") or c["mac"], c.get("ip", ""), c["mac"], f"port {c['port']}", sp] if v)
@@ -251,7 +260,7 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
                         cn["extra"] = f"port {c['port']} · {_ago(c['stale'], t)}"
                         cn["tip"] += " · " + t("map.last_seen", ago=_ago(c["stale"], t))
                     nodes.append(cn)
-                    edges.append({"from": gn, "to": cn, "kind": "cable", "color": lanc})
+                    edges.append({"from": gn, "to": cn, "kind": "cable", "color": cc})
                 continue
             n = net_of_ap_network(ap, s.get("network", ""))
             sn = {"id": f"ssid:{ap.name}:{s['ifname']}", "kind": "ssid", "x": COL_X["ssid"],
@@ -320,6 +329,9 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
     ap_by_name = {a.name: n for a, n in ap_nodes}
     for ap, apn in ap_nodes:
         vl = sorted({v for v in ap_ifvlan.get(ap.name, {}).values() if v is not None})
+        if ap.kind == "switch":  # VLANy z portu switche (Q-BRIDGE-MIB), jen site, ktere zna router
+            vl = sorted({v for p in ap.ports for v in [*p.get("vlans_t", []), *p.get("vlans_u", [])]
+                         if _net_key(v) in nets})
         chips = [{"label": nets[_net_key(v)]["label"], "color": nets[_net_key(v)]["color"]} for v in vl]
         apn["chips"] = _chips(apn, chips)
         src = ap_by_name.get(parent.get(ap.name)) or rn

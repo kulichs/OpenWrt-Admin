@@ -18,9 +18,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
-from .demo import demo_router, demo_states
+from .demo import demo_router, demo_states, demo_switch
 
 DATA = Path(os.environ.get("OWADMIN_DATA", "/data"))
 OPTIONS = DATA / "options.json"
@@ -47,7 +47,7 @@ def load_options() -> dict:
     opts = {"aps": [], "ssh_user": "root", "poll_interval": 30, "dhcp_router": "", "router_name": "Router", "demo": False,
             "full_access": [], "read_access": [], "refresh_interval": 30, "language": "auto",
             "ha_names": True, "names": [], "notify_new_devices": True, "notify_service": "", "notify_random_mac": True,
-            "update_check_hours": 12, "backup_interval_days": 7, "backup_keep": 10}
+            "update_check_hours": 12, "backup_interval_days": 7, "backup_keep": 10, "switches": []}
     if OPTIONS.exists():
         opts.update(json.loads(OPTIONS.read_text()))
     return opts
@@ -93,6 +93,9 @@ class Store:
         self.pubkey = self.key.export_public_key().decode().strip()
         self.ap_items, self.router_item = split_devices(self.opts)
         self.aps: list[APState] = [APState(name=a["name"], host=a["host"]) for a in self.ap_items]
+        # spravovane switche pres SNMP (jen cteni)
+        self.switch_items: list[dict] = [dict(x) for x in self.opts.get("switches") or [] if x.get("name") and x.get("host")]
+        self.switches: list[APState] = [APState(name=x["name"], host=x["host"], kind="switch") for x in self.switch_items]
         self.leases: dict[str, dict] = {}
         self.router: APState | None = (APState(name=self.router_item["name"], host=self.router_item["host"], kind="router")
                                        if self.router_item else None)
@@ -137,7 +140,7 @@ class Store:
 
     def ap(self, name: str) -> APState:
         """AP nebo router podle jmena (vse, co ma stranku a akce)."""
-        for d in [*self.aps, self.router]:
+        for d in [*self.aps, self.router, *self.switches]:
             if d is not None and d.name == name:
                 return d
         raise HTTPException(404, "device not found")
@@ -194,7 +197,12 @@ class Store:
                                                 "02:00:00:00:20:03": {"name": "xbox", "ip": "192.168.1.218"},
                                                 "02:00:00:00:30:01": {"name": "mailserver", "ip": "192.168.100.7"}}
                 self.info = self.build_info()
-                self.wired_state = wiredmod.locate(self.aps, self.router, self.info, self.seen, known=self._known())
+                if self.router:
+                    self.router.mac = "02:00:00:00:00:01"
+                sw_items = self.switch_items or [{"name": "Switch-Core", "host": "192.168.1.5"}]
+                self.switches = [demo_switch(x["name"], x["host"], self.aps, "02:00:00:00:00:01") for x in sw_items[:1]]
+                self.attach_router_to_switches()
+                self.wired_state = wiredmod.locate(self.l2(), self.router, self.info, self.seen, known=self._known())
                 # ukazka: zablokovany klient na HomeWiFi (oba AP)
                 for ap in self.aps:
                     ap.bans_ok = ap.online
@@ -215,19 +223,43 @@ class Store:
             cfgs = [self._cfg(a) for a in self.ap_items]
             tasks = [collect_ap(c, self.key) for c in cfgs]
             rc = self.router_cfg()
+            wake = self.wake_ips()
+            n_sw = len(self.switch_items)
+            tasks += [switchmod.collect_switch(x["name"], x["host"], str(x.get("community") or "public"),
+                                               int(x.get("port") or 161)) for x in self.switch_items]
             if rc:
-                tasks.append(collect_router(rc, self.key, wake=self.wake_ips()))
+                tasks.append(collect_router(rc, self.key, wake=wake))
             res = await asyncio.gather(*tasks)
             if rc:
                 self.router, leases = res.pop()
                 self.leases = leases or self.leases
-            self.aps = list(res)
+            self.switches = list(res[len(res) - n_sw:]) if n_sw else []
+            self.aps = list(res[:len(res) - n_sw]) if n_sw else list(res)
+            self.attach_router_to_switches()
             await self.refresh_ha()
             self.info = self.build_info()
-            self.wired_state = wiredmod.locate(self.aps, self.router, self.info, self.seen, known=self._known())
+            self.wired_state = wiredmod.locate(self.l2(), self.router, self.info, self.seen, known=self._known())
             self._save_seen()
             self.last_poll = time.time()
         await self.track_new()
+
+    # ------------------------------------------------------------ switche
+    def l2(self) -> list[APState]:
+        """Zarizeni s tabulkou MAC adres pro umisteni kabelovych zarizeni: switche a AP."""
+        return [*self.switches, *self.aps]
+
+    def router_mac(self) -> str:
+        if self.router and self.router.mac:
+            return self.router.mac
+        ip = self.router.host.split(":")[0] if self.router else ""
+        return next((a.arp[ip] for a in self.aps if ip and ip in a.arp), "")
+
+    def attach_router_to_switches(self):
+        """Switch nema ARP: uplink pozna podle MAC routeru (z routeru nebo z ARP tabulky AP)."""
+        mac = self.router_mac()
+        ip = self.router.host.split(":")[0] if self.router else ""
+        for sw in self.switches:
+            sw.arp = {ip: mac} if ip and mac else {}
 
     # ------------------------------------------------------------ nova zarizeni
     def _t(self):
@@ -378,7 +410,7 @@ class Store:
     def wake_ips(self) -> list[str]:
         """IP kabelovych zarizeni, ktera router vidi, ale zadny AP je nema na portu (switch je zapomnel).
         Router je pingne -> pri dalsim nacteni je switch AP zase zna. Jen kdyz nejaky AP umi tabulku switche."""
-        if not self.router or not self.router.online or not any(a.arl for a in self.aps) or self.wired_state is None:
+        if not self.router or not self.router.online or not any(a.arl for a in self.l2()) or self.wired_state is None:
             return []
         now = time.time()
         if now - self._last_wake < self.WAKE_EVERY:
@@ -403,10 +435,13 @@ class Store:
         w = self.wired_state or {}
         for d in (w.get("by_ap") or {}).get(ap.name, []):
             on_port.setdefault(str(d["port"]), []).append(d)
-        ap_names = {x.mac: x.name for x in self.aps if x.mac}
+        parents = (self.wired_state or {}).get("parent") or {}
+        ap_names = {x.mac: x.name for x in self.l2() if x.mac and x is not ap and parents.get(x.name) == ap.name}
         for mac, port in a["local"].items():  # AP zapojene za timto AP
             if mac in ap_names:
                 on_port.setdefault(port.split(":")[1], []).append({"mac": mac, "hostname": ap_names[mac], "ap": True})
+        # na uplink portu: nadrazene zarizeni (switch / AP), jinak router
+        par = (w.get("parent") or {}).get(ap.name) or (self.router.name if self.router and ap.kind != "router" else "")
         out = []
         for p in ap.ports:
             if p["id"] in a["cpu"]:
@@ -417,8 +452,10 @@ class Store:
                 role = "wan"
             else:
                 role = "local" if p["kind"] == "switch" or ap.kind != "router" else "lan"
-            out.append({**p, "role": role, "label": wiredmod.speed_label(p["speed"]),
-                        "devices": on_port.get(p["num"], []) if p["kind"] == "switch" else []})
+            devs = on_port.get(p["num"], []) if p["kind"] == "switch" else []
+            if role == "uplink" and par:
+                devs = [{"mac": "", "hostname": par, "ap": True}] + devs
+            out.append({**p, "role": role, "label": wiredmod.speed_label(p["speed"]), "devices": devs})
         return out
 
     def switch_diag(self, ap) -> dict | None:
@@ -428,7 +465,7 @@ class Store:
         info = self.info or {}
         a = wiredmod.analyze(ap, self.router)
         wifi = {c["mac"] for x in self.aps for c in x.clients}
-        ap_macs = {x.mac: x.name for x in self.aps if x.mac}
+        ap_macs = {x.mac: x.name for x in self.l2() if x.mac}
         if self.router and self.router.mac:
             ap_macs[self.router.mac] = self.router.name
         ports = []
@@ -453,7 +490,7 @@ class Store:
 
     def devices(self) -> list[dict]:
         """Vsechna spravovana zarizeni (AP + router) pro souhrn na prehledu."""
-        out = [{"name": a.name, "online": a.online} for a in self.aps]
+        out = [{"name": a.name, "online": a.online} for a in [*self.switches, *self.aps]]
         if self.router:
             out.insert(0, {"name": self.router.name, "online": self.router.online})
         return out
@@ -552,7 +589,7 @@ class Store:
     def wired(self) -> dict:
         if self.wired_state is None:
             self.info = self.info or self.build_info()
-            self.wired_state = wiredmod.locate(self.aps, self.router, self.info, self.seen, known=self._known())
+            self.wired_state = wiredmod.locate(self.l2(), self.router, self.info, self.seen, known=self._known())
         return self.wired_state
 
     def lease_list(self, wired: dict | None = None) -> list[dict]:
@@ -853,6 +890,9 @@ async def ap_page(request: Request, name: str):
                 counts[l["iface"]] = counts.get(l["iface"], 0) + 1
         return render(request, "router.html", page="ap:" + name, ap=ap, leases=leases, iface_counts=counts,
                       ports=store.port_table(ap))
+    if ap.kind == "switch":
+        return render(request, "switch.html", page="ap:" + name, ap=ap, ports=store.port_table(ap),
+                      diag=store.switch_diag(ap), sw=next((x for x in store.switch_items if x["name"] == name), {}))
     clients = [c for c in store.all_clients() if c["ap"] == name]
     return render(request, "ap.html", page="ap:" + name, ap=ap, clients=clients, diag=store.switch_diag(ap),
                   ports=store.port_table(ap))
@@ -866,16 +906,23 @@ async def map_page(request: Request, clients: str = "1", empty: str = "0"):
                     if l["online"] and not l["ap"] and not l["cable_ap"] and not l["is_ap"]
                     and (l["known_net"] or not l["ip"] or not store.router)]  # IP mimo LAN/VLAN routeru (WAN) ne
     speeds = {}
-    for a in store.aps:
+    l2 = store.l2()
+    for a in l2:
         up = wiredmod.uplink_port(a, store.router) if a.online else None
         if up and up["speed"]:
             speeds[a.name] = up["speed"]
     ap_wired = {}
+    resolve = topology.net_resolver(store.router)
     for name, devs in w["by_ap"].items():
-        a = next((x for x in store.aps if x.name == name), None)
-        ap_wired[name] = [{**d, "speed": ((wiredmod.port_by_num(a, d["port"]) or {}).get("speed", 0)
-                                         if a and not d.get("stale") else 0)} for d in devs]
-    topo = topology.build(store.router, store.aps, router_wired, request.state.t, clients=store.all_clients(),
+        a = next((x for x in l2 if x.name == name), None)
+        ap_wired[name] = []
+        for d in devs:
+            e = {**d, "speed": ((wiredmod.port_by_num(a, d["port"]) or {}).get("speed", 0) if a and not d.get("stale") else 0)}
+            n = resolve(d["ip"]) if d.get("ip") else None
+            if n:
+                e["vlan"] = n["vlan"]  # barva podle site (DMZ, IoT…)
+            ap_wired[name].append(e)
+    topo = topology.build(store.router, l2, router_wired, request.state.t, clients=store.all_clients(),
                           show_clients=show_clients, show_empty=show_empty,
                           ap_wired=ap_wired, parent=w["parent"], speeds=speeds)
     return render(request, "map.html", page="map", topo=topo, show_clients=show_clients, show_empty=show_empty)

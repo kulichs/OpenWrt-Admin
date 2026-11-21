@@ -2,6 +2,15 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.14.0
+- Managed switches over SNMP (optional `switches`: name, host, community, port): read-only SNMP v2c with standard MIBs (IF-MIB, BRIDGE-MIB, Q-BRIDGE-MIB) – works with Netgear, TP-Link, Cisco SG, Zyxel, HP… No extra library, the SNMP client is built in.
+- The switch appears on the map between the router and the APs: uplink by the router's MAC, APs and wired devices placed on its ports with port speed, devices coloured by network. Own page with ports (speed, VLANs untagged/tagged, devices) and MAC table diagnostics; card on the overview and a tab.
+- Big switches: the port table lists only connected ports (all ports stay as boxes).
+---
+- Spravované switche přes SNMP (volitelné `switches`: name, host, community, port): jen čtení přes SNMP v2c se standardními MIB (IF-MIB, BRIDGE-MIB, Q-BRIDGE-MIB) – funguje s Netgear, TP-Link, Cisco SG, Zyxel, HP… Bez další knihovny, SNMP klient je vestavěný.
+- Switch je na mapě mezi routerem a AP: uplink podle MAC routeru, AP a kabelová zařízení na jeho portech s rychlostí portu, zařízení obarvená podle sítě. Vlastní stránka s porty (rychlost, VLANy netagované/tagované, zařízení) a diagnostikou tabulky MAC; karta na přehledu a záložka.
+- Velké switche: tabulka portů ukazuje jen připojené porty (všechny zůstávají jako políčka).
+
 ## 0.13.1
 - Ports: only switch ports used in `switch_vlan` are shown – the switch chip often has more ports than the device (UniFi AP LR: 5 chip ports, 1 jack; AR8327: port 6 is a second CPU port). Without `switch_vlan` the switch is unused and the device's own ports are shown (e.g. `eth0`), only those used by the network.
 - Map: 1 Gb/s speeds are green.

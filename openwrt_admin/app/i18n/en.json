@@ -214,7 +214,7 @@
   "map.legend_cable": "LAN on an AP port",
   "map.legend_via": "AP connected through another AP",
   "router.cable_at": "LAN",
-  "router.is_ap": "access point",
+  "router.is_ap": "managed device (AP / switch)",
   "fmt.ago_h": "{h} h ago",
   "fmt.ago_d": "{d} d ago",
   "map.last_seen": "last seen {ago}",
@@ -330,7 +330,23 @@
   "ports.role_local": "LAN",
   "ports.role_wan": "WAN",
   "ports.role_lan": "LAN",
-  "ports.hint": "Negotiated speed and duplex from the switch (swconfig) or network card (ubus network.device). 100 Mb/s instead of 1 Gb/s is often a faulty or 4-wire cable, or a device that cannot do more.",
+  "ports.hint": "Negotiated speed and duplex from the switch (swconfig, SNMP) or network card (ubus network.device). 100 Mb/s instead of 1 Gb/s is often a faulty or 4-wire cable, or a device that cannot do more.",
   "ports.uplink_speed": "connected at {s}",
-  "map.legend_speed": "port speed (AP uplink, wired devices): green 1 Gb/s, orange slower"
+  "map.legend_speed": "port speed (AP uplink, wired devices): green 1 Gb/s, orange slower",
+  "switch.kind": "switch",
+  "switch.snmp_hint": "The switch is read over SNMP v2c (read-only). Check the IP, community and that the Home Assistant address is allowed in the switch settings (Management Station IP).",
+  "switch.source": "Data source",
+  "switch.readonly": "read-only",
+  "switch.summary": "Summary",
+  "switch.ports_up": "Connected ports",
+  "switch.macs": "MAC addresses in table",
+  "switch.slow": "Slow ports",
+  "switch.gw_missing": "The router MAC is not known yet (router or APs have not loaded it) – the uplink cannot be detected.",
+  "map.ports_up": "{up}/{n} ports",
+  "ports.untagged": "untagged (access) VLANs",
+  "ports.tagged": "tagged VLANs (trunk)",
+  "ports.only_up": [
+    "Only connected ports shown ({n} disconnected hidden).",
+    "Only connected ports shown ({n} disconnected hidden)."
+  ]
 }

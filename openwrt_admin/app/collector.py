@@ -597,6 +597,8 @@ async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 1
             st.static_hosts = parse_static_hosts(ucidhcp)
             st.interfaces = parse_interfaces(dump, devstatus, uci_vlans(ucinet))
             st.switch_vlans = switch_vlan_ports(ucinet)
+            lan_dev = next((i["device"] for i in st.interfaces if i["name"] == "lan"), "br-lan")
+            st.mac = (((devstatus or {}).get(lan_dev) or {}).get("macaddr") or "").lower()
             st.ports = merge_ports(parse_swconfig_ports(swports), parse_dev_ports(devstatus, used_devices(devstatus, st.interfaces)),
                                    st.switch_vlans)
             # ARP jen z LAN/VLAN: brana poskytovatele na WAN ani VPN peery nejsou klienti

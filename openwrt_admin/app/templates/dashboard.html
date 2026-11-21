@@ -45,6 +45,27 @@
     {% endif %}
   </a>
 {% endif %}
+{% for sw in store.switches %}
+  <a class="card {{ 'offline' if not sw.online }}" href="{{ base }}/ap/{{ sw.name | urlencode }}">
+    <div class="card-head">
+      <span class="dot {{ 'on' if sw.online else 'off' }}"></span>
+      <strong>{{ sw.name }}</strong> <span class="tag">{{ t("switch.kind") }}</span>
+      <span class="muted">{{ sw.host }}</span>
+    </div>
+    {% if sw.online %}
+    <div class="muted small">{{ sw.model }}{% if sw.release %} · {{ sw.release }}{% endif %}</div>
+    <dl>
+      <dt>{{ t("sys.uptime") }}</dt><dd>{{ sw.uptime | duration }}</dd>
+      <dt>{{ t("switch.ports_up") }}</dt><dd>{{ sw.ports | selectattr("up") | list | length }} / {{ sw.ports | length }}</dd>
+      {% set slow = sw.ports | selectattr("up") | selectattr("speed", "lt", 1000) | selectattr("speed", "gt", 0) | list %}
+      {% if slow %}<dt>{{ t("switch.slow") }}</dt><dd>{% for p in slow %}<span class="tag sp-100">{{ p.num }}: {{ p.speed }}M</span>{% endfor %}</dd>{% endif %}
+    </dl>
+    <div class="portrow mini-ports">{% for p in sw.ports %}<span class="pdot {{ 'sp-down' if not p.up else ('sp-1000' if p.speed >= 1000 else ('sp-100' if p.speed >= 100 else 'sp-10')) }}" title="{{ p.num }}{% if p.alias %} · {{ p.alias }}{% endif %}{% if p.up %} · {{ p.speed }} Mb/s{% endif %}">{{ p.num }}</span>{% endfor %}</div>
+    {% else %}
+    <p class="err">{{ t("ap.unreachable", error=(sw.error or t("ap.not_loaded"))) }}</p>
+    {% endif %}
+  </a>
+{% endfor %}
 {% for ap in store.aps %}
   <a class="card {{ 'offline' if not ap.online }}" href="{{ base }}/ap/{{ ap.name | urlencode }}">
     <div class="card-head">

@@ -37,6 +37,9 @@ try {
     {% if store.router %}{% set r = store.router %}
     <a href="{{ base }}/ap/{{ r.name | urlencode }}" class="ap-tab router-tab {{ 'active' if page == 'ap:' ~ r.name }}" title="{{ t('router.kind') }}"><span class="dot {{ 'on' if r.online else 'off' }}"></span>{{ r.name | replace('OpenWrt_', '') }}<span class="cnt" title="{{ t('router.leases_title') }}">{{ store.leases | length }}</span></a>
     {% endif %}
+    {% for a in store.switches %}
+    <a href="{{ base }}/ap/{{ a.name | urlencode }}" class="ap-tab switch-tab {{ 'active' if page == 'ap:' ~ a.name }}" title="{{ t('switch.kind') }}"><span class="dot {{ 'on' if a.online else 'off' }}"></span>{{ a.name }}<span class="cnt" title="{{ t('switch.ports_up') }}">{{ a.ports | selectattr("up") | list | length }}</span></a>
+    {% endfor %}
     {% for a in store.aps %}
     <a href="{{ base }}/ap/{{ a.name | urlencode }}" class="ap-tab {{ 'active' if page == 'ap:' ~ a.name }}"><span class="dot {{ 'on' if a.online else 'off' }}"></span>{{ a.name | replace('OpenWrt_', '') }}<span class="cnt">{{ a.client_count }}</span></a>
     {% endfor %}

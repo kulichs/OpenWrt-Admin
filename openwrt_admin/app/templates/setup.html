@@ -19,6 +19,10 @@ chmod 600 /etc/dropbear/authorized_keys</pre>
     <tr><td>{{ store.router.name }} <span class="muted small">({{ t("router.kind") }})</span></td><td class="mono">{{ store.router.host }}</td>
         <td>{% if store.router_ok %}<span class="sig good">OK</span> · {{ t("setup.leases", n=(store.leases | length)) }}{% else %}<span class="err">{{ store.router_error or t("ap.not_loaded") }}</span>{% endif %}</td></tr>
     {% endif %}
+    {% for a in store.switches %}
+    <tr><td>{{ a.name }} <span class="muted small">({{ t("switch.kind") }}, SNMP)</span></td><td class="mono">{{ a.host }}</td>
+        <td>{% if a.online %}<span class="sig good">OK</span> · {{ a.model }}{% else %}<span class="err">{{ a.error or t("ap.not_loaded") }}</span>{% endif %}</td></tr>
+    {% endfor %}
     {% for a in store.aps %}
     <tr><td>{{ a.name }} <span class="muted small">(AP)</span></td><td class="mono">{{ a.host }}</td>
         <td>{% if a.online %}<span class="sig good">OK</span>{% else %}<span class="err">{{ a.error or t("ap.not_loaded") }}</span>{% endif %}</td></tr>

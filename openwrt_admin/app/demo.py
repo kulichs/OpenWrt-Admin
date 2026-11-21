@@ -134,3 +134,23 @@ def demo_router(name: str, host: str) -> APState:
     r.arp_dev = {"192.168.100.7": "eth1.100", "192.168.10.20": "br-lan.10"}
     r.static_hosts = {}
     return r
+
+
+def demo_switch(name: str, host: str, aps: list[APState], router_mac: str) -> APState:
+    """Spravovany switch (SNMP) mezi routerem a AP: port 24 router, port 2 AP-Office (a vse za nim),
+    port 5 Home Assistant, port 8 server v DMZ (100 Mb/s), port 6 zarizeni ve VLAN IoT."""
+    sw = APState(name=name, host=host, kind="switch", online=True, updated=time.time(),
+                 model="GS724Tv4 ProSafe 24-port Gigabit Ethernet Smart Switch", release="6.3.1.47, B1.0.0.4",
+                 uptime=3_210_000, mac="02:00:00:00:00:50")
+    office = next((a for a in aps if a.name == "AP-Office"), None)
+    behind = []
+    if office:
+        behind = [office.mac] + [m for p, macs in office.arl.items() if p != "switch0:2" for m in macs]
+    sw.arl = {"sw:24": [router_mac], "sw:2": sorted(set(behind)), "sw:5": ["02:00:00:00:10:02"],
+              "sw:8": ["02:00:00:00:30:01"], "sw:6": ["02:00:00:00:30:02"], "sw:51": [sw.mac]}
+    speeds = {2: 1000, 5: 1000, 6: 1000, 8: 100, 24: 1000}
+    sw.ports = [{"id": f"sw:{n}", "num": str(n), "up": n in speeds, "speed": speeds.get(n, 0),
+                 "duplex": "full" if n in speeds else "", "kind": "switch",
+                 "name": f"g{n}", "alias": {24: "router", 2: "AP-Office", 8: "dmz"}.get(n, ""),
+                 "vlans_u": [100] if n == 8 else [1], "vlans_t": [10, 30] if n in (2, 24) else []} for n in range(1, 25)]
+    return sw

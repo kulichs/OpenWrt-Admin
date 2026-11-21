@@ -215,7 +215,7 @@
   "map.legend_cable": "LAN na portu AP",
   "map.legend_via": "AP zapojený přes jiný AP",
   "router.cable_at": "LAN",
-  "router.is_ap": "access point",
+  "router.is_ap": "spravované zařízení (AP / switch)",
   "fmt.ago_h": "před {h} h",
   "fmt.ago_d": "před {d} d",
   "map.last_seen": "naposledy viděno {ago}",
@@ -337,7 +337,24 @@
   "ports.role_local": "LAN",
   "ports.role_wan": "WAN",
   "ports.role_lan": "LAN",
-  "ports.hint": "Vyjednaná rychlost a duplex podle switche (swconfig) nebo síťové karty (ubus network.device). 100 Mb/s místo 1 Gb/s bývá vadný nebo jen 4žilový kabel, případně zařízení, které víc neumí.",
+  "ports.hint": "Vyjednaná rychlost a duplex podle switche (swconfig, SNMP) nebo síťové karty (ubus network.device). 100 Mb/s místo 1 Gb/s bývá vadný nebo jen 4žilový kabel, případně zařízení, které víc neumí.",
   "ports.uplink_speed": "připojeno rychlostí {s}",
-  "map.legend_speed": "rychlost portu (uplink AP, kabelová zařízení): zeleně 1 Gb/s, oranžově pomaleji"
+  "map.legend_speed": "rychlost portu (uplink AP, kabelová zařízení): zeleně 1 Gb/s, oranžově pomaleji",
+  "switch.kind": "switch",
+  "switch.snmp_hint": "Switch se čte přes SNMP v2c (jen čtení). Zkontroluj IP, community a že je v nastavení switche povolená adresa Home Assistantu (Management Station IP).",
+  "switch.source": "Zdroj dat",
+  "switch.readonly": "jen čtení",
+  "switch.summary": "Souhrn",
+  "switch.ports_up": "Připojené porty",
+  "switch.macs": "MAC adres v tabulce",
+  "switch.slow": "Pomalé porty",
+  "switch.gw_missing": "MAC routeru zatím není známá (router nebo AP ji ještě nenačetly) – uplink nejde poznat.",
+  "map.ports_up": "{up}/{n} portů",
+  "ports.untagged": "netagované (access) VLAN",
+  "ports.tagged": "tagované VLAN (trunk)",
+  "ports.only_up": [
+    "Zobrazené jen připojené porty ({n} odpojený skrytý).",
+    "Zobrazené jen připojené porty ({n} odpojené skryté).",
+    "Zobrazené jen připojené porty ({n} odpojených skrytých)."
+  ]
 }
