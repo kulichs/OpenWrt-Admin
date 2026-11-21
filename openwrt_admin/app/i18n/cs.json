@@ -198,5 +198,16 @@
   "map.network": "Síť",
   "map.names": "Názvy rozhraní",
   "map.untagged": "netagovaná",
-  "map.note": "Spojnice ukazují logické propojení: AP je ve stejné síti jako router a nese uvedené VLANy. Switche a konkrétní porty z OpenWrt (ubus) vidět nejsou. VLAN ID se zjišťuje z názvů zařízení (eth0.30, br-lan.10) a ze členů bridge."
+  "map.note": "Spojnice ukazují logické propojení: AP je ve stejné síti jako router a nese uvedené VLANy. Switche a konkrétní porty z OpenWrt (ubus) vidět nejsou. VLAN ID se zjišťuje z názvů zařízení (eth0.30, br-lan.10) a ze členů bridge.",
+  "map.show_clients": "Klienti",
+  "map.show_empty": "SSID bez klientů",
+  "map.hidden_empty": [
+    "skryto {n} SSID bez klientů",
+    "skryta {n} SSID bez klientů",
+    "skryto {n} SSID bez klientů"
+  ],
+  "map.zoom_in": "Přiblížit",
+  "map.zoom_out": "Oddálit",
+  "map.fit": "Vše",
+  "map.drag_hint": "kolečko = zoom, tažení = posun"
 }

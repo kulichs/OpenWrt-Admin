@@ -2,6 +2,13 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.8.0
+- Map: clients as their own nodes (name/MAC + signal, wired devices with IP, tooltip with IP/MAC/band), SSIDs without clients hidden by default (toggle), clients can be switched off.
+- Map can be zoomed (mouse wheel around the cursor, + / − / Fit) and panned by dragging; position is kept across automatic refresh.
+---
+- Mapa: klienti jako samostatné uzly (jméno/MAC + signál, zařízení na kabelu s IP, po najetí IP/MAC/pásmo), SSID bez klientů jsou ve výchozím stavu skrytá (přepínač), klienty jde vypnout.
+- Mapu jde přibližovat (kolečko myši kolem kurzoru, + / − / Vše) a posouvat tažením; pozice zůstane i po automatickém obnovení.
+
 ## 0.7.2
 - Fix: on APs, VLAN interfaces with their own gateway (e.g. `proto dhcp`, or static with `gateway`) were treated as WAN and missing from the map. On APs only interfaces named `wan*` are WAN now.
 ---

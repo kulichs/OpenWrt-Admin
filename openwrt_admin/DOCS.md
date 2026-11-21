@@ -103,7 +103,11 @@ The add-on's SSH key must be on the router too.
 
 ### Network map
 
-The **Map** page draws the network as a tree: Internet → router → access points → SSIDs, plus a node for wired/other DHCP clients. Each node links to its page (SSID nodes to the filtered client list).
+The **Map** page draws the network as a tree: Internet → router → access points → SSIDs → **clients**, plus a node for wired/other DHCP clients with those devices under it. Each node links to its page (SSID nodes to the filtered client list); hover over a client for IP, MAC, band and signal.
+
+- **Clients** are shown with name (or MAC) and signal (green ≥ −60 dBm, orange ≥ −72 dBm, red below); wired devices with their IP. The **Clients** toggle switches them off (then SSIDs show only the count).
+- **SSIDs without clients are hidden** by default; the **SSIDs without clients** toggle shows them.
+- **Zoom and pan:** mouse wheel zooms around the cursor, dragging moves the map, buttons **+ / − / Fit**. The position is kept when the page refreshes itself.
 
 - **Line types:** WAN (grey, thick), LAN untagged (thin), LAN + VLANs = trunk (thick; the tagged VLANs are shown as coloured chips in the AP node), Wi-Fi (dotted). Offline devices: red dashed line.
 - **Colours = networks:** the untagged LAN and every VLAN have their own colour, the same on the router, APs and SSIDs. The legend lists the VLAN IDs and the interface names used for them on each device.
@@ -265,7 +269,11 @@ SSH klíč add-onu musí být i na routeru.
 
 ### Mapa sítě
 
-Stránka **Mapa** kreslí síť jako strom: Internet → router → access pointy → SSID, k tomu uzel pro DHCP klienty na kabelu a ostatní. Každý uzel je odkaz na svou stránku (SSID na vyfiltrovaný seznam klientů).
+Stránka **Mapa** kreslí síť jako strom: Internet → router → access pointy → SSID → **klienti**, k tomu uzel pro DHCP klienty na kabelu a ostatní se zařízeními pod ním. Každý uzel je odkaz na svou stránku (SSID na vyfiltrovaný seznam klientů); po najetí na klienta se ukáže IP, MAC, pásmo a signál.
+
+- **Klienti** jsou se jménem (nebo MAC) a signálem (zeleně ≥ −60 dBm, oranžově ≥ −72 dBm, červeně slabší); zařízení na kabelu s IP. Přepínač **Klienti** je vypne (SSID pak ukazují jen počet).
+- **SSID bez klientů se skrývají**, přepínač **SSID bez klientů** je zobrazí.
+- **Zoom a posun:** kolečko myši přibližuje kolem kurzoru, tažením se mapa posouvá, tlačítka **+ / − / Vše**. Pozice zůstane i po automatickém obnovení stránky.
 
 - **Druhy spojnic:** WAN (šedá, silná), LAN netagovaná (tenká), LAN + VLANy = trunk (silná; tagované VLANy jsou barevné štítky v uzlu AP), Wi-Fi (tečkovaná). Offline zařízení: červená přerušovaná.
 - **Barvy = sítě:** netagovaná LAN a každá VLAN mají vlastní barvu, stejnou u routeru, AP i SSID. Legenda ukazuje VLAN ID a názvy rozhraní, pod kterými je síť na zařízeních.

@@ -433,10 +433,12 @@ async def ap_page(request: Request, name: str):
 
 
 @app.get("/map", response_class=HTMLResponse)
-async def map_page(request: Request):
-    wired = sum(1 for l in store.lease_list() if not l["ap"])
-    topo = topology.build(store.router, store.aps, wired, request.state.t)
-    return render(request, "map.html", page="map", topo=topo)
+async def map_page(request: Request, clients: str = "1", empty: str = "0"):
+    show_clients, show_empty = clients != "0", empty == "1"
+    wired = [l for l in store.lease_list() if not l["ap"]]
+    topo = topology.build(store.router, store.aps, wired, request.state.t, clients=store.all_clients(),
+                          show_clients=show_clients, show_empty=show_empty)
+    return render(request, "map.html", page="map", topo=topo, show_clients=show_clients, show_empty=show_empty)
 
 
 @app.get("/setup", response_class=HTMLResponse)

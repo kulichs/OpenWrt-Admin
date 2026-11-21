@@ -12,10 +12,12 @@ from .collector import APState
 
 PALETTE = ["#03a9f4", "#8e44ad", "#e67e22", "#16a085", "#c0392b", "#2c7be5", "#b7950b", "#7f8c8d"]
 
-COL_X = {"internet": 20, "router": 225, "ap": 530, "ssid": 880}
-NODE_W = {"internet": 170, "router": 240, "ap": 280, "ssid": 250, "wired": 280}
+COL_X = {"internet": 20, "router": 225, "ap": 530, "ssid": 880, "client": 1190}
+NODE_W = {"internet": 170, "router": 240, "ap": 280, "ssid": 250, "wired": 280, "client": 250}
 NODE_H = 52
 ROW = 66
+CLIENT_H = 28
+CROW = 34
 TOP = 20
 
 
@@ -49,7 +51,26 @@ def _eff_vlans(dev: APState) -> dict[str, int | None]:
     return out
 
 
-def build(router: APState | None, aps: list[APState], wired_count: int, t) -> dict:
+def _client_node(c: dict, x: float, y: float, color: str, wired: bool, t) -> dict:
+    name = c.get("hostname") or c.get("mac", "")
+    if wired:
+        extra = c.get("ip", "")
+    else:
+        extra = f"{c['signal']} dBm" if c.get("signal") is not None else ""
+    tip = " · ".join(v for v in [name, c.get("ip", ""), c.get("mac", ""), (c.get("band") or ""),
+                                 (c.get("standard") or ""), extra if not wired else ""] if v)
+    sig = c.get("signal")
+    cls = "" if wired or sig is None else ("good" if sig >= -60 else "ok" if sig >= -72 else "bad")
+    return {"id": "client:" + c.get("mac", ""), "kind": "client", "x": x, "y": y, "w": NODE_W["client"], "h": CLIENT_H,
+            "title": name, "sub": "", "extra": extra, "sig": cls, "online": True, "color": color, "tip": tip,
+            "href": ""}
+
+
+def build(router: APState | None, aps: list[APState], wired: list[dict], t, clients: list[dict] | None = None,
+          show_clients: bool = True, show_empty: bool = False) -> dict:
+    """wired: DHCP leases mimo Wi-Fi; clients: vsichni Wi-Fi klienti (ap, ifname, ...)."""
+    clients = clients or []
+    wired_count = len(wired)
     # ---- site (podle VLAN ID), nazvy primarne z routeru
     nets: dict[str, dict] = {}
 
@@ -94,40 +115,71 @@ def build(router: APState | None, aps: list[APState], wired_count: int, t) -> di
         vlan = ap_ifvlan.get(ap.name, {}).get(first)
         return nets[_net_key(vlan)] if _net_key(vlan) in nets else net(vlan, first)
 
-    # ---- rozlozeni: kazdy AP zabira tolik radku, kolik ma SSID (min. 1)
+    # ---- rozlozeni: SSID blok = max(radek SSID, klienti pod sebou), AP blok = soucet SSID bloku
+    by_if: dict[tuple, list] = {}
+    for c in clients:
+        by_if.setdefault((c["ap"], c.get("ifname")), []).append(c)
+    for v in by_if.values():
+        v.sort(key=lambda c: ((c.get("hostname") or "~").lower(), c.get("mac", "")))
+
     nodes, edges = [], []
     y = TOP
     ap_nodes = []
+    hidden = 0
     for ap in aps:
         ssids = ap.ssids if ap.online else []
-        rows = max(1, len(ssids))
+        if not show_empty:
+            hidden += sum(1 for s in ssids if not s.get("clients"))
+            ssids = [s for s in ssids if s.get("clients")]
         block_top = y
-        ap_y = block_top + (rows - 1) * ROW / 2
-        apn = {"id": "ap:" + ap.name, "kind": "ap", "x": COL_X["ap"], "y": ap_y, "w": NODE_W["ap"],
-               "title": ap.name, "sub": ap.host, "online": ap.online, "href": "/ap/" + quote(ap.name),
+        children = []
+        for s in ssids:
+            cl = by_if.get((ap.name, s["ifname"]), []) if show_clients else []
+            h = max(ROW, len(cl) * CROW + (ROW - CROW))
+            children.append((s, cl, y, h))
+            y += h
+        if not children:
+            y += ROW
+        block_h = y - block_top
+        apn = {"id": "ap:" + ap.name, "kind": "ap", "x": COL_X["ap"], "y": block_top + (block_h - ROW) / 2 + (ROW - NODE_H) / 2,
+               "w": NODE_W["ap"], "title": ap.name, "sub": ap.host, "online": ap.online, "href": "/ap/" + quote(ap.name),
                "extra": t("map.clients", n=ap.client_count) if ap.online else t("map.offline")}
         nodes.append(apn)
         ap_nodes.append((ap, apn))
-        for k, s in enumerate(ssids):
+        for s, cl, top, h in children:
             n = net_of_ap_network(ap, s.get("network", ""))
-            sn = {"id": f"ssid:{ap.name}:{s['ifname']}", "kind": "ssid", "x": COL_X["ssid"], "y": block_top + k * ROW,
+            sn = {"id": f"ssid:{ap.name}:{s['ifname']}", "kind": "ssid", "x": COL_X["ssid"],
+                  "y": top + (h - ROW) / 2 + (ROW - NODE_H) / 2,
                   "w": NODE_W["ssid"], "title": s["ssid"] or "–", "sub": s.get("band", ""),
                   "extra": t("map.clients", n=s.get("clients", 0)), "online": True, "color": n["color"],
                   "net": n["label"], "href": "/clients?" + urlencode({"ap": ap.name, "ssid": s["ssid"]})}
             nodes.append(sn)
             edges.append({"from": apn, "to": sn, "kind": "wifi", "color": n["color"]})
-        y = block_top + rows * ROW
+            for k, c in enumerate(cl):
+                cn = _client_node(c, COL_X["client"], top + (ROW - CROW) / 2 + k * CROW + (CROW - CLIENT_H) / 2,
+                                  n["color"], False, t)
+                nodes.append(cn)
+                edges.append({"from": sn, "to": cn, "kind": "client", "color": n["color"]})
 
-    wired = None
+    wired_node = None
     if router or wired_count:
-        wired = {"id": "wired", "kind": "wired", "x": COL_X["ap"], "y": y, "w": NODE_W["wired"],
-                 "title": t("map.wired"), "sub": t("map.wired_sub"), "extra": t("map.clients", n=wired_count),
-                 "online": True, "href": ("/ap/" + quote(router.name)) if router else ""}
-        nodes.append(wired)
-        y += ROW
+        cl = sorted(wired, key=lambda c: tuple(int(p) if p.isdigit() else 0 for p in (c.get("ip") or "0").split("."))) \
+            if show_clients else []
+        h = max(ROW, len(cl) * CROW + (ROW - CROW))
+        wired_node = {"id": "wired", "kind": "wired", "x": COL_X["ap"], "y": y + (h - ROW) / 2 + (ROW - NODE_H) / 2,
+                      "w": NODE_W["wired"], "title": t("map.wired"), "sub": t("map.wired_sub"),
+                      "extra": t("map.clients", n=wired_count), "online": True,
+                      "href": ("/ap/" + quote(router.name)) if router else ""}
+        nodes.append(wired_node)
+        lanc = nets["lan"]["color"]
+        for k, c in enumerate(cl):
+            cn = _client_node(c, COL_X["ssid"], y + (ROW - CROW) / 2 + k * CROW + (CROW - CLIENT_H) / 2, lanc, True, t)
+            nodes.append(cn)
+            edges.append({"from": wired_node, "to": cn, "kind": "cable", "color": lanc})
+        y += h
 
     height = max(y, TOP + ROW) + 10
-    mid = (TOP + y - ROW) / 2
+    mid = (TOP + y) / 2 - NODE_H / 2
 
     # ---- router / virtualni LAN
     if router:
@@ -156,18 +208,21 @@ def build(router: APState | None, aps: list[APState], wired_count: int, t) -> di
     if router:
         rv = sorted({v for v in router_vl.values() if v is not None})
         rn["chips"] = _chips(rn, [{"label": nets[_net_key(v)]["label"], "color": nets[_net_key(v)]["color"]} for v in rv])
-    if wired:
-        edges.append({"from": rn, "to": wired, "kind": "lan", "color": lan_color, "chips": [], "up": True})
+    if wired_node:
+        edges.append({"from": rn, "to": wired_node, "kind": "lan", "color": lan_color, "chips": [], "up": True})
 
     # ---- geometrie spojnic (bezier z praveho okraje rodice do leveho okraje potomka)
     for e in edges:
         a, b = e["from"], e["to"]
-        x1, y1 = a["x"] + a["w"], a["y"] + NODE_H / 2
-        x2, y2 = b["x"], b["y"] + NODE_H / 2
+        x1, y1 = a["x"] + a["w"], a["y"] + a.get("h", NODE_H) / 2
+        x2, y2 = b["x"], b["y"] + b.get("h", NODE_H) / 2
         dx = (x2 - x1) / 2
         e["d"] = f"M{x1:.0f},{y1:.0f} C{x1 + dx:.0f},{y1:.0f} {x2 - dx:.0f},{y2:.0f} {x2:.0f},{y2:.0f}"
         e["mx"], e["my"] = (x1 + x2) / 2, (y1 + y2) / 2
 
-    width = COL_X["ssid"] + NODE_W["ssid"] + 20
+    for n in nodes:
+        n.setdefault("h", NODE_H)
+    has_clients = show_clients and any(n["kind"] == "client" and n["x"] == COL_X["client"] for n in nodes)
+    width = (COL_X["client"] + NODE_W["client"] if has_clients else COL_X["ssid"] + NODE_W["ssid"]) + 20
     return {"nodes": nodes, "edges": edges, "width": width, "height": height, "node_h": NODE_H,
-            "networks": order}
+            "networks": order, "hidden_ssids": hidden}
