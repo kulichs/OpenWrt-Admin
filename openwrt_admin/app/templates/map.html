@@ -23,7 +23,7 @@
   {% endfor %}
   {% for n in topo.nodes %}
   {% if n.kind == 'client' %}
-  <g class="node node-client">
+  <g class="node node-client {{ 'node-stale' if n.stale }}">
     <title>{{ n.tip }}</title>
     <rect x="{{ n.x }}" y="{{ n.y }}" width="{{ n.w }}" height="{{ n.h }}" rx="7"/>
     <rect x="{{ n.x }}" y="{{ n.y }}" width="4" height="{{ n.h }}" rx="2" style="fill: {{ n.color }}"/>

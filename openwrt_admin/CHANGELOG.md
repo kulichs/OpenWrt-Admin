@@ -2,6 +2,13 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.9.2
+- Map: the "Wired" group under APs and the router's "Wired / other" node are now called "LAN" and "LAN / other".
+- Last known place of wired devices: when a device disappears from the switch MAC table (e.g. TV switched off), it stays at its AP and port, greyed out with "last seen …", while it has a DHCP lease (otherwise 24 h). Stored in `/data/wired_seen.json`.
+---
+- Mapa: skupina „Kabel“ pod AP a uzel „Kabel / ostatní“ u routeru se jmenují „LAN“ a „LAN / ostatní“.
+- Poslední známé místo kabelových zařízení: když zařízení zmizí z tabulky MAC adres switche (např. vypnutá televize), zůstane u svého AP a portu šedě s „naposledy viděno …“, dokud má DHCP záznam (jinak 24 h). Ukládá se do `/data/wired_seen.json`.
+
 ## 0.9.1
 - Fix: wired devices on AP ports were not found when the router had the same MAC on several IPs (LAN + VLAN interfaces) – the ARP table is now keyed by IP.
 ---

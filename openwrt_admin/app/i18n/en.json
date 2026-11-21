@@ -172,7 +172,7 @@
   "router.up_for": "Up for",
   "router.leases": "DHCP leases ({n})",
   "router.connection": "Connection",
-  "router.not_wifi": "wired or not on Wi-Fi",
+  "router.not_wifi": "LAN at the router or not connected",
   "router.no_leases": "No DHCP leases",
   "router.confirm_reboot": "Reboot the router {ap}? The whole network and the internet will be down for 1–2 minutes.",
   "router.confirm_upgrade": "Run {pkg} upgrade on the router {ap}? Upgrading packages can break networking; sysupgrade is safer.",
@@ -183,8 +183,8 @@
   "map.lan": "LAN",
   "map.router": "router",
   "map.no_router": "no router configured",
-  "map.wired": "Wired / other",
-  "map.wired_sub": "DHCP clients not on Wi-Fi",
+  "map.wired": "LAN / other",
+  "map.wired_sub": "DHCP clients not on Wi-Fi or AP ports",
   "map.clients": [
     "{n} client",
     "{n} clients"
@@ -209,10 +209,13 @@
   "map.zoom_out": "Zoom out",
   "map.fit": "Fit",
   "map.drag_hint": "wheel = zoom, drag = pan",
-  "map.cable": "Wired",
+  "map.cable": "LAN",
   "map.ports": "port {ports}",
-  "map.legend_cable": "cable on an AP port",
+  "map.legend_cable": "LAN on an AP port",
   "map.legend_via": "AP connected through another AP",
-  "router.cable_at": "wired",
-  "router.is_ap": "access point"
+  "router.cable_at": "LAN",
+  "router.is_ap": "access point",
+  "fmt.ago_h": "{h} h ago",
+  "fmt.ago_d": "{d} d ago",
+  "map.last_seen": "last seen {ago}"
 }

@@ -7,12 +7,20 @@ Zdroj: tabulka MAC adres switche (`swconfig dev switch0 get arl_table`). Na kazd
 - ostatni porty = lokalni zarizeni.
 Kdyz stejnou MAC vidi lokalne vic AP (AP zapojene za sebou), patri tomu nejniz v retezu.
 Neumi-li switch tabulku vypsat (jiny cip, DSA), AP se preskoci a zarizeni zustanou u routeru.
+
+Pamet: switch MAC po par minutach bez provozu zapomene (vypnuta TV). Posledni zname misto
+(AP + port) se proto pamatuje (`memory`) a zarizeni zustane u sveho AP jako "naposledy videno",
+dokud ma DHCP zaznam na routeru nebo nebylo videt dele nez STALE_KEEP.
 """
 from __future__ import annotations
 
 import re
+import time
 
 from .collector import APState
+
+STALE_KEEP = 24 * 3600        # bez DHCP zaznamu ukazovat jeste den
+MEMORY_MAX = 30 * 24 * 3600   # z pameti mazat po 30 dnech
 
 PORT_RE = re.compile(r"^(\d+)(t?)")
 
@@ -66,8 +74,11 @@ def local_ports(ap: APState, router: APState | None) -> dict[str, str]:
     return out
 
 
-def locate(aps: list[APState], router: APState | None, leases: dict[str, dict]) -> dict:
-    """-> {"by_ap": {ap: [zarizeni]}, "parent": {ap: nadrazeny_ap}, "placed": {mac}, "ap_macs": {mac}}"""
+def locate(aps: list[APState], router: APState | None, leases: dict[str, dict],
+           memory: dict[str, dict] | None = None, now: float | None = None) -> dict:
+    """-> {"by_ap": {ap: [zarizeni]}, "parent": {ap: nadrazeny_ap}, "placed": {mac}, "ap_macs": {mac}}
+    memory: {mac: {ap, port, ts, hostname, ip}} – posledni zname misto; aktualizuje se zde (in place)."""
+    now = now or time.time()
     local = {ap.name: local_ports(ap, router) for ap in aps if ap.online}
     ap_mac = {ap.mac: ap.name for ap in aps if ap.mac}
     wifi = {c["mac"] for ap in aps for c in ap.clients}
@@ -104,6 +115,27 @@ def locate(aps: list[APState], router: APState | None, leases: dict[str, dict]) 
             "port": local[owner][mac].split(":")[1],
         })
         placed.add(mac)
+    if memory is not None:
+        for owner, devs in by_ap.items():
+            for d in devs:
+                memory[d["mac"]] = {"ap": owner, "port": d["port"], "ts": now, "hostname": d["hostname"], "ip": d["ip"]}
+        names = {ap.name for ap in aps}
+        online = {ap.name for ap in aps if ap.online}
+        for mac, m in list(memory.items()):
+            age = now - m.get("ts", 0)
+            if age > MEMORY_MAX or m.get("ap") not in names:
+                del memory[mac]
+                continue
+            if mac in placed or mac in wifi or mac in ap_mac or m["ap"] not in online:
+                continue
+            if mac not in leases and age > STALE_KEEP:
+                continue
+            l = leases.get(mac, {})
+            by_ap.setdefault(m["ap"], []).append({
+                "mac": mac, "ip": l.get("ip") or m.get("ip", ""), "hostname": l.get("hostname") or m.get("hostname", ""),
+                "port": str(m.get("port", "?")), "stale": m["ts"],
+            })
+            placed.add(mac)
     for v in by_ap.values():
-        v.sort(key=lambda d: (int(d["port"]), (d["hostname"] or "~").lower(), d["mac"]))
+        v.sort(key=lambda d: (int(d["port"]) if str(d["port"]).isdigit() else 99, (d["hostname"] or "~").lower(), d["mac"]))
     return {"by_ap": by_ap, "parent": parent, "placed": placed, "ap_macs": set(ap_mac)}

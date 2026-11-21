@@ -130,3 +130,7 @@ svg.netmap.dragging { cursor: grabbing; }
 
 /* 0.9.0 – Wi-Fi ke klientum prerusovane, kabel plne */
 .edge-client { stroke-dasharray: 3 4; stroke-linecap: round; }
+
+/* 0.9.2 – naposledy videna kabelova zarizeni */
+.netmap .node-stale { opacity: .5; }
+.netmap .node-stale > rect:first-of-type { stroke-dasharray: 3 3; }

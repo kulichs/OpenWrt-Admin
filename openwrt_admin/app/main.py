@@ -25,6 +25,7 @@ from .demo import demo_router, demo_states
 DATA = Path(os.environ.get("OWADMIN_DATA", "/data"))
 OPTIONS = DATA / "options.json"
 KEYFILE = DATA / "id_ed25519"
+SEENFILE = DATA / "wired_seen.json"   # posledni zname misto kabelovych zarizeni (AP + port)
 INGRESS_IPS = {"172.30.32.2", "127.0.0.1"}
 ALLOW_ALL = os.environ.get("OWADMIN_ALLOW_ALL") == "1"
 
@@ -91,6 +92,8 @@ class Store:
         self.router: APState | None = (APState(name=self.router_item["name"], host=self.router_item["host"], kind="router")
                                        if self.router_item else None)
         self.last_poll = 0.0
+        self.seen: dict[str, dict] = self._load_seen()
+        self.wired_state: dict | None = None
         self.lock = asyncio.Lock()
         self.ap_locks: dict[str, asyncio.Lock] = {}
         self.pending: dict[str, tuple[float, dict[str, list[actions.SsidChange]]]] = {}
@@ -150,6 +153,10 @@ class Store:
                 self.aps, self.leases = demo_states()
                 if self.router:
                     self.router = demo_router(self.router.name, self.router.host)
+                # ukazka "naposledy videno": vypnuta TV na portu 4 AP-Office
+                self.seen = {"02:00:00:00:10:04": {"ap": "AP-Office", "port": "4", "ts": time.time() - 3 * 3600,
+                                                   "hostname": "tv-office", "ip": "192.168.1.13"}}
+                self.wired_state = wiredmod.locate(self.aps, self.router, self.leases, self.seen)
                 self.last_poll = time.time()
                 return
             user = self.opts.get("ssh_user", "root")
@@ -163,6 +170,8 @@ class Store:
                 self.router, leases = res.pop()
                 self.leases = leases or self.leases
             self.aps = list(res)
+            self.wired_state = wiredmod.locate(self.aps, self.router, self.leases, self.seen)
+            self._save_seen()
             self.last_poll = time.time()
 
     def devices(self) -> list[dict]:
@@ -172,14 +181,32 @@ class Store:
             out.insert(0, {"name": self.router.name, "online": self.router.online})
         return out
 
+    def _load_seen(self) -> dict:
+        if self.opts.get("demo"):
+            return {}
+        try:
+            return json.loads(SEENFILE.read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def _save_seen(self):
+        try:
+            tmp = SEENFILE.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self.seen))
+            tmp.replace(SEENFILE)
+        except OSError as e:
+            log.warning("Nelze ulozit %s: %s", SEENFILE, e)
+
     def wired(self) -> dict:
-        return wiredmod.locate(self.aps, self.router, self.leases)
+        if self.wired_state is None:
+            self.wired_state = wiredmod.locate(self.aps, self.router, self.leases, self.seen)
+        return self.wired_state
 
     def lease_list(self, wired: dict | None = None) -> list[dict]:
         """DHCP leases z routeru, u Wi-Fi klientu doplneno AP/SSID/pasmo, u kabelovych AP a port."""
         wifi = {c["mac"]: c for a in self.aps for c in a.clients}
         wired = wired or self.wired()
-        cable = {d["mac"]: (ap, d["port"]) for ap, devs in wired["by_ap"].items() for d in devs}
+        cable = {d["mac"]: (ap, d["port"], d.get("stale")) for ap, devs in wired["by_ap"].items() for d in devs}
         out = []
         for mac, l in self.leases.items():
             c = wifi.get(mac)
@@ -187,6 +214,7 @@ class Store:
             out.append({"mac": mac, "ip": l.get("ip", ""), "hostname": l.get("hostname", ""),
                         "ap": c["ap"] if c else "", "ssid": c["ssid"] if c else "", "band": c.get("band", "") if c else "",
                         "cable_ap": cab[0] if cab else "", "cable_port": cab[1] if cab else "",
+                        "cable_stale": cab[2] if cab else None,
                         "is_ap": mac in wired["ap_macs"]})
 
         def ipkey(x):
@@ -364,7 +392,13 @@ def ago(ctx, ts) -> str:
     if not ts:
         return t("fmt.never")
     s = int(time.time() - ts)
-    return t("fmt.ago_s", s=s) if s < 120 else t("fmt.ago_m", m=s // 60)
+    if s < 120:
+        return t("fmt.ago_s", s=s)
+    if s < 7200:
+        return t("fmt.ago_m", m=s // 60)
+    if s < 172800:
+        return t("fmt.ago_h", h=s // 3600)
+    return t("fmt.ago_d", d=s // 86400)
 
 
 @pass_context

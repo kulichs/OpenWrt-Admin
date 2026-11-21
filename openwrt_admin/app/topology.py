@@ -6,6 +6,7 @@ br-lan.10) nebo z clenu bridge (br-host -> eth0.30), netagovana sit = LAN.
 """
 from __future__ import annotations
 
+import time
 from urllib.parse import quote, urlencode
 
 from .collector import APState
@@ -49,6 +50,15 @@ def _eff_vlans(dev: APState) -> dict[str, int | None]:
         mgmt = i["name"] == "lan" or any(a.split("/")[0] == host for a in (i.get("ipv4") or "").split(", ") if a)
         out[i["name"]] = None if mgmt else i.get("vlan")
     return out
+
+
+def _ago(ts: float, t) -> str:
+    s = int(time.time() - ts)
+    if s < 7200:
+        return t("fmt.ago_m", m=max(1, s // 60))
+    if s < 172800:
+        return t("fmt.ago_h", h=s // 3600)
+    return t("fmt.ago_d", d=s // 86400)
 
 
 def _client_node(c: dict, x: float, y: float, color: str, wired: bool, t) -> dict:
@@ -198,6 +208,10 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
                                       top + (ROW - CROW) / 2 + k * CROW + (CROW - CLIENT_H) / 2, lanc, True, t)
                     cn["extra"] = f"port {c['port']}" + (f" · {c['ip']}" if c.get("ip") else "")
                     cn["tip"] = " · ".join(v for v in [c.get("hostname") or c["mac"], c.get("ip", ""), c["mac"], f"port {c['port']}"] if v)
+                    if c.get("stale"):
+                        cn["stale"] = True
+                        cn["extra"] = f"port {c['port']} · {_ago(c['stale'], t)}"
+                        cn["tip"] += " · " + t("map.last_seen", ago=_ago(c["stale"], t))
                     nodes.append(cn)
                     edges.append({"from": gn, "to": cn, "kind": "cable", "color": lanc})
                 continue

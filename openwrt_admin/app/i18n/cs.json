@@ -171,7 +171,7 @@
   "router.up_for": "Běží",
   "router.leases": "DHCP klienti ({n})",
   "router.connection": "Připojení",
-  "router.not_wifi": "kabel nebo nepřipojeno k Wi-Fi",
+  "router.not_wifi": "LAN u routeru nebo nepřipojeno",
   "router.no_leases": "Žádné DHCP záznamy",
   "router.confirm_reboot": "Restartovat router {ap}? Na 1–2 minuty spadne celá síť i internet.",
   "router.confirm_upgrade": "Spustit {pkg} upgrade na routeru {ap}? Upgrade balíčků může rozbít síť; bezpečnější je sysupgrade.",
@@ -182,8 +182,8 @@
   "map.lan": "LAN",
   "map.router": "router",
   "map.no_router": "router není nastavený",
-  "map.wired": "Kabel / ostatní",
-  "map.wired_sub": "DHCP klienti mimo Wi-Fi",
+  "map.wired": "LAN / ostatní",
+  "map.wired_sub": "DHCP klienti mimo Wi-Fi a porty AP",
   "map.clients": [
     "{n} klient",
     "{n} klienti",
@@ -210,10 +210,13 @@
   "map.zoom_out": "Oddálit",
   "map.fit": "Vše",
   "map.drag_hint": "kolečko = zoom, tažení = posun",
-  "map.cable": "Kabel",
+  "map.cable": "LAN",
   "map.ports": "port {ports}",
-  "map.legend_cable": "kabel na portu AP",
+  "map.legend_cable": "LAN na portu AP",
   "map.legend_via": "AP zapojený přes jiný AP",
-  "router.cable_at": "kabel",
-  "router.is_ap": "access point"
+  "router.cable_at": "LAN",
+  "router.is_ap": "access point",
+  "fmt.ago_h": "před {h} h",
+  "fmt.ago_d": "před {d} d",
+  "map.last_seen": "naposledy viděno {ago}"
 }
