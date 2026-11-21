@@ -155,3 +155,16 @@ select option { background: var(--card); color: var(--fg); }
 .bans { margin-bottom: 1rem; }
 .tag { white-space: nowrap; }
 button.small { padding: .15rem .55rem; font-size: .8rem; }
+/* 0.13.0: rychlost portu */
+.netmap .edge-speed { font-size: 10.5px; font-weight: 600; fill: var(--muted); paint-order: stroke; stroke: var(--card); stroke-width: 3px; }
+.netmap .edge-speed.slow, .netmap .c-extra.slow { fill: var(--ok); }
+.tag.sp-1000 { color: var(--good); border-color: var(--good); }
+.tag.sp-100 { color: var(--ok); border-color: var(--ok); }
+.tag.sp-10 { color: var(--bad); border-color: var(--bad); }
+.tag.sp-down { color: var(--muted); }
+.portrow { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .8rem; }
+.portbox { border: 2px solid var(--line); border-radius: 6px; min-width: 3.4rem; padding: .25rem .4rem; text-align: center; line-height: 1.2; }
+.portbox b { display: block; font-size: .95rem; }
+.portbox span { font-size: .75rem; color: var(--muted); }
+.portbox.sp-1000 { border-color: var(--good); } .portbox.sp-100 { border-color: var(--ok); } .portbox.sp-10 { border-color: var(--bad); }
+.portbox.sp-down { opacity: .5; border-style: dashed; }

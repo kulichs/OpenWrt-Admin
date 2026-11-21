@@ -11,6 +11,7 @@ import time
 from urllib.parse import quote, urlencode
 
 from .collector import APState, is_l2_iface
+from .wired import speed_label
 
 PALETTE = ["#03a9f4", "#8e44ad", "#e67e22", "#16a085", "#c0392b", "#2c7be5", "#b7950b", "#7f8c8d"]
 
@@ -138,12 +139,14 @@ def _tree_order(aps: list[APState], parent: dict[str, str]) -> list[tuple[APStat
 
 def build(router: APState | None, aps: list[APState], wired: list[dict], t, clients: list[dict] | None = None,
           show_clients: bool = True, show_empty: bool = False,
-          ap_wired: dict[str, list[dict]] | None = None, parent: dict[str, str] | None = None) -> dict:
+          ap_wired: dict[str, list[dict]] | None = None, parent: dict[str, str] | None = None,
+          speeds: dict[str, int] | None = None) -> dict:
     """wired: kabelova zarizeni u routeru (neumistena na zadny AP); clients: vsichni Wi-Fi klienti;
     ap_wired: {ap: [kabelova zarizeni na portech AP]}; parent: {ap: AP, pres ktery je zapojeny}."""
     clients = clients or []
     ap_wired = ap_wired or {}
     parent = parent or {}
+    speeds = speeds or {}
     # ---- site (podle VLAN ID), nazvy primarne z routeru
     nets: dict[str, dict] = {}
 
@@ -238,8 +241,11 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
                 for k, c in enumerate(cl):
                     cn = _client_node({**c, "port": c["port"]}, COL_X["client"],
                                       top + (ROW - CROW) / 2 + k * CROW + (CROW - CLIENT_H) / 2, lanc, True, t)
-                    cn["extra"] = f"port {c['port']}" + (f" · {c['ip']}" if c.get("ip") else "")
-                    cn["tip"] = " · ".join(v for v in [c.get("hostname") or c["mac"], c.get("ip", ""), c["mac"], f"port {c['port']}"] if v)
+                    sp = speed_label(c.get("speed", 0))
+                    cn["extra"] = f"port {c['port']}" + (f" · {sp}" if sp else "") + (f" · {c['ip']}" if c.get("ip") else "")
+                    cn["tip"] = " · ".join(v for v in [c.get("hostname") or c["mac"], c.get("ip", ""), c["mac"], f"port {c['port']}", sp] if v)
+                    if c.get("speed") and c["speed"] < 1000:
+                        cn["slow"] = True
                     if c.get("stale"):
                         cn["stale"] = True
                         cn["extra"] = f"port {c['port']} · {_ago(c['stale'], t)}"
@@ -318,7 +324,8 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
         apn["chips"] = _chips(apn, chips)
         src = ap_by_name.get(parent.get(ap.name)) or rn
         edges.append({"from": src, "to": apn, "kind": "trunk" if vl else "lan", "color": lan_color, "up": ap.online,
-                      "via": src is not rn})
+                      "via": src is not rn, "speed": speed_label(speeds.get(ap.name, 0)) if ap.online else "",
+                      "slow": 0 < speeds.get(ap.name, 0) < 1000})
     if router:
         rv = sorted({v for v in router_vl.values() if v is not None})
         rn["chips"] = _chips(rn, [{"label": nets[_net_key(v)]["label"], "color": nets[_net_key(v)]["color"]} for v in rv])
@@ -334,12 +341,14 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
             r = min(12, (y2 - y1) / 2, (x2 - x1) / 2) if y2 > y1 and x2 > x1 else 0
             e["d"] = f"M{x1:.0f},{y1:.0f} V{y2 - r:.0f} Q{x1:.0f},{y2:.0f} {x1 + r:.0f},{y2:.0f} H{x2:.0f}"
             e["mx"], e["my"] = x1, y2
+            e["lx"], e["ly"] = x2 - 6, y2 - 5
             continue
         x1, y1 = a["x"] + a["w"], a["y"] + a.get("h", NODE_H) / 2
         x2, y2 = b["x"], b["y"] + b.get("h", NODE_H) / 2
         dx = (x2 - x1) / 2
         e["d"] = f"M{x1:.0f},{y1:.0f} C{x1 + dx:.0f},{y1:.0f} {x2 - dx:.0f},{y2:.0f} {x2:.0f},{y2:.0f}"
         e["mx"], e["my"] = (x1 + x2) / 2, (y1 + y2) / 2
+        e["lx"], e["ly"] = x2 - 6, y2 - 5
 
     for n in nodes:
         n.setdefault("h", NODE_H)

@@ -326,5 +326,18 @@
   "unban.until_unknown": "neznámo (zadáno mimo add-on)",
   "unban.left": "{d}",
   "unban.button": "Zrušit blokaci",
-  "unban.confirm": "Zrušit blokaci {who} na Wi-Fi {ssid}?"
+  "unban.confirm": "Zrušit blokaci {who} na Wi-Fi {ssid}?",
+  "ports.title": "Porty",
+  "ports.speed": "Rychlost",
+  "ports.devices": "Zařízení na portu",
+  "ports.up": "připojeno",
+  "ports.down": "odpojeno",
+  "ports.role_uplink": "uplink (k routeru)",
+  "ports.role_cpu": "CPU (AP)",
+  "ports.role_local": "LAN",
+  "ports.role_wan": "WAN",
+  "ports.role_lan": "LAN",
+  "ports.hint": "Vyjednaná rychlost a duplex podle switche (swconfig) nebo síťové karty (ubus network.device). 100 Mb/s místo 1 Gb/s bývá vadný nebo jen 4žilový kabel, případně zařízení, které víc neumí.",
+  "ports.uplink_speed": "připojeno rychlostí {s}",
+  "map.legend_speed": "rychlost portu (uplink AP, kabelová zařízení); oranžově pod 1 Gb/s"
 }

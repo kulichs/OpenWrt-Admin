@@ -55,6 +55,7 @@
     </table>
   </div>
 </section>
+{% include "_ports.html" %}
 {% include "_maint.html" %}
 {% set on = leases | selectattr("online") | list %}
 {% set off = leases | rejectattr("online") | list %}

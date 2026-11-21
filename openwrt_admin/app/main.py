@@ -392,6 +392,35 @@ class Store:
             log.exception("wake_ips")
             return []
 
+    def port_table(self, ap) -> list[dict]:
+        """Fyzicke porty zarizeni pro stranku AP/routeru: stav, rychlost, role a zarizeni na portu."""
+        if not ap.online or not ap.ports:
+            return []
+        a = wiredmod.analyze(ap, self.router) if ap.arl else {"uplink": set(), "cpu": set(), "local": {}}
+        up = wiredmod.uplink_port(ap, self.router) if ap.kind != "router" else None
+        wan_devs = {i.get("device") for i in ap.interfaces if i.get("wan")}
+        on_port: dict[str, list[dict]] = {}
+        w = self.wired_state or {}
+        for d in (w.get("by_ap") or {}).get(ap.name, []):
+            on_port.setdefault(str(d["port"]), []).append(d)
+        ap_names = {x.mac: x.name for x in self.aps if x.mac}
+        for mac, port in a["local"].items():  # AP zapojene za timto AP
+            if mac in ap_names:
+                on_port.setdefault(port.split(":")[1], []).append({"mac": mac, "hostname": ap_names[mac], "ap": True})
+        out = []
+        for p in ap.ports:
+            if p["id"] in a["cpu"]:
+                role = "cpu"
+            elif p["id"] in a["uplink"] or (up and p["id"] == up["id"]):
+                role = "uplink"
+            elif p["id"] in wan_devs:
+                role = "wan"
+            else:
+                role = "local" if p["kind"] == "switch" or ap.kind != "router" else "lan"
+            out.append({**p, "role": role, "label": wiredmod.speed_label(p["speed"]),
+                        "devices": on_port.get(p["num"], []) if p["kind"] == "switch" else []})
+        return out
+
     def switch_diag(self, ap) -> dict | None:
         """Diagnostika switche AP pro stranku AP: porty, MAC, uplink/CPU, pamet 'naposledy videno'."""
         if not ap.online:
@@ -755,6 +784,7 @@ def fmt_band(ctx, b) -> str:
 
 templates.env.filters.update(band=fmt_band, bytes=fmt_bytes, duration=fmt_duration, rate=fmt_rate, interval=fmt_interval,
                              sigclass=signal_class, ago=ago)
+templates.env.filters["speed"] = lambda mbps: (f"{mbps / 1000:g} Gb/s" if mbps >= 1000 else f"{mbps} Mb/s") if mbps else "–"
 templates.env.filters["left"] = lambda ts: max(0, int(ts - time.time()))  # zbyva sekund
 templates.env.tests["recent"] = lambda ts, hours=24: bool(ts) and time.time() - ts < hours * 3600
 
@@ -821,9 +851,11 @@ async def ap_page(request: Request, name: str):
         for l in leases:
             if l["online"] and l["iface"]:
                 counts[l["iface"]] = counts.get(l["iface"], 0) + 1
-        return render(request, "router.html", page="ap:" + name, ap=ap, leases=leases, iface_counts=counts)
+        return render(request, "router.html", page="ap:" + name, ap=ap, leases=leases, iface_counts=counts,
+                      ports=store.port_table(ap))
     clients = [c for c in store.all_clients() if c["ap"] == name]
-    return render(request, "ap.html", page="ap:" + name, ap=ap, clients=clients, diag=store.switch_diag(ap))
+    return render(request, "ap.html", page="ap:" + name, ap=ap, clients=clients, diag=store.switch_diag(ap),
+                  ports=store.port_table(ap))
 
 
 @app.get("/map", response_class=HTMLResponse)
@@ -833,9 +865,19 @@ async def map_page(request: Request, clients: str = "1", empty: str = "0"):
     router_wired = [l for l in store.lease_list(w)
                     if l["online"] and not l["ap"] and not l["cable_ap"] and not l["is_ap"]
                     and (l["known_net"] or not l["ip"] or not store.router)]  # IP mimo LAN/VLAN routeru (WAN) ne
+    speeds = {}
+    for a in store.aps:
+        up = wiredmod.uplink_port(a, store.router) if a.online else None
+        if up and up["speed"]:
+            speeds[a.name] = up["speed"]
+    ap_wired = {}
+    for name, devs in w["by_ap"].items():
+        a = next((x for x in store.aps if x.name == name), None)
+        ap_wired[name] = [{**d, "speed": ((wiredmod.port_by_num(a, d["port"]) or {}).get("speed", 0)
+                                         if a and not d.get("stale") else 0)} for d in devs]
     topo = topology.build(store.router, store.aps, router_wired, request.state.t, clients=store.all_clients(),
                           show_clients=show_clients, show_empty=show_empty,
-                          ap_wired=w["by_ap"], parent=w["parent"])
+                          ap_wired=ap_wired, parent=w["parent"], speeds=speeds)
     return render(request, "map.html", page="map", topo=topo, show_clients=show_clients, show_empty=show_empty)
 
 

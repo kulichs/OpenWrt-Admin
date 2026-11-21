@@ -1,0 +1,26 @@
+{% macro spc(p) %}{% if not p.up %}sp-down{% elif p.speed >= 1000 %}sp-1000{% elif p.speed >= 100 %}sp-100{% elif p.speed %}sp-10{% endif %}{% endmacro %}
+{% if ports %}
+<div class="panel">
+  <h2>{{ t("ports.title") }}</h2>
+  <div class="portrow">
+    {% for p in ports %}
+    <div class="portbox {{ spc(p) }}" title="{{ t('ports.role_' ~ p.role) }}{% if p.up %} · {{ p.speed | speed }}{% if p.duplex == 'half' %} · half-duplex{% endif %}{% endif %}">
+      <b>{{ p.num }}</b><span>{{ p.label if p.up else t("ports.down") }}{% if p.duplex == 'half' %} HD{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <table class="list">
+    <thead><tr><th>{{ t("diag.port") }}</th><th>{{ t("col.state") }}</th><th>{{ t("ports.speed") }}</th><th>{{ t("diag.role") }}</th><th>{{ t("ports.devices") }}</th></tr></thead>
+    {% for p in ports %}
+    <tr>
+      <td><b>{{ p.num }}</b>{% if p.kind == 'switch' %} <span class="muted small">{{ p.id.split(':')[0] }}</span>{% endif %}</td>
+      <td><span class="dot {{ 'on' if p.up else 'off' }}"></span> {{ t("ports.up") if p.up else t("ports.down") }}</td>
+      <td>{% if p.up %}<span class="tag {{ spc(p) }}">{{ p.speed | speed }}</span>{% if p.duplex == 'half' %} <span class="warn small">half-duplex</span>{% endif %}{% else %}–{% endif %}</td>
+      <td>{{ t("ports.role_" ~ p.role) }}</td>
+      <td>{% for d in p.devices %}{{ d.hostname or d.mac }}{% if d.stale %} <span class="muted small">({{ t("map.last_seen", ago=(d.stale | ago)) }})</span>{% endif %}{{ ", " if not loop.last }}{% else %}<span class="muted">–</span>{% endfor %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">{{ t("ports.hint") }}</p>
+</div>
+{% endif %}

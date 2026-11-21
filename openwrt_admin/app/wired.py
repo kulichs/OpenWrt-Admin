@@ -150,3 +150,27 @@ def locate(aps: list[APState], router: APState | None, leases: dict[str, dict],
     for v in by_ap.values():
         v.sort(key=lambda d: (int(d["port"]) if str(d["port"]).isdigit() else 99, (d["hostname"] or "~").lower(), d["mac"]))
     return {"by_ap": by_ap, "parent": parent, "placed": placed, "ap_macs": set(ap_mac)}
+
+
+def speed_label(mbps: int) -> str:
+    """1000 -> '1G', 100 -> '100M', 2500 -> '2.5G'."""
+    if not mbps:
+        return ""
+    if mbps >= 1000:
+        g = mbps / 1000
+        return f"{g:g}G"
+    return f"{mbps}M"
+
+
+def port_by_num(ap: APState, num: str) -> dict | None:
+    return next((p for p in ap.ports if p["num"] == str(num)), None)
+
+
+def uplink_port(ap: APState, router: APState | None) -> dict | None:
+    """Port, kterym je AP pripojeny k siti: uplink ze switche (MAC routeru), jinak jediny zapojeny fyzicky port."""
+    up_ids = analyze(ap, router)["uplink"] if ap.arl else set()
+    for p in ap.ports:
+        if p["id"] in up_ids:
+            return p
+    live = [p for p in ap.ports if p["up"] and p["kind"] == "dev"]
+    return live[0] if len(live) == 1 else None

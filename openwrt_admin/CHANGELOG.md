@@ -2,6 +2,13 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.13.0
+- Port speeds: AP and router pages have a new **Ports** panel – every physical port with its state, negotiated speed (1 Gb/s, 100 Mb/s…) and duplex, role (uplink, CPU, LAN, WAN) and the devices on it. Source: `swconfig dev <switch> show` (switch ports) or `ubus call network.device status` (DSA ports, separate network cards).
+- Map: the line to each AP shows the speed of its uplink port (e.g. "1G", "100M"), wired devices on AP ports show their port speed. Below 1 Gb/s is orange (often a bad or 4-wire cable).
+---
+- Rychlost portů: stránka AP i routeru má nový panel **Porty** – každý fyzický port se stavem, vyjednanou rychlostí (1 Gb/s, 100 Mb/s…) a duplexem, rolí (uplink, CPU, LAN, WAN) a zařízeními na něm. Zdroj: `swconfig dev <switch> show` (porty switche) nebo `ubus call network.device status` (porty DSA, samostatné síťové karty).
+- Mapa: u čáry ke každému AP je rychlost jeho uplink portu (např. „1G“, „100M“), kabelová zařízení na portech AP mají rychlost svého portu. Pod 1 Gb/s oranžově (často vadný nebo 4žilový kabel).
+
 ## 0.12.1
 - Blocked Wi-Fi clients are listed (Clients page and AP page, from hostapd `list_bans`) with the remaining time and an **Unblock** button (full access).
 - Dark mode: drop-down lists (e.g. Disconnect…) were white.

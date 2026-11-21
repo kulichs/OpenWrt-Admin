@@ -21,14 +21,17 @@
   <path d="{{ e.d }}" class="edge edge-{{ e.kind }} {{ 'edge-down' if e.up is defined and not e.up }}"
         {% if e.color %}style="stroke: {{ e.color }}"{% endif %}/>
   {% endfor %}
+  {% for e in topo.edges if e.speed %}
+  <text x="{{ e.lx }}" y="{{ e.ly }}" text-anchor="end" class="edge-speed {{ 'slow' if e.slow }}"><title>{{ t("ports.uplink_speed", s=e.speed) }}</title>{{ e.speed }}</text>
+  {% endfor %}
   {% for n in topo.nodes %}
   {% if n.kind == 'client' %}
   <g class="node node-client {{ 'node-stale' if n.stale }}">
     <title>{{ n.tip }}</title>
     <rect x="{{ n.x }}" y="{{ n.y }}" width="{{ n.w }}" height="{{ n.h }}" rx="7"/>
     <rect x="{{ n.x }}" y="{{ n.y }}" width="4" height="{{ n.h }}" rx="2" style="fill: {{ n.color }}"/>
-    <text x="{{ n.x + 12 }}" y="{{ n.y + 18 }}" class="c-title">{{ n.title | truncate(24, true, '…') }}</text>
-    <text x="{{ n.x + n.w - 8 }}" y="{{ n.y + 18 }}" text-anchor="end" class="c-extra {{ 'sig-' ~ n.sig if n.sig }}">{{ n.extra }}</text>
+    <text x="{{ n.x + 12 }}" y="{{ n.y + 18 }}" class="c-title">{{ n.title | truncate([8, [24, ((n.w - 26) / 6.4 - (n.extra | length) * 0.92) | int] | min] | max, true, '…', 0) }}</text>
+    <text x="{{ n.x + n.w - 8 }}" y="{{ n.y + 18 }}" text-anchor="end" class="c-extra {{ 'sig-' ~ n.sig if n.sig }} {{ 'slow' if n.slow }}">{{ n.extra }}</text>
   </g>
   {% else %}
   {% if n.href %}<a href="{{ base }}{{ n.href }}">{% endif %}
@@ -104,6 +107,7 @@
     <span><svg width="44" height="10"><path d="M2,5 H42" class="edge edge-wifi" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_wifi") }}</span>
     <span><svg width="44" height="10"><path d="M2,5 H42" class="edge edge-cable" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_cable") }}</span>
     <span><svg width="44" height="14"><path d="M4,1 V9 Q4,13 8,13 H42" class="edge edge-lan" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_via") }}</span>
+    <span><svg width="44" height="14" class="netmap"><text x="2" y="11" class="edge-speed">1G</text><text x="22" y="11" class="edge-speed slow">100M</text></svg> {{ t("map.legend_speed") }}</span>
   </div>
   <table class="list">
     <thead><tr><th>{{ t("map.network") }}</th><th>VLAN</th><th>{{ t("map.names") }}</th></tr></thead>

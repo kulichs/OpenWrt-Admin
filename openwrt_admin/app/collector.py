@@ -61,6 +61,8 @@ class APState:
     # zablokovani klienti z hostapd (list_bans): [{mac, ifname, ssid}]
     bans: list[dict[str, Any]] = field(default_factory=list)
     bans_ok: bool = False  # hostapd umi list_bans
+    # fyzicke porty: [{id: "switch0:1" / "lan1", num, up, speed (Mb/s, 0 = nezname), duplex ("full"/"half"/""), kind}]
+    ports: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def client_count(self) -> int:
@@ -232,7 +234,7 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
             known_hosts=None,  # host klice se meni pri sysupgrade -n; jen LAN a jen cteni
             connect_timeout=timeout,
         ) as conn:
-            (wstatus, hostapd_list, uci_wl, ifdump, devstatus, ucinet, arl, arp), _ = await asyncio.gather(
+            (wstatus, hostapd_list, uci_wl, ifdump, devstatus, ucinet, arl, arp, swports), _ = await asyncio.gather(
                 asyncio.gather(
                     _ubus(conn, "network.wireless", "status", timeout),
                     _run(conn, "ubus list 'hostapd.*'", timeout),
@@ -242,10 +244,12 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
                     _run(conn, "uci -q show network", timeout),
                     _run(conn, ARL_CMD, timeout),
                     _run(conn, "cat /proc/net/arp", timeout),
+                    _run(conn, PORTS_CMD, timeout),
                 ),
                 _read_system(conn, st, timeout),
             )
             st.arl, st.arp, st.switch_vlans = parse_arl(arl), parse_arp(arp), switch_vlan_ports(ucinet)
+            st.ports = merge_ports(parse_swconfig_ports(swports), parse_dev_ports(devstatus))
             st.wifi_ifaces = parse_wifi_ifaces(uci_wl)
             st.interfaces = parse_interfaces(ifdump, devstatus, uci_vlans(ucinet), gw_is_wan=False)
             lan_dev = next((i["device"] for i in st.interfaces if i["name"] == "lan"), "br-lan")
@@ -360,6 +364,48 @@ def vlan_of(device: str, devstatus: dict | None = None) -> int | None:
 ARL_RE = re.compile(r"Port\s+(\d+)\s*:\s*MAC\s+([0-9a-fA-F:]{17})")
 ARL_CMD = ("for s in $(swconfig list 2>/dev/null | sed -n 's/^Found: \\([^ ]*\\).*/\\1/p'); do "
            "echo \"== $s\"; swconfig dev $s get arl_table 2>/dev/null; done")
+
+
+PORTS_CMD = ("for s in $(swconfig list 2>/dev/null | sed -n 's/^Found: \\([^ ]*\\).*/\\1/p'); do "
+             "echo \"== $s\"; swconfig dev $s show 2>/dev/null | grep 'link:'; done")
+SW_LINK_RE = re.compile(r"port:(\d+)\s+link:(up|down)(?:\s+speed:(\d+)base\S*)?(?:\s+(full|half)-duplex)?")
+PHYS_RE = re.compile(r"^(eth\d+|lan\d+|wan\d*|port\d+|sfp\d*|swp\d+)$")
+
+
+def parse_swconfig_ports(text: str) -> list[dict]:
+    """`swconfig dev X show | grep link:` -> porty switche s rychlosti (swconfig: starsi Atheros/MediaTek)."""
+    out = []
+    sw = "switch0"
+    for line in (text or "").splitlines():
+        if line.startswith("== "):
+            sw = line[3:].strip()
+            continue
+        m = SW_LINK_RE.search(line)
+        if m:
+            up = m.group(2) == "up"
+            out.append({"id": f"{sw}:{m.group(1)}", "num": m.group(1), "up": up,
+                        "speed": int(m.group(3)) if up and m.group(3) else 0,
+                        "duplex": (m.group(4) or "") if up else "", "kind": "switch"})
+    return out
+
+
+def parse_dev_ports(devstatus: dict | None) -> list[dict]:
+    """`ubus call network.device status` -> fyzicke porty (DSA lan1…, wan, eth0…) se `speed` "1000F"."""
+    out = []
+    for name, d in (devstatus or {}).items():
+        if not PHYS_RE.match(name) or not isinstance(d, dict) or "speed" not in d and "carrier" not in d:
+            continue
+        up = bool(d.get("carrier"))
+        sp = str(d.get("speed") or "")
+        m = re.match(r"^(\d+)([FH]?)$", sp)
+        out.append({"id": name, "num": name, "up": up, "speed": int(m.group(1)) if up and m else 0,
+                    "duplex": {"F": "full", "H": "half"}.get(m.group(2), "") if up and m else "", "kind": "dev"})
+    return sorted(out, key=lambda p: (not p["num"].startswith(("wan",)), p["num"]))
+
+
+def merge_ports(sw: list[dict], dev: list[dict]) -> list[dict]:
+    """Se swconfig switchem jsou porty switche; eth0 je jen spoj do CPU. Bez switche (DSA, router se 2 NIC) porty zarizeni."""
+    return sw if sw else dev
 
 
 def parse_arl(text: str) -> dict[str, list[str]]:
@@ -518,7 +564,7 @@ async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 1
     try:
         async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=timeout) as conn:
-            _, dump, devstatus, ucinet, leases, ucidhcp, arp = await asyncio.gather(
+            _, dump, devstatus, ucinet, leases, ucidhcp, arp, swports = await asyncio.gather(
                 _read_system(conn, st, timeout),
                 _ubus(conn, "network.interface", "dump", timeout),
                 _ubus(conn, "network.device", "status", timeout),
@@ -526,8 +572,10 @@ async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 1
                 _read_leases(conn, timeout),
                 _run(conn, "uci -q show dhcp", timeout),
                 _run(conn, "cat /proc/net/arp", timeout),
+                _run(conn, PORTS_CMD, timeout),
             )
             st.static_hosts = parse_static_hosts(ucidhcp)
+            st.ports = merge_ports(parse_swconfig_ports(swports), parse_dev_ports(devstatus))
             st.interfaces = parse_interfaces(dump, devstatus, uci_vlans(ucinet))
             # ARP jen z LAN/VLAN: brana poskytovatele na WAN ani VPN peery nejsou klienti
             skip = {i["device"] for i in st.interfaces if i.get("device") and not is_l2_iface(i)}

@@ -95,6 +95,10 @@ def demo_states() -> tuple[list[APState], dict]:
              "switch0:3": ["02:00:00:00:10:01", "02:00:00:00:10:03", "02:00:00:00:10:05"],
              "switch0:4": [living_mac] + [x["mac"] for x in a.clients]}
     b.arp["192.168.1.50"] = "02:00:00:00:10:05"
+    # rychlosti portu: AP-Office switch (swconfig), AP-Living jen eth0 na 100 Mb/s (spatny kabel)
+    b.ports = [{"id": f"switch0:{n}", "num": str(n), "up": up, "speed": sp, "duplex": "full" if up else "", "kind": "switch"}
+               for n, up, sp in [(0, True, 1000), (1, False, 0), (2, True, 1000), (3, True, 100), (4, True, 100), (5, False, 0)]]
+    a.ports = [{"id": "eth0", "num": "eth0", "up": True, "speed": 100, "duplex": "full", "kind": "dev"}]
 
     # zarizeni na kabelu (jen v DHCP routeru)
     for i, (mac, name) in enumerate([("02:00:00:00:10:01", "nas"), ("02:00:00:00:10:02", "homeassistant"),
@@ -123,6 +127,8 @@ def demo_router(name: str, host: str) -> APState:
         {"name": "wg0", "up": True, "proto": "wireguard", "device": "wg0", "ipv4": "10.9.0.1/24",
          "ipv6": "", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False, "vlan": None},
     ]
+    r.ports = [{"id": "eth0", "num": "eth0", "up": True, "speed": 1000, "duplex": "full", "kind": "dev"},
+               {"id": "eth1", "num": "eth1", "up": True, "speed": 1000, "duplex": "full", "kind": "dev"}]
     # server v DMZ (pevna IP, bez DHCP) a zarizeni ve VLAN IoT na kabelu u routeru
     r.arp = {"192.168.100.7": "02:00:00:00:30:01", "192.168.10.20": "02:00:00:00:30:02"}
     r.arp_dev = {"192.168.100.7": "eth1.100", "192.168.10.20": "br-lan.10"}

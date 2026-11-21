@@ -87,6 +87,15 @@ chmod 600 /etc/dropbear/authorized_keys
 - Reboot and upgrade ask for confirmation.
 - **Upgrading packages** is generally discouraged on OpenWrt: new versions go to the overlay and small APs (8 MB flash) may run out of space. For bigger changes build a new image and `sysupgrade`.
 
+### Ports and link speed
+
+AP and router pages have a **Ports** panel: every physical port with its state, negotiated speed and duplex, its role and the devices plugged into it (from the switch MAC table).
+
+- **swconfig** devices (switch chips such as Atheros/Qualcomm AR8xxx, MediaTek): ports of the switch from `swconfig dev <switch> show` (`link: port:N link:up speed:1000baseT full-duplex`). The CPU port is the AP itself, the uplink is the port towards the router.
+- **DSA** devices and devices without a switch (e.g. UniFi AP with one `eth0`, a router with two network cards): physical devices (`lan1`, `wan`, `eth0`…) from `ubus call network.device status` (`speed: "1000F"`). Without a switch the only connected port counts as the uplink.
+- Colours: green 1 Gb/s and more, orange 100 Mb/s, red 10 Mb/s, dashed = disconnected; half-duplex is flagged. **100 Mb/s instead of 1 Gb/s** usually means a damaged or 4-wire cable, or a device that cannot do more.
+- On the **map** the line to each AP is labelled with the speed of its uplink port, and wired devices on AP ports show their port speed (orange below 1 Gb/s).
+
 ### New devices on the network
 
 When a device (MAC address) the add-on has never seen appears on the network – on Wi-Fi, on an AP port or in the router's ARP table – a notification is sent to Home Assistant (the bell, `persistent_notification`). It shows the name (if known), MAC, IP, network/VLAN and where the device is (AP + SSID, AP port, router). With `notify_service` (e.g. `notify.mobile_app_phone`) it also goes to that service.
@@ -202,6 +211,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | switch MAC table (wired devices on AP ports) | `swconfig dev <switch> get arl_table`, `/proc/net/arp` |
 | waking quiet wired devices (router, every 4 min) | `ping -c1 -W1 <ip>` |
 | packages to update (every `update_check_hours`) | `apk update -q; apk list --upgradable` / `opkg update; opkg list-upgradable` |
+| port speeds | `swconfig dev <switch> show`, `ubus call network.device status` |
 | configuration backup | `sysupgrade -b` |
 | interfaces and VLANs (router, APs) | `ubus call network.interface dump`, `ubus call network.device status` |
 | client names and IPs (router) | `ubus call luci-rpc getDHCPLeases`, else `/tmp/dhcp.leases`; `uci show dhcp` (reservations), `/proc/net/arp` |
@@ -326,6 +336,15 @@ chmod 600 /etc/dropbear/authorized_keys
 - Restart a upgrade se potvrzují.
 - **Upgrade balíčků** OpenWrt obecně nedoporučuje: nové verze jdou do overlay a na malých AP (8 MB flash) může místo dojít. Pro větší změny je lepší nový image a `sysupgrade`.
 
+### Porty a rychlost spojení
+
+Stránka AP i routeru má panel **Porty**: každý fyzický port se stavem, vyjednanou rychlostí a duplexem, rolí a zařízeními, která jsou do něj zapojená (z tabulky MAC adres switche).
+
+- Zařízení se **swconfig** (switch čipy jako Atheros/Qualcomm AR8xxx, MediaTek): porty switche z `swconfig dev <switch> show` (`link: port:N link:up speed:1000baseT full-duplex`). CPU port je samotné AP, uplink je port směrem k routeru.
+- Zařízení s **DSA** a bez switche (např. UniFi AP s jediným `eth0`, router se dvěma síťovkami): fyzická zařízení (`lan1`, `wan`, `eth0`…) z `ubus call network.device status` (`speed: "1000F"`). Bez switche se za uplink bere jediný připojený port.
+- Barvy: zeleně 1 Gb/s a víc, oranžově 100 Mb/s, červeně 10 Mb/s, čárkovaně = odpojeno; half-duplex je označený. **100 Mb/s místo 1 Gb/s** bývá poškozený nebo 4žilový kabel, případně zařízení, které víc neumí.
+- Na **mapě** je u čáry ke každému AP rychlost jeho uplink portu a kabelová zařízení na portech AP mají rychlost svého portu (pod 1 Gb/s oranžově).
+
 ### Nová zařízení v síti
 
 Když se v síti objeví zařízení (MAC adresa), které add-on ještě nikdy neviděl – na Wi-Fi, na portu AP nebo v ARP tabulce routeru – pošle upozornění do Home Assistantu (zvoneček, `persistent_notification`). Je v něm jméno (pokud je známé), MAC, IP, síť/VLAN a kde zařízení je (AP + SSID, port AP, router). S `notify_service` (např. `notify.mobile_app_telefon`) jde upozornění i do té služby.
@@ -441,6 +460,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | tabulka MAC adres switche (kabel na portech AP) | `swconfig dev <switch> get arl_table`, `/proc/net/arp` |
 | buzení tichých kabelových zařízení (router, každé 4 min) | `ping -c1 -W1 <ip>` |
 | balíčky k aktualizaci (každých `update_check_hours`) | `apk update -q; apk list --upgradable` / `opkg update; opkg list-upgradable` |
+| rychlost portů | `swconfig dev <switch> show`, `ubus call network.device status` |
 | záloha konfigurace | `sysupgrade -b` |
 | rozhraní a VLANy (router, AP) | `ubus call network.interface dump`, `ubus call network.device status` |
 | jména a IP klientů (router) | `ubus call luci-rpc getDHCPLeases`, jinak `/tmp/dhcp.leases`; `uci show dhcp` (rezervace), `/proc/net/arp` |
