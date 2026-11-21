@@ -12,11 +12,11 @@ configuration:
     name: Jazyk
     description: Jazyk webového rozhraní. auto = podle jazyka uživatele Home Assistantu (nebo prohlížeče). Každý prohlížeč si ho může změnit na stránce Nastavení.
   dhcp_router:
-    name: Router
-    description: OpenWrt router (LAN, bez Wi-Fi), např. 192.168.1.1 nebo host:port. Zobrazí se jako samostatné zařízení (rozhraní, DHCP klienti, restart, aktualizace) a bere se z něj jméno a IP klientů. Prázdné = vypnuto.
+    name: Router (zastaralé)
+    description: Starý způsob nastavení routeru. Místo toho dej routeru v seznamu zařízení type router. Když je vyplněné, router se stane zařízení se stejnou IP.
   router_name:
-    name: Název routeru
-    description: Jak se router v add-onu jmenuje (karta a záložka), výchozí Router.
+    name: Název routeru (zastaralé)
+    description: Jen se zastaralým dhcp_router, když router není v seznamu zařízení.
   demo:
     name: Demo režim
     description: Zobrazí vymyšlená data, bez SSH.
@@ -27,5 +27,5 @@ configuration:
     name: Jen čtení
     description: Uživatelská jména HA, která smí jen prohlížet. Kdo není v žádném seznamu, nemá přístup.
   aps:
-    name: Access pointy
-    description: Seznam OpenWrt AP (název, adresa, volitelně SSH port).
+    name: Zařízení
+    description: Všechna spravovaná OpenWrt zařízení – add-on používá jen tato. Každé má název, adresu, volitelně SSH port a type ap (výchozí) nebo router. Router (jeden) se zobrazí s rozhraními a DHCP klienty a dává jména a IP klientů.

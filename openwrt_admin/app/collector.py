@@ -211,18 +211,19 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
             known_hosts=None,  # host klice se meni pri sysupgrade -n; jen LAN a jen cteni
             connect_timeout=timeout,
         ) as conn:
-            (wstatus, hostapd_list, uci_wl, ifdump, devstatus), _ = await asyncio.gather(
+            (wstatus, hostapd_list, uci_wl, ifdump, devstatus, ucinet), _ = await asyncio.gather(
                 asyncio.gather(
                     _ubus(conn, "network.wireless", "status", timeout),
                     _run(conn, "ubus list 'hostapd.*'", timeout),
                     _run(conn, "uci -q show wireless", timeout),
                     _ubus(conn, "network.interface", "dump", timeout),
                     _ubus(conn, "network.device", "status", timeout),
+                    _run(conn, "uci -q show network", timeout),
                 ),
                 _read_system(conn, st, timeout),
             )
             st.wifi_ifaces = parse_wifi_ifaces(uci_wl)
-            st.interfaces = parse_interfaces(ifdump, devstatus)
+            st.interfaces = parse_interfaces(ifdump, devstatus, uci_vlans(ucinet))
 
             # mapovani ifname -> SSID / sit / radio z netifd
             iface_meta: dict[str, dict] = {}
@@ -325,7 +326,30 @@ def vlan_of(device: str, devstatus: dict | None = None) -> int | None:
     return None
 
 
-def parse_interfaces(dump, devstatus: dict | None = None) -> list[dict]:
+def uci_vlans(text: str) -> dict[str, int]:
+    """`uci show network` -> {rozhrani: VLAN ID}. Funguje i se starsim OpenWrt (ifname='eth0.30', type=bridge)
+    a s device sekcemi (br_host: name='br-host', ports='eth0.30')."""
+    secs = parse_uci_show(text or "")
+    devs = {}
+    for sec in secs.values():
+        if sec.get(".type") == "device" and sec.get("name"):
+            devs[sec["name"]] = _as_list(sec.get("ports")) + _as_list(sec.get("ifname"))
+    out = {}
+    for name, sec in secs.items():
+        if sec.get(".type") != "interface":
+            continue
+        cands = _as_list(sec.get("device")) + _as_list(sec.get("ifname"))
+        for c in list(cands):
+            cands += devs.get(c, [])
+        for c in cands:
+            m = VLAN_RE.search(str(c))
+            if m and not str(c).startswith(("phy", "wlan")):
+                out[name] = int(m.group(1))
+                break
+    return out
+
+
+def parse_interfaces(dump, devstatus: dict | None = None, ucivlans: dict | None = None) -> list[dict]:
     """`ubus call network.interface dump` -> seznam rozhrani (lan, wan, vlany...)."""
     out = []
     for i in (dump or {}).get("interface") or []:
@@ -347,7 +371,7 @@ def parse_interfaces(dump, devstatus: dict | None = None) -> list[dict]:
             "dns": ", ".join(i.get("dns-server") or []),
             "uptime": i.get("uptime"),
             "wan": name.startswith("wan") or bool(gw),
-            "vlan": vlan_of(i.get("l3_device") or i.get("device", ""), devstatus),
+            "vlan": vlan_of(i.get("l3_device") or i.get("device", ""), devstatus) or (ucivlans or {}).get(name),
         })
     return sorted(out, key=lambda x: (not x["wan"], x["name"]))
 
@@ -377,13 +401,14 @@ async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 1
     try:
         async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=timeout) as conn:
-            _, dump, devstatus, leases = await asyncio.gather(
+            _, dump, devstatus, ucinet, leases = await asyncio.gather(
                 _read_system(conn, st, timeout),
                 _ubus(conn, "network.interface", "dump", timeout),
                 _ubus(conn, "network.device", "status", timeout),
+                _run(conn, "uci -q show network", timeout),
                 _read_leases(conn, timeout),
             )
-            st.interfaces = parse_interfaces(dump, devstatus)
+            st.interfaces = parse_interfaces(dump, devstatus, uci_vlans(ucinet))
             st.online = True
     except (OSError, asyncssh.Error, asyncio.TimeoutError) as e:
         st.error = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__

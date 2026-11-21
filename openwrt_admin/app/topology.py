@@ -12,15 +12,41 @@ from .collector import APState
 
 PALETTE = ["#03a9f4", "#8e44ad", "#e67e22", "#16a085", "#c0392b", "#2c7be5", "#b7950b", "#7f8c8d"]
 
-COL_X = {"internet": 20, "router": 225, "ap": 480, "ssid": 830}
-NODE_W = {"internet": 170, "router": 190, "ap": 280, "ssid": 250, "wired": 280}
+COL_X = {"internet": 20, "router": 225, "ap": 530, "ssid": 880}
+NODE_W = {"internet": 170, "router": 240, "ap": 280, "ssid": 250, "wired": 280}
 NODE_H = 52
 ROW = 66
 TOP = 20
 
 
+def _chips(node: dict, chips: list[dict]) -> list[dict]:
+    """Stitky VLAN vpravo dole v uzlu; kdyz se nevejdou vedle IP, zuzi se na samotne cislo."""
+    if not chips:
+        return []
+    room = node["w"] - 120  # vlevo je IP adresa
+    w, gap = 50, 4
+    if len(chips) * (w + gap) > room:
+        w = max(24, min(34, room // len(chips) - gap))
+        chips = [{**c, "label": c["label"].replace("VLAN ", "")} for c in chips]
+    x0 = node["x"] + node["w"] - 10 - len(chips) * (w + gap) + gap
+    return [{**c, "x": x0 + k * (w + gap), "y": node["y"] + 28, "w": w} for k, c in enumerate(chips)]
+
+
 def _net_key(vlan: int | None) -> str:
     return "lan" if vlan is None else f"vlan{vlan}"
+
+
+def _eff_vlans(dev: APState) -> dict[str, int | None]:
+    """Rozhrani -> VLAN pro mapu. Rozhrani s IP zarizeni nebo pojmenovane 'lan' = management LAN (netagovana),
+    i kdyz je interne eth0.1 / br-lan.1 (swconfig/DSA, na kabelu bez tagu)."""
+    out = {}
+    host = (dev.host or "").split(":")[0]
+    for i in dev.interfaces:
+        if i.get("wan"):
+            continue
+        mgmt = i["name"] == "lan" or any(a.split("/")[0] == host for a in (i.get("ipv4") or "").split(", ") if a)
+        out[i["name"]] = None if mgmt else i.get("vlan")
+    return out
 
 
 def build(router: APState | None, aps: list[APState], wired_count: int, t) -> dict:
@@ -36,18 +62,25 @@ def build(router: APState | None, aps: list[APState], wired_count: int, t) -> di
         return nets[k]
 
     net(None, "lan")
-    if router:
-        for i in router.interfaces:
-            if not i.get("wan"):
-                net(i.get("vlan"), i["name"])
+    router_vl = _eff_vlans(router) if router else {}
+    for name, v in router_vl.items():
+        net(v, name)
+    by_name = {n.lower(): v for n, v in router_vl.items() if v is not None}
     ap_ifvlan: dict[str, dict[str, int | None]] = {}
     for ap in aps:
-        m = {}
-        for i in ap.interfaces:
-            if not i.get("wan"):
-                m[i["name"]] = i.get("vlan")
-                net(i.get("vlan"), i["name"])
+        m = _eff_vlans(ap)
+        for name, v in list(m.items()):
+            if v is None and name != "lan" and name.lower() in by_name and not any(
+                    a for a in (next((i for i in ap.interfaces if i["name"] == name), {}).get("ipv4") or "").split(", ")
+                    if a.split("/")[0] == ap.host):
+                m[name] = by_name[name.lower()]  # VLAN se nepodarilo zjistit -> podle stejneho jmena site na routeru
+            net(m[name], name)
         ap_ifvlan[ap.name] = m
+    for ap in aps:  # i AP bez dat o rozhranich: sit z wireless podle jmena na routeru
+        for s_ in ap.ssids:
+            first = (s_.get("network") or "").split(",")[0].strip()
+            if first and first not in ap_ifvlan[ap.name] and first.lower() in by_name:
+                ap_ifvlan[ap.name][first] = by_name[first.lower()]
 
     order = sorted(nets.values(), key=lambda n: (n["vlan"] is not None, n["vlan"] or 0))
     for idx, n in enumerate(order):
@@ -59,11 +92,6 @@ def build(router: APState | None, aps: list[APState], wired_count: int, t) -> di
         # SSID muze byt ve vice sitich ("lan, iot") -> prvni
         first = (network or "").split(",")[0].strip()
         vlan = ap_ifvlan.get(ap.name, {}).get(first)
-        if first and first not in ap_ifvlan.get(ap.name, {}) and not ap.interfaces:
-            # AP bez dat o rozhranich: zkus podle jmena site na routeru
-            for n in nets.values():
-                if first in n["names"]:
-                    return n
         return nets[_net_key(vlan)] if _net_key(vlan) in nets else net(vlan, first)
 
     # ---- rozlozeni: kazdy AP zabira tolik radku, kolik ma SSID (min. 1)
@@ -123,9 +151,11 @@ def build(router: APState | None, aps: list[APState], wired_count: int, t) -> di
     for ap, apn in ap_nodes:
         vl = sorted({v for v in ap_ifvlan.get(ap.name, {}).values() if v is not None})
         chips = [{"label": nets[_net_key(v)]["label"], "color": nets[_net_key(v)]["color"]} for v in vl]
-        apn["chips"] = [{**c, "x": apn["x"] + apn["w"] - 10 - (len(chips) - k) * 54, "y": apn["y"] + 28, "w": 50}
-                        for k, c in enumerate(chips)]
+        apn["chips"] = _chips(apn, chips)
         edges.append({"from": rn, "to": apn, "kind": "trunk" if vl else "lan", "color": lan_color, "up": ap.online})
+    if router:
+        rv = sorted({v for v in router_vl.values() if v is not None})
+        rn["chips"] = _chips(rn, [{"label": nets[_net_key(v)]["label"], "color": nets[_net_key(v)]["color"]} for v in rv])
     if wired:
         edges.append({"from": rn, "to": wired, "kind": "lan", "color": lan_color, "chips": [], "up": True})
 

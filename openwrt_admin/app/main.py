@@ -60,15 +60,36 @@ def load_key() -> asyncssh.SSHKey:
 
 # ---------------------------------------------------------------- stav a poller
 
+def split_devices(opts: dict) -> tuple[list[dict], dict | None]:
+    """Jen definovana zarizeni ze seznamu `aps`: type ap (vychozi) / router.
+    Zpetna kompatibilita: zastaraly `dhcp_router` bez zarizeni typu router -> zarizeni se stejnou IP
+    se stane routerem; kdyz takove neni, vznikne router z `dhcp_router` + `router_name`."""
+    items = [dict(i) for i in opts.get("aps") or []]
+    router = next((i for i in items if i.get("type") == "router"), None)
+    if router is None and opts.get("dhcp_router"):
+        host, port = parse_host_port(str(opts["dhcp_router"]))
+        router = next((i for i in items if i.get("host") == host), None)
+        if router is None:
+            router = {"name": str(opts.get("router_name") or "Router"), "host": host, "port": port}
+        else:
+            log.info("dhcp_router %s = zarizeni %s -> pouzije se jako router (doporuceno: type: router)", host, router["name"])
+    extra = [i for i in items if i.get("type") == "router" and i is not router]
+    for i in extra:
+        log.warning("Vice zarizeni s type: router, %s se bere jako AP", i["name"])
+    aps = [i for i in items if i is not router]
+    return aps, router
+
+
 class Store:
     def __init__(self):
         self.opts = load_options()
         self.key = load_key()
         self.pubkey = self.key.export_public_key().decode().strip()
-        self.aps: list[APState] = [APState(name=a["name"], host=a["host"]) for a in self.opts["aps"]]
+        self.ap_items, self.router_item = split_devices(self.opts)
+        self.aps: list[APState] = [APState(name=a["name"], host=a["host"]) for a in self.ap_items]
         self.leases: dict[str, dict] = {}
-        self.router: APState | None = (APState(name=self.router_name, host=self.opts["dhcp_router"], kind="router")
-                                       if self.opts.get("dhcp_router") else None)
+        self.router: APState | None = (APState(name=self.router_item["name"], host=self.router_item["host"], kind="router")
+                                       if self.router_item else None)
         self.last_poll = 0.0
         self.lock = asyncio.Lock()
         self.ap_locks: dict[str, asyncio.Lock] = {}
@@ -76,13 +97,14 @@ class Store:
 
     @property
     def router_name(self) -> str:
-        return str(self.opts.get("router_name") or "Router")
+        return self.router_item["name"] if self.router_item else ""
+
+    def _cfg(self, item: dict) -> APConfig:
+        return APConfig(name=item["name"], host=item["host"], port=int(item.get("port") or 22),
+                        user=self.opts.get("ssh_user", "root"))
 
     def router_cfg(self) -> APConfig | None:
-        if not self.opts.get("dhcp_router"):
-            return None
-        host, port = parse_host_port(str(self.opts["dhcp_router"]))
-        return APConfig(name=self.router_name, host=host, port=port, user=self.opts.get("ssh_user", "root"))
+        return self._cfg(self.router_item) if self.router_item else None
 
     def ap(self, name: str) -> APState:
         """AP nebo router podle jmena (vse, co ma stranku a akce)."""
@@ -92,14 +114,10 @@ class Store:
         raise HTTPException(404, "device not found")
 
     def cfg(self, name: str) -> APConfig:
-        rc = self.router_cfg()
-        if rc and rc.name == name:
-            return rc
-        a = next((a for a in self.opts["aps"] if a["name"] == name), None)
-        if not a:
+        item = next((i for i in [*self.ap_items, self.router_item] if i and i["name"] == name), None)
+        if not item:
             raise HTTPException(404, "device not found")
-        return APConfig(name=a["name"], host=a["host"], port=int(a.get("port") or 22),
-                        user=self.opts.get("ssh_user", "root"))
+        return self._cfg(item)
 
     @property
     def router_ok(self) -> bool:
@@ -131,12 +149,11 @@ class Store:
             if self.opts.get("demo"):
                 self.aps, self.leases = demo_states()
                 if self.router:
-                    self.router = demo_router(self.router_name, self.router.host)
+                    self.router = demo_router(self.router.name, self.router.host)
                 self.last_poll = time.time()
                 return
             user = self.opts.get("ssh_user", "root")
-            cfgs = [APConfig(name=a["name"], host=a["host"], port=int(a.get("port") or 22), user=user)
-                    for a in self.opts["aps"]]
+            cfgs = [self._cfg(a) for a in self.ap_items]
             tasks = [collect_ap(c, self.key) for c in cfgs]
             rc = self.router_cfg()
             if rc:
@@ -197,8 +214,9 @@ async def lifespan(app: FastAPI):
     global store
     store = Store()
     log.info("AP: %s, router: %s, demo: %s",
-             ", ".join(f"{a['name']}={a['host']}" for a in store.opts["aps"]) or "-",
-             store.opts.get("dhcp_router") or "-", store.opts.get("demo"))
+             ", ".join(f"{a['name']}={a['host']}" for a in store.ap_items) or "-",
+             (f"{store.router_item['name']}={store.router_item['host']}" if store.router_item else "-"),
+             store.opts.get("demo"))
     task = asyncio.create_task(poller())
     yield
     task.cancel()

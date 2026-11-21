@@ -100,11 +100,11 @@ svg.netmap { display: block; max-width: 100%; height: auto; font: 13px system-ui
 .edge-trunk { stroke-width: 4 !important; }
 .edge-wifi { stroke-dasharray: 3 5; stroke-linecap: round; stroke-width: 2.5; }
 .edge-down { stroke: var(--bad) !important; stroke-dasharray: 6 6; opacity: .6; }
-.netmap .node rect:first-of-type { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
-.netmap .node-router rect:first-of-type { stroke: var(--accent); stroke-width: 2.5; }
-.netmap .node-internet rect:first-of-type { stroke-dasharray: 4 3; }
+.netmap .node > rect:first-of-type { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
+.netmap .node-router > rect:first-of-type { stroke: var(--accent); stroke-width: 2.5; }
+.netmap .node-internet > rect:first-of-type { stroke-dasharray: 4 3; }
 .netmap .node-off { opacity: .55; }
-.netmap a:hover .node rect:first-of-type { stroke: var(--accent); }
+.netmap a:hover .node > rect:first-of-type { stroke: var(--accent); }
 .netmap .n-title { fill: var(--fg); font-weight: 600; }
 .netmap .n-sub, .netmap .n-extra { fill: var(--muted); font-size: 11.5px; }
 .netmap .st-on { fill: var(--good); } .netmap .st-off { fill: var(--bad); }

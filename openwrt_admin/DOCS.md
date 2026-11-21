@@ -30,20 +30,24 @@ ssh_user: root
 poll_interval: 30            # s, 10–600: how often data is collected from the APs
 refresh_interval: 30         # s, 0 = off: how often open pages reload (each browser can override it)
 language: auto               # auto | en | cs – web UI language (auto = HA user's language)
-dhcp_router: 192.168.1.1     # OpenWrt router (LAN, no Wi-Fi): own device + client names/IPs; empty = off; "host:port" works too
-router_name: Router          # name of the router in the add-on
 demo: false                  # true = made-up data, no SSH
 full_access:                 # HA usernames with full access (reboot, packages, SSIDs)
   - alice
 read_access:                 # HA usernames with read-only access
   - bob
-aps:
+aps:                         # all managed devices – the add-on uses only these
+  - name: Router
+    host: 192.168.1.1
+    type: router             # one router: interfaces, DHCP leases, client names/IPs
   - name: AP-Living
     host: 192.168.1.2
+    type: ap                 # default
   - name: AP-Office
     host: 192.168.1.3
     port: 22                 # optional
 ```
+
+`dhcp_router` and `router_name` from versions up to 0.7.0 still work but are deprecated: if `dhcp_router` is set and no device has `type: router`, the device with the same IP becomes the router (so it is never shown twice); otherwise a router is created from `dhcp_router`. Recommended: remove `dhcp_router` and set `type: router` on the router.
 
 ### SSH key
 
@@ -89,7 +93,7 @@ Login is handled by Home Assistant (Ingress); the add-on has no passwords of its
 
 ### Router
 
-The router (`dhcp_router`) is a device of its own, without radios and SSIDs. It has its own tab, card on the overview and page with:
+The router (the device with `type: router`) is a device of its own, without radios and SSIDs. It has its own tab, card on the overview and page with:
 - system info (model, firmware, uptime, load, RAM, overlay),
 - **interfaces** from `ubus call network.interface dump`: WAN/LAN/VLANs, state, protocol, IPv4/IPv6, gateway, uptime,
 - **DHCP leases**: every device with an IP from the router, Wi-Fi clients with their AP/SSID/band, the rest marked as wired or not on Wi-Fi,
@@ -103,7 +107,7 @@ The **Map** page draws the network as a tree: Internet → router → access poi
 
 - **Line types:** WAN (grey, thick), LAN untagged (thin), LAN + VLANs = trunk (thick; the tagged VLANs are shown as coloured chips in the AP node), Wi-Fi (dotted). Offline devices: red dashed line.
 - **Colours = networks:** the untagged LAN and every VLAN have their own colour, the same on the router, APs and SSIDs. The legend lists the VLAN IDs and the interface names used for them on each device.
-- **VLAN IDs** come from device names (`eth0.30`, `br-lan.10`) and bridge members (`br-host` → `eth0.30`), read with `ubus call network.interface dump` and `ubus call network.device status`. Works with swconfig and DSA.
+- **VLAN IDs** come from device names (`eth0.30`, `br-lan.10`), bridge members (`br-host` → `eth0.30`) and `uci show network` (`ifname`/`device`/`ports`, also older OpenWrt). The interface with the device's own IP (or named `lan`) is always the untagged LAN, even if it is `eth0.1` internally. If a VLAN cannot be detected on an AP, a router interface with the same name (case-insensitive) is used. Works with swconfig and DSA.
 - The map shows **logical** connections: switches and physical ports are not visible from OpenWrt.
 
 ### Overview tiles
@@ -186,20 +190,24 @@ ssh_user: root
 poll_interval: 30            # s, 10–600: jak často se sbírají data z AP
 refresh_interval: 30         # s, 0 = vypnuto: jak často se otevřené stránky obnovují (prohlížeč si může změnit)
 language: auto               # auto | en | cs – jazyk webového rozhraní (auto = podle uživatele HA)
-dhcp_router: 192.168.1.1     # OpenWrt router (LAN, bez Wi-Fi): samostatné zařízení + jména/IP klientů; prázdné = vypnuto; lze i "host:port"
-router_name: Router          # jak se router v add-onu jmenuje
 demo: false                  # true = vymyšlená data, bez SSH
 full_access:                 # uživatelská jména HA s plným přístupem (restart, balíčky, SSID)
   - alice
 read_access:                 # uživatelská jména HA jen pro čtení
   - bob
-aps:
+aps:                         # všechna spravovaná zařízení – add-on používá jen tato
+  - name: Router
+    host: 192.168.1.1
+    type: router             # jeden router: rozhraní, DHCP klienti, jména/IP klientů
   - name: AP-Living
     host: 192.168.1.2
+    type: ap                 # výchozí
   - name: AP-Office
     host: 192.168.1.3
     port: 22                 # volitelné
 ```
+
+`dhcp_router` a `router_name` z verzí do 0.7.0 fungují dál, ale jsou zastaralé: když je `dhcp_router` vyplněný a žádné zařízení nemá `type: router`, router se stane zařízení se stejnou IP (nikdy se tedy nezobrazí dvakrát); jinak se router vytvoří z `dhcp_router`. Doporučeno: `dhcp_router` smazat a routeru dát `type: router`.
 
 ### SSH klíč
 
@@ -245,7 +253,7 @@ Přihlášení řeší Home Assistant (Ingress), add-on vlastní hesla nemá. Po
 
 ### Router
 
-Router (`dhcp_router`) je samostatné zařízení, bez rádií a SSID. Má vlastní záložku, kartu na přehledu a stránku s:
+Router (zařízení s `type: router`) je samostatné zařízení, bez rádií a SSID. Má vlastní záložku, kartu na přehledu a stránku s:
 - informacemi o systému (model, firmware, uptime, load, RAM, overlay),
 - **rozhraními** z `ubus call network.interface dump`: WAN/LAN/VLANy, stav, protokol, IPv4/IPv6, brána, jak dlouho běží,
 - **DHCP klienty**: všechna zařízení, která mají IP od routeru; Wi-Fi klienti s AP/SSID/pásmem, ostatní jako kabel nebo nepřipojeno k Wi-Fi,
@@ -259,7 +267,7 @@ Stránka **Mapa** kreslí síť jako strom: Internet → router → access point
 
 - **Druhy spojnic:** WAN (šedá, silná), LAN netagovaná (tenká), LAN + VLANy = trunk (silná; tagované VLANy jsou barevné štítky v uzlu AP), Wi-Fi (tečkovaná). Offline zařízení: červená přerušovaná.
 - **Barvy = sítě:** netagovaná LAN a každá VLAN mají vlastní barvu, stejnou u routeru, AP i SSID. Legenda ukazuje VLAN ID a názvy rozhraní, pod kterými je síť na zařízeních.
-- **VLAN ID** se bere z názvů zařízení (`eth0.30`, `br-lan.10`) a ze členů bridge (`br-host` → `eth0.30`), přes `ubus call network.interface dump` a `ubus call network.device status`. Funguje se swconfig i DSA.
+- **VLAN ID** se bere z názvů zařízení (`eth0.30`, `br-lan.10`), ze členů bridge (`br-host` → `eth0.30`) a z `uci show network` (`ifname`/`device`/`ports`, i starší OpenWrt). Rozhraní s vlastní IP zařízení (nebo pojmenované `lan`) je vždy netagovaná LAN, i když je interně `eth0.1`. Když se VLAN na AP zjistit nepodaří, použije se rozhraní routeru se stejným názvem (bez ohledu na velikost písmen). Funguje se swconfig i DSA.
 - Mapa ukazuje **logické** propojení: switche a fyzické porty z OpenWrt vidět nejsou.
 
 ### Dlaždice na přehledu

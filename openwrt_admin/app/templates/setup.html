@@ -15,12 +15,14 @@ chmod 600 /etc/dropbear/authorized_keys</pre>
   <p>{{ t("setup.devices_text") }}</p>
   <table class="list">
     <thead><tr><th>{{ t("col.name") }}</th><th>{{ t("col.address") }}</th><th>{{ t("col.state") }}</th></tr></thead>
+    {% if store.router %}
+    <tr><td>{{ store.router.name }} <span class="muted small">({{ t("router.kind") }})</span></td><td class="mono">{{ store.router.host }}</td>
+        <td>{% if store.router_ok %}<span class="sig good">OK</span> · {{ t("setup.leases", n=(store.leases | length)) }}{% else %}<span class="err">{{ store.router_error or t("ap.not_loaded") }}</span>{% endif %}</td></tr>
+    {% endif %}
     {% for a in store.aps %}
-    <tr><td>{{ a.name }}</td><td class="mono">{{ a.host }}</td>
+    <tr><td>{{ a.name }} <span class="muted small">(AP)</span></td><td class="mono">{{ a.host }}</td>
         <td>{% if a.online %}<span class="sig good">OK</span>{% else %}<span class="err">{{ a.error or t("ap.not_loaded") }}</span>{% endif %}</td></tr>
     {% endfor %}
-    <tr><td>{{ store.router_name }} <span class="muted small">({{ t("router.kind") }})</span></td><td class="mono">{{ store.opts.dhcp_router or "–" }}</td>
-        <td>{% if not store.opts.dhcp_router %}–{% elif store.router_ok %}<span class="sig good">OK</span> · {{ t("setup.leases", n=(store.leases | length)) }}{% else %}<span class="err">{{ store.router_error or t("ap.not_loaded") }}</span>{% endif %}</td></tr>
   </table>
 </div>
 <div class="panel">

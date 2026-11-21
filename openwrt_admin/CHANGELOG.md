@@ -2,6 +2,13 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.7.1
+- Only defined devices: each device in the list has `type: ap` (default) or `type: router`. `dhcp_router`/`router_name` are deprecated; if `dhcp_router` points to a device from the list, that device becomes the router (no more duplicate router on the map).
+- Map: VLAN detection also from `uci show network` (older OpenWrt, `ifname='eth0.30'`), management interface (device IP / `lan`) always untagged LAN, fallback by router interface name. Router shows its VLAN chips; chips no longer overlap the IP.
+---
+- Jen definovaná zařízení: každé zařízení v seznamu má `type: ap` (výchozí) nebo `type: router`. `dhcp_router`/`router_name` jsou zastaralé; když `dhcp_router` míří na zařízení ze seznamu, stane se routerem to zařízení (na mapě už není router dvakrát).
+- Mapa: VLAN se zjišťuje i z `uci show network` (starší OpenWrt, `ifname='eth0.30'`), management rozhraní (IP zařízení / `lan`) je vždy netagovaná LAN, záložně podle názvu rozhraní na routeru. Router má štítky svých VLAN; štítky už nepřekrývají IP.
+
 ## 0.7.0
 - New **Map** page: network tree Internet → router → APs → SSIDs (+ wired clients). Lines distinguish WAN, untagged LAN, trunk with VLANs (VLAN chips in AP nodes) and Wi-Fi; colours per network (LAN / VLAN ID), legend with interface names. Offline devices shown dashed red. Nodes link to their pages.
 - APs now also read `network.interface dump` and `network.device status`; VLAN IDs detected from device names and bridge members (swconfig and DSA).
