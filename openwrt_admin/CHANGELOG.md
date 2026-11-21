@@ -2,6 +2,11 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.7.2
+- Fix: on APs, VLAN interfaces with their own gateway (e.g. `proto dhcp`, or static with `gateway`) were treated as WAN and missing from the map. On APs only interfaces named `wan*` are WAN now.
+---
+- Oprava: na AP se VLAN rozhraní s vlastní bránou (např. `proto dhcp` nebo statická s `gateway`) brala jako WAN a na mapě chyběla. Na AP je teď WAN jen rozhraní pojmenované `wan*`.
+
 ## 0.7.1
 - Only defined devices: each device in the list has `type: ap` (default) or `type: router`. `dhcp_router`/`router_name` are deprecated; if `dhcp_router` points to a device from the list, that device becomes the router (no more duplicate router on the map).
 - Map: VLAN detection also from `uci show network` (older OpenWrt, `ifname='eth0.30'`), management interface (device IP / `lan`) always untagged LAN, fallback by router interface name. Router shows its VLAN chips; chips no longer overlap the IP.

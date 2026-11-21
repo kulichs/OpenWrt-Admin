@@ -223,7 +223,7 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
                 _read_system(conn, st, timeout),
             )
             st.wifi_ifaces = parse_wifi_ifaces(uci_wl)
-            st.interfaces = parse_interfaces(ifdump, devstatus, uci_vlans(ucinet))
+            st.interfaces = parse_interfaces(ifdump, devstatus, uci_vlans(ucinet), gw_is_wan=False)
 
             # mapovani ifname -> SSID / sit / radio z netifd
             iface_meta: dict[str, dict] = {}
@@ -349,8 +349,11 @@ def uci_vlans(text: str) -> dict[str, int]:
     return out
 
 
-def parse_interfaces(dump, devstatus: dict | None = None, ucivlans: dict | None = None) -> list[dict]:
-    """`ubus call network.interface dump` -> seznam rozhrani (lan, wan, vlany...)."""
+def parse_interfaces(dump, devstatus: dict | None = None, ucivlans: dict | None = None,
+                     gw_is_wan: bool = True) -> list[dict]:
+    """`ubus call network.interface dump` -> seznam rozhrani (lan, wan, vlany...).
+    gw_is_wan: rozhrani s vychozi branou = WAN (router). Na AP False: tam maji brany i VLAN rozhrani
+    (dhcp, static s gateway), WAN je jen rozhrani pojmenovane wan*."""
     out = []
     for i in (dump or {}).get("interface") or []:
         name = i.get("interface", "")
@@ -370,7 +373,7 @@ def parse_interfaces(dump, devstatus: dict | None = None, ucivlans: dict | None 
             "gateway": gw,
             "dns": ", ".join(i.get("dns-server") or []),
             "uptime": i.get("uptime"),
-            "wan": name.startswith("wan") or bool(gw),
+            "wan": name.lower().startswith("wan") or (gw_is_wan and bool(gw)),
             "vlan": vlan_of(i.get("l3_device") or i.get("device", ""), devstatus) or (ucivlans or {}).get(name),
         })
     return sorted(out, key=lambda x: (not x["wan"], x["name"]))

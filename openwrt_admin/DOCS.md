@@ -108,6 +108,8 @@ The **Map** page draws the network as a tree: Internet → router → access poi
 - **Line types:** WAN (grey, thick), LAN untagged (thin), LAN + VLANs = trunk (thick; the tagged VLANs are shown as coloured chips in the AP node), Wi-Fi (dotted). Offline devices: red dashed line.
 - **Colours = networks:** the untagged LAN and every VLAN have their own colour, the same on the router, APs and SSIDs. The legend lists the VLAN IDs and the interface names used for them on each device.
 - **VLAN IDs** come from device names (`eth0.30`, `br-lan.10`), bridge members (`br-host` → `eth0.30`) and `uci show network` (`ifname`/`device`/`ports`, also older OpenWrt). The interface with the device's own IP (or named `lan`) is always the untagged LAN, even if it is `eth0.1` internally. If a VLAN cannot be detected on an AP, a router interface with the same name (case-insensitive) is used. Works with swconfig and DSA.
+- On APs only an interface named `wan*` counts as WAN; VLAN interfaces with their own gateway (DHCP or static) are shown as VLANs. On the router, the interface with the default route is the WAN.
+- VLANs that exist only in the switch (`switch_vlan` / `bridge-vlan`) without an interface are not shown.
 - The map shows **logical** connections: switches and physical ports are not visible from OpenWrt.
 
 ### Overview tiles
@@ -268,6 +270,8 @@ Stránka **Mapa** kreslí síť jako strom: Internet → router → access point
 - **Druhy spojnic:** WAN (šedá, silná), LAN netagovaná (tenká), LAN + VLANy = trunk (silná; tagované VLANy jsou barevné štítky v uzlu AP), Wi-Fi (tečkovaná). Offline zařízení: červená přerušovaná.
 - **Barvy = sítě:** netagovaná LAN a každá VLAN mají vlastní barvu, stejnou u routeru, AP i SSID. Legenda ukazuje VLAN ID a názvy rozhraní, pod kterými je síť na zařízeních.
 - **VLAN ID** se bere z názvů zařízení (`eth0.30`, `br-lan.10`), ze členů bridge (`br-host` → `eth0.30`) a z `uci show network` (`ifname`/`device`/`ports`, i starší OpenWrt). Rozhraní s vlastní IP zařízení (nebo pojmenované `lan`) je vždy netagovaná LAN, i když je interně `eth0.1`. Když se VLAN na AP zjistit nepodaří, použije se rozhraní routeru se stejným názvem (bez ohledu na velikost písmen). Funguje se swconfig i DSA.
+- Na AP se za WAN považuje jen rozhraní pojmenované `wan*`; VLAN rozhraní s vlastní bránou (DHCP nebo statická) se zobrazí jako VLAN. Na routeru je WAN rozhraní s výchozí trasou.
+- VLANy, které jsou jen ve switchi (`switch_vlan` / `bridge-vlan`) bez rozhraní, se nezobrazí.
 - Mapa ukazuje **logické** propojení: switche a fyzické porty z OpenWrt vidět nejsou.
 
 ### Dlaždice na přehledu

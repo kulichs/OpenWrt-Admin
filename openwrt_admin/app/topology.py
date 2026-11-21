@@ -24,7 +24,7 @@ def _chips(node: dict, chips: list[dict]) -> list[dict]:
     if not chips:
         return []
     room = node["w"] - 120  # vlevo je IP adresa
-    w, gap = 50, 4
+    w, gap = 48, 4
     if len(chips) * (w + gap) > room:
         w = max(24, min(34, room // len(chips) - gap))
         chips = [{**c, "label": c["label"].replace("VLAN ", "")} for c in chips]
