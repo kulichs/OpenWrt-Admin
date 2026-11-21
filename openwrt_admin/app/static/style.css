@@ -146,6 +146,12 @@ details.offline-list summary { cursor: pointer; color: var(--muted); }
 .stat.stat-warn .num { color: var(--ok); }
 .tag.tag-new { color: var(--ok); border-color: var(--ok); font-weight: 600; }
 td.kick form { display: flex; gap: .3rem; align-items: center; margin: 0; }
-td.kick select { font: inherit; font-size: .8rem; padding: .15rem .2rem; width: 6.5rem; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; background: transparent; }
+td.kick select { font: inherit; font-size: .8rem; padding: .15rem .2rem; width: 6.5rem; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; background: var(--card); }
+/* rozbalene seznamy (option) v tmavem rezimu: prohlizec je jinak kresli bile */
+:root { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
+select option { background: var(--card); color: var(--fg); }
+.bans { margin-bottom: 1rem; }
 .tag { white-space: nowrap; }
 button.small { padding: .15rem .55rem; font-size: .8rem; }

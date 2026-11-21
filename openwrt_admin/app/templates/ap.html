@@ -59,6 +59,7 @@
 </section>
 {% include "_maint.html" %}
 <h2>{{ t("ap.clients", n=(clients | length)) }}</h2>
+{% set bans = store.bans(ap.name) %}{% include "_bans.html" %}
 {% set show_ap = false %}
 {% include "_clients_table.html" %}
 {% if diag %}

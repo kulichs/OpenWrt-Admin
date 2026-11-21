@@ -115,6 +115,7 @@ class Store:
         self.ha_lang = ""
         self.notify_status = ""         # posledni chyba odeslani upozorneni
         self.backup_busy: set[str] = set()
+        self.ban_meta: dict[str, dict] = {}  # mac -> {until, ssid} – blokace zadane z add-onu
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -194,6 +195,12 @@ class Store:
                                                 "02:00:00:00:30:01": {"name": "mailserver", "ip": "192.168.100.7"}}
                 self.info = self.build_info()
                 self.wired_state = wiredmod.locate(self.aps, self.router, self.info, self.seen, known=self._known())
+                # ukazka: zablokovany klient na HomeWiFi (oba AP)
+                for ap in self.aps:
+                    ap.bans_ok = ap.online
+                    ap.bans = [{"mac": "02:00:00:00:40:01", "ifname": x["ifname"], "ssid": x["ssid"]}
+                               for x in ap.ssids if x["ssid"] == "HomeWiFi"] if ap.online else []
+                self.ban_meta.setdefault("02:00:00:00:40:01", {"until": time.time() + 2400, "ssid": "HomeWiFi"})
                 # ukazka: nove zarizeni (stitek „nove“) a aktualizace
                 self.known.data = {"02:00:00:00:30:01": {"first": time.time() - 2 * 3600, "last": time.time()}}
                 self.versions = {"stable_version": "25.12.3", "oldstable_version": "24.10.6"}
@@ -343,6 +350,27 @@ class Store:
                 last = next(iter(self.backups(d)), None)
                 if d.online and (not last or now - last["ts"] > days * 86400):
                     await self.backup_one(d)
+
+    def bans(self, ap_name: str | None = None) -> list[dict]:
+        """Zablokovani klienti: z hostapd list_bans; u AP bez list_bans (starsi hostapd) podle toho, co zadal add-on."""
+        now = time.time()
+        self.ban_meta = {m: v for m, v in self.ban_meta.items() if v["until"] > now}
+        rows: dict[tuple, dict] = {}
+        for a in self.aps:
+            if not a.online:
+                continue
+            items = list(a.bans)
+            if not a.bans_ok:  # nevime – ukazat blokace zadane z add-onu na AP s tim SSID
+                items += [{"mac": m, "ifname": x["ifname"], "ssid": v["ssid"]} for m, v in self.ban_meta.items()
+                          for x in a.ssids if x["ssid"] == v["ssid"]]
+            for b in items:
+                r = rows.setdefault((b["mac"], b["ssid"]), {"mac": b["mac"], "ssid": b["ssid"], "aps": [],
+                                                            "until": (self.ban_meta.get(b["mac"]) or {}).get("until", 0),
+                                                            "hostname": (self.info.get(b["mac"]) or {}).get("hostname", "")})
+                if a.name not in r["aps"]:
+                    r["aps"].append(a.name)
+        out = sorted(rows.values(), key=lambda r: (r["hostname"] or "~" + r["mac"]).lower())
+        return [r for r in out if ap_name is None or ap_name in r["aps"]]
 
     WAKE_EVERY = 240  # s; switch zapomina MAC po ~5 min, castejsi ping neni potreba
     _last_wake = 0.0
@@ -727,6 +755,7 @@ def fmt_band(ctx, b) -> str:
 
 templates.env.filters.update(band=fmt_band, bytes=fmt_bytes, duration=fmt_duration, rate=fmt_rate, interval=fmt_interval,
                              sigclass=signal_class, ago=ago)
+templates.env.filters["left"] = lambda ts: max(0, int(ts - time.time()))  # zbyva sekund
 templates.env.tests["recent"] = lambda ts, hours=24: bool(ts) and time.time() - ts < hours * 3600
 
 
@@ -981,8 +1010,39 @@ async def client_kick(request: Request, ap: str = Form(...), ifname: str = Form(
         asyncio.create_task(repoll())
     out = "\n".join(r.output for r in res)
     if ok and ban:
+        store.ban_meta[mac] = {"until": time.time() + ban, "ssid": ssid}
+        for a in store.aps:  # hned ukazat v seznamu blokaci (dalsi nacteni ho potvrdi)
+            for i in targets.get(a.name, []):
+                if not any(b["mac"] == mac and b["ifname"] == i for b in a.bans):
+                    a.bans.append({"mac": mac, "ifname": i, "ssid": ssid})
         out += "\n\n" + t("kick.ban_note")
     return result(request, title, actions.Result(ok, out))
+
+
+@app.post("/clients/unban", response_class=HTMLResponse)
+async def client_unban(request: Request, mac: str = Form(...), ssid: str = Form(...)):
+    """Zrusit blokaci: del_client s ban_time 0 na vsech AP, ktere vysilaji dane SSID."""
+    require_htmx(request)
+    t = request.state.t
+    mac = mac.strip().lower()
+    title = t("unban.title", who=(store.info.get(mac) or {}).get("hostname") or mac)
+    if request.state.user["role"] != "full":
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
+    if not actions.MAC_RE.match(mac):
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    targets = {a.name: [x["ifname"] for x in a.ssids if x["ssid"] == ssid] for a in store.aps if a.online}
+    targets = {k: v for k, v in targets.items() if v}
+    if not targets:
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    log.info("%s: zrusit blokaci %s na %s", who(request), mac, targets)
+    store.ban_meta.pop(mac, None)
+    for a in store.aps:
+        a.bans = [b for b in a.bans if not (b["mac"] == mac and b["ssid"] == ssid)]
+    if store.opts.get("demo"):
+        await asyncio.sleep(1)
+        return result(request, title, actions.Result(True, "\n".join(f"{a} {i}: OK (demo)" for a, l in targets.items() for i in l)))
+    res = await asyncio.gather(*(actions.kick(store.cfg(a), store.key, l, mac, 0, t) for a, l in targets.items()))
+    return result(request, title, actions.Result(all(r.ok for r in res), "\n".join(r.output for r in res)))
 
 
 # ---------------------------------------------------------------- SSID

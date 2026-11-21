@@ -315,5 +315,16 @@
     "{n} známá zařízení",
     "{n} známých zařízení"
   ],
-  "setup.maint_hint": "Nastavuje se v konfiguraci add-onu: notify_new_devices, notify_service, notify_random_mac, update_check_hours, backup_interval_days, backup_keep. Při prvním spuštění se všechna zařízení v síti berou jako známá."
+  "setup.maint_hint": "Nastavuje se v konfiguraci add-onu: notify_new_devices, notify_service, notify_random_mac, update_check_hours, backup_interval_days, backup_keep. Při prvním spuštění se všechna zařízení v síti berou jako známá.",
+  "unban.title": "Zrušit blokaci {who}",
+  "unban.list": [
+    "Zablokovaný klient",
+    "Zablokovaní klienti ({n})",
+    "Zablokovaných klientů: {n}"
+  ],
+  "unban.until": "Zbývá",
+  "unban.until_unknown": "neznámo (zadáno mimo add-on)",
+  "unban.left": "{d}",
+  "unban.button": "Zrušit blokaci",
+  "unban.confirm": "Zrušit blokaci {who} na Wi-Fi {ssid}?"
 }

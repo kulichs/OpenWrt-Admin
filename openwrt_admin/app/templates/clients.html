@@ -11,6 +11,7 @@
   <button type="submit">{{ t("clients.filter") }}</button>
   <span class="muted">{{ t("clients.count", n=(clients | length)) }}</span>
 </form>
+{% set bans = store.bans() %}{% include "_bans.html" %}
 {% set show_ap = true %}
 {% include "_clients_table.html" %}
 {% endblock %}

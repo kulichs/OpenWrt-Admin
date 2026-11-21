@@ -1,0 +1,17 @@
+{% if bans %}
+<div class="panel bans">
+  <h2>{{ t("unban.list", n=(bans | length)) }}</h2>
+  <div id="unban-out" hx-preserve="true"></div>
+  <table class="list">
+    <thead><tr><th>{{ t("col.device") }}</th><th>MAC</th><th>SSID</th><th>AP</th><th>{{ t("unban.until") }}</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    {% for b in bans %}
+    <tr><td>{{ b.hostname or "–" }}</td><td class="mono">{{ b.mac }}</td><td>{{ b.ssid }}</td><td>{{ b.aps | join(", ") }}</td>
+        <td>{% if b.until %}{{ t("unban.left", d=(b.until | left | duration)) }}{% else %}<span class="muted">{{ t("unban.until_unknown") }}</span>{% endif %}</td>
+        {% if can_edit %}<td><button class="secondary small" hx-post="{{ base }}/clients/unban" hx-target="#unban-out"
+            hx-vals='{"mac": "{{ b.mac }}", "ssid": {{ b.ssid | tojson }}}'
+            hx-confirm="{{ t('unban.confirm', who=(b.hostname or b.mac), ssid=b.ssid) }}">{{ t("unban.button") }}</button></td>{% endif %}</tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">{{ t("kick.ban_note") }}</p>
+</div>
+{% endif %}

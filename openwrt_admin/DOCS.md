@@ -118,6 +118,8 @@ In the client tables (AP page, **Clients**) users with full access have a **Disc
 
 The block is kept in `hostapd` memory: a Wi-Fi restart (`wifi reload`, SSID change) or an AP reboot clears it. A permanent block is a MAC filter (`macfilter`/`maclist`) in the SSID configuration – not done by the add-on.
 
+Blocked clients are listed above the client table (Clients page, AP page) with the APs and the remaining time; **Unblock** lifts the block on all APs with that SSID (`del_client` with `ban_time: 0`). The list comes from `ubus call hostapd.<if> list_bans`; on older hostapd without it only blocks set from the add-on are shown.
+
 ### Users and permissions
 
 Login is handled by Home Assistant (Ingress); the add-on has no passwords of its own. It assigns a role based on the HA user who opened the panel:
@@ -354,6 +356,8 @@ V tabulkách klientů (stránka AP, **Klienti**) mají uživatelé s plným př�
 - **+ blokovat 10 min / 1 h / 24 h** – odpojí a po tu dobu nepustí zpět na **všech AP, která vysílají stejné SSID** (jinak by se připojil k jinému AP).
 
 Blokaci drží `hostapd` v paměti: restart Wi-Fi (`wifi reload`, změna SSID) nebo restart AP ji zruší. Trvalé blokování je MAC filtr (`macfilter`/`maclist`) v nastavení SSID – to add-on nedělá.
+
+Zablokovaní klienti jsou vypsaní nad tabulkou klientů (stránka Klienti, stránka AP) s AP a zbývajícím časem; **Zrušit blokaci** ji zruší na všech AP s tím SSID (`del_client` s `ban_time: 0`). Seznam je z `ubus call hostapd.<if> list_bans`; u staršího hostapd bez této metody se ukazují jen blokace zadané z add-onu.
 
 ### Uživatelé a oprávnění
 

@@ -58,6 +58,9 @@ class APState:
     switch_vlans: list[str] = field(default_factory=list)      # ["0t 2 3 4 5", "0t 2t", ...]
     # router: staticke DHCP rezervace z `uci show dhcp` (host sekce) -> {mac: {name, ip}}
     static_hosts: dict[str, dict] = field(default_factory=dict)
+    # zablokovani klienti z hostapd (list_bans): [{mac, ifname, ssid}]
+    bans: list[dict[str, Any]] = field(default_factory=list)
+    bans_ok: bool = False  # hostapd umi list_bans
 
     @property
     def client_count(self) -> int:
@@ -135,6 +138,16 @@ def wifi_standard(c: dict, freq) -> str:
         return "802.11a" if int(freq) >= 4900 else "802.11b/g"
     except (TypeError, ValueError):
         return "legacy"
+
+
+MAC_ANY_RE = re.compile(r"\b[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}\b")
+
+
+def parse_bans(data) -> list[str]:
+    """hostapd `list_bans` -> MAC adresy (format se mezi verzemi lisi, bere se kazda MAC v odpovedi)."""
+    if not data:
+        return []
+    return sorted({m.lower() for m in MAC_ANY_RE.findall(json.dumps(data))})
 
 
 def parse_uci_show(text: str) -> dict[str, dict]:
@@ -268,11 +281,16 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
 
             for obj in hostapd_list.split():
                 ifname = obj.split(".", 1)[1] if "." in obj else obj
-                status, clients = await asyncio.gather(
+                status, clients, bans = await asyncio.gather(
                     _ubus(conn, obj, "get_status", timeout),
                     _ubus(conn, obj, "get_clients", timeout),
+                    _ubus(conn, obj, "list_bans", timeout),
                 )
                 meta = iface_meta.get(ifname, {})
+                st.bans_ok = st.bans_ok or bans is not None
+                for bmac in parse_bans(bans):
+                    st.bans.append({"mac": bmac, "ifname": ifname,
+                                    "ssid": (status or {}).get("ssid") or meta.get("ssid", "")})
                 freq = (status or {}).get("freq") or (clients or {}).get("freq") or 0
                 ssid = (status or {}).get("ssid") or meta.get("ssid", "")
                 cl = (clients or {}).get("clients") or {}

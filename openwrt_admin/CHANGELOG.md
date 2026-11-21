@@ -2,6 +2,13 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.12.1
+- Blocked Wi-Fi clients are listed (Clients page and AP page, from hostapd `list_bans`) with the remaining time and an **Unblock** button (full access).
+- Dark mode: drop-down lists (e.g. Disconnect…) were white.
+---
+- Zablokovaní Wi-Fi klienti jsou vidět (stránka Klienti a stránka AP, z hostapd `list_bans`) se zbývajícím časem a tlačítkem **Zrušit blokaci** (plný přístup).
+- Tmavý režim: rozbalovací seznamy (např. Odpojit…) byly bílé.
+
 ## 0.12.0
 - New devices: when a device the add-on has never seen joins the network (Wi-Fi, AP port or router ARP), a notification is sent to Home Assistant, optionally also to a `notify.*` service (e.g. the mobile app). The first start takes all present devices as known. New devices have a "new" tag for 24 hours. Options `notify_new_devices`, `notify_service`, `notify_random_mac`.
 - Updates overview: every `update_check_hours` (default 12) each device is checked for packages to update; the overview shows the count (tile + cards), the device page lists the packages. A newer OpenWrt release is detected from downloads.openwrt.org.
