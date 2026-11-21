@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+{% set online = store.aps | selectattr("online") | list %}
+<section class="summary">
+  <div class="stat"><span class="num">{{ online | length }}/{{ store.aps | length }}</span><span class="lbl">AP online</span></div>
+  <div class="stat"><span class="num">{{ clients | length }}</span><span class="lbl">klientů</span></div>
+  {% for ssid, group in clients | groupby("ssid") %}
+  <div class="stat"><span class="num">{{ group | length }}</span><span class="lbl">{{ ssid }}</span></div>
+  {% endfor %}
+</section>
+
+{% if not store.aps %}
+<p class="empty">Žádné AP nejsou nastavené. Přidej je v konfiguraci add-onu a podívej se do <a href="{{ base }}/setup">Nastavení</a>.</p>
+{% endif %}
+
+<section class="cards">
+{% for ap in store.aps %}
+  <a class="card {{ 'offline' if not ap.online }}" href="{{ base }}/ap/{{ ap.name | urlencode }}">
+    <div class="card-head">
+      <span class="dot {{ 'on' if ap.online else 'off' }}"></span>
+      <strong>{{ ap.name }}</strong>
+      <span class="muted">{{ ap.host }}</span>
+    </div>
+    {% if ap.online %}
+    <div class="muted small">{{ ap.model }} · {{ ap.release }}</div>
+    <dl>
+      <dt>Uptime</dt><dd>{{ ap.uptime | duration }}</dd>
+      <dt>Load</dt><dd>{{ ap.load }}</dd>
+      <dt>RAM volná</dt><dd>{{ ap.mem_avail | bytes }} / {{ ap.mem_total | bytes }}</dd>
+      {% if ap.overlay_size %}
+      {% set pct = (100 * ap.overlay_used / ap.overlay_size) | round | int %}
+      <dt>Overlay</dt><dd><span class="{{ 'warn' if ap.overlay_avail < 300*1024 }}">{{ ap.overlay_avail | bytes }} volno</span>
+        <span class="bar"><span style="width: {{ pct }}%"></span></span></dd>
+      {% endif %}
+      <dt>Rádia</dt><dd>{% for r in ap.radios %}<span class="tag {{ 'tag-off' if not r.up }}">{{ r.band or r.name }} ch {{ r.channel }} {{ r.htmode }}</span>{% endfor %}</dd>
+    </dl>
+    <table class="mini">
+      {% for s in ap.ssids %}
+      <tr><td>{{ s.ssid }}</td><td class="muted">{{ s.network }}</td><td class="num">{{ s.clients }}</td></tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="err">Nedostupný: {{ ap.error or "zatím nenačteno" }}</p>
+    {% endif %}
+  </a>
+{% endfor %}
+</section>
+{% endblock %}

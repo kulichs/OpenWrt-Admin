@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1><span class="dot {{ 'on' if ap.online else 'off' }}"></span> {{ ap.name }} <span class="muted">{{ ap.host }}</span></h1>
+{% if not ap.online %}
+<p class="err">Nedostupný: {{ ap.error or "zatím nenačteno" }}</p>
+{% else %}
+<section class="grid2">
+  <div class="panel">
+    <h2>Systém</h2>
+    <dl>
+      <dt>Hostname</dt><dd>{{ ap.hostname }}</dd>
+      <dt>Model</dt><dd>{{ ap.model }}</dd>
+      <dt>Firmware</dt><dd>{{ ap.release }}</dd>
+      <dt>Jádro</dt><dd>{{ ap.kernel }}</dd>
+      <dt>Uptime</dt><dd>{{ ap.uptime | duration }}</dd>
+      <dt>Load</dt><dd>{{ ap.load }}</dd>
+      <dt>RAM</dt><dd>{{ ap.mem_avail | bytes }} volno z {{ ap.mem_total | bytes }}</dd>
+      {% if ap.overlay_size %}<dt>Overlay</dt><dd>{{ ap.overlay_used | bytes }} použito, {{ ap.overlay_avail | bytes }} volno</dd>{% endif %}
+    </dl>
+  </div>
+  <div class="panel">
+    <h2>Rádia</h2>
+    <table class="list">
+      <thead><tr><th>Rádio</th><th>Pásmo</th><th>Kanál</th><th>Šířka</th><th>Výkon</th><th>Země</th><th>Stav</th></tr></thead>
+      {% for r in ap.radios %}
+      <tr><td>{{ r.name }}</td><td>{{ r.band }}</td><td>{{ r.channel }}</td><td>{{ r.htmode }}</td>
+          <td>{{ r.txpower }}</td><td>{{ r.country }}</td><td>{{ 'zapnuto' if r.up else ('vypnuto' if r.disabled else 'dole') }}</td></tr>
+      {% endfor %}
+    </table>
+    <h2>SSID</h2>
+    <table class="list">
+      <thead><tr><th>SSID</th><th>Síť</th><th>Rozhraní</th><th>Šifrování</th><th class="num">Klienti</th></tr></thead>
+      {% for s in ap.ssids %}
+      <tr><td>{{ s.ssid }}</td><td>{{ s.network }}</td><td class="mono">{{ s.ifname }}</td><td>{{ s.encryption }}</td><td class="num">{{ s.clients }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</section>
+<h2>Klienti ({{ clients | length }})</h2>
+{% set show_ap = false %}
+{% include "_clients_table.html" %}
+{% endif %}
+{% endblock %}

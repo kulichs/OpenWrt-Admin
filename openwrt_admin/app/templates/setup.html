@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Nastavení</h1>
+<div class="panel">
+  <h2>1. SSH klíč add-onu</h2>
+  <p>Add-on se na AP i router přihlašuje tímto klíčem (pouze čtení přes <code>ubus</code>). Přidej ho na každé zařízení:</p>
+  <pre id="pub">{{ store.pubkey }}</pre>
+  <p>Na AP/routeru:</p>
+  <pre>echo '{{ store.pubkey }}' &gt;&gt; /etc/dropbear/authorized_keys
+chmod 600 /etc/dropbear/authorized_keys</pre>
+  <p class="muted small">Soubor <code>/etc/dropbear/authorized_keys</code> přežije sysupgrade. Po <code>sysupgrade -n</code> ho přidej znovu (nebo ho dej do first-boot skriptu).</p>
+</div>
+<div class="panel">
+  <h2>2. Seznam AP</h2>
+  <p>AP, uživatel, interval a router s DHCP se nastavují v Home Assistantu: <em>Nastavení → Doplňky → OpenWrt-Admin → Konfigurace</em>.</p>
+  <table class="list">
+    <thead><tr><th>Název</th><th>Adresa</th><th>Stav</th></tr></thead>
+    {% for a in store.aps %}
+    <tr><td>{{ a.name }}</td><td class="mono">{{ a.host }}</td>
+        <td>{% if a.online %}<span class="sig good">OK</span>{% else %}<span class="err">{{ a.error or "zatím nenačteno" }}</span>{% endif %}</td></tr>
+    {% endfor %}
+    <tr><td>DHCP router</td><td class="mono">{{ store.opts.dhcp_router or "–" }}</td>
+        <td>{{ store.leases | length }} záznamů</td></tr>
+  </table>
+</div>
+<div class="panel">
+  <h2>3. JSON API</h2>
+  <p>Aktuální stav je i ve strojově čitelné podobě: <a href="{{ base }}/api/state"><code>api/state</code></a>.</p>
+</div>
+{% endblock %}
