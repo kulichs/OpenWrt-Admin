@@ -38,11 +38,12 @@ def parse_devices(devices: list[dict]) -> dict[str, str]:
     return out
 
 
-async def fetch_names(timeout: float = 15.0) -> dict[str, str]:
-    """Nacte jmena z HA. Bez SUPERVISOR_TOKEN (lokalni vyvoj) vrati {}. Chyby vyhazuje dal."""
+async def _session(requests: list[dict], timeout: float = 15.0) -> list[dict]:
+    """Jedno websocket spojeni s HA: prihlaseni a postupne odeslani pozadavku; vrati odpovedi ve stejnem poradi.
+    Bez SUPERVISOR_TOKEN (lokalni vyvoj) vyhodi RuntimeError."""
     token = os.environ.get("SUPERVISOR_TOKEN")
     if not token:
-        return {}
+        raise RuntimeError("no SUPERVISOR_TOKEN")
     import websockets  # az tady: lokalne bez HA neni potreba
 
     async def run():
@@ -53,13 +54,52 @@ async def fetch_names(timeout: float = 15.0) -> dict[str, str]:
                 msg = json.loads(await ws.recv())
             if msg.get("type") != "auth_ok":
                 raise RuntimeError(f"HA auth: {msg.get('type')} {msg.get('message', '')}")
-            await ws.send(json.dumps({"id": 1, "type": "config/device_registry/list"}))
-            while True:
-                msg = json.loads(await ws.recv())
-                if msg.get("id") == 1:
-                    break
-            if not msg.get("success"):
-                raise RuntimeError(f"HA device_registry: {msg.get('error')}")
-            return parse_devices(msg.get("result") or [])
+            out = []
+            for n, req in enumerate(requests, start=1):
+                await ws.send(json.dumps({"id": n, **req}))
+                while True:
+                    msg = json.loads(await ws.recv())
+                    if msg.get("id") == n:
+                        break
+                if not msg.get("success"):
+                    raise RuntimeError(f"HA {req.get('type')}: {msg.get('error')}")
+                out.append(msg.get("result"))
+            return out
 
     return await asyncio.wait_for(run(), timeout * 2)
+
+
+async def fetch_names(timeout: float = 15.0) -> dict[str, str]:
+    """Nacte jmena z HA. Bez SUPERVISOR_TOKEN (lokalni vyvoj) vrati {}. Chyby vyhazuje dal."""
+    if not os.environ.get("SUPERVISOR_TOKEN"):
+        return {}
+    (devices,) = await _session([{"type": "config/device_registry/list"}], timeout)
+    return parse_devices(devices or [])
+
+
+async def ha_language() -> str:
+    """Jazyk Home Assistantu (get_config -> language), napr. 'cs'. Pri chybe ''."""
+    try:
+        (cfg,) = await _session([{"type": "get_config"}])
+        return str((cfg or {}).get("language") or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def service_call(service: str, data: dict) -> dict | None:
+    """'notify.mobile_app_x' -> websocket call_service; None pri spatnem tvaru."""
+    domain, _, name = (service or "").strip().partition(".")
+    if not domain or not name:
+        return None
+    return {"type": "call_service", "domain": domain, "service": name, "service_data": data}
+
+
+async def notify(title: str, message: str, notification_id: str = "", service: str = "") -> None:
+    """Trvala notifikace v HA (zvonecek) a volitelne i sluzba notify.* (napr. mobilni aplikace)."""
+    reqs = [{"type": "call_service", "domain": "persistent_notification", "service": "create",
+             "service_data": {"title": title, "message": message, **({"notification_id": notification_id} if notification_id else {})}}]
+    plain = message.replace("**", "").replace("`", "")  # mobilni notifikace markdown nezobrazi
+    extra = service_call(service, {"title": title, "message": plain})
+    if extra:
+        reqs.append(extra)
+    await _session(reqs)

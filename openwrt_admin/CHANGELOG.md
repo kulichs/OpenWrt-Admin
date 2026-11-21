@@ -2,6 +2,19 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.12.0
+- New devices: when a device the add-on has never seen joins the network (Wi-Fi, AP port or router ARP), a notification is sent to Home Assistant, optionally also to a `notify.*` service (e.g. the mobile app). The first start takes all present devices as known. New devices have a "new" tag for 24 hours. Options `notify_new_devices`, `notify_service`, `notify_random_mac`.
+- Updates overview: every `update_check_hours` (default 12) each device is checked for packages to update; the overview shows the count (tile + cards), the device page lists the packages. A newer OpenWrt release is detected from downloads.openwrt.org.
+- Configuration backups: **Back up now** on AP/router pages and an automatic backup every `backup_interval_days` (default 7) via `sysupgrade -b`, stored in `/data/backups` (part of HA backups), the last `backup_keep` (10) kept. Download only with full access (contains Wi-Fi passwords).
+- Wi-Fi clients can be disconnected or blocked for 10 min / 1 h / 24 h (on all APs with the same SSID) from the client tables – full access only.
+- Settings page: status of notifications, update checks and backups.
+---
+- Nová zařízení: když se v síti objeví zařízení, které add-on ještě neviděl (Wi-Fi, port AP nebo ARP routeru), pošle upozornění do Home Assistantu, volitelně i do služby `notify.*` (např. mobilní aplikace). První spuštění bere všechna přítomná zařízení jako známá. Nová zařízení mají 24 hodin štítek „nové“. Volby `notify_new_devices`, `notify_service`, `notify_random_mac`.
+- Přehled aktualizací: každých `update_check_hours` (výchozí 12) se na každém zařízení zjistí balíčky k aktualizaci; přehled ukazuje počet (dlaždice + karty), stránka zařízení je vypíše. Novější verze OpenWrt se zjišťuje z downloads.openwrt.org.
+- Zálohy konfigurace: **Zálohovat teď** na stránce AP/routeru a automatická záloha každých `backup_interval_days` (výchozí 7) přes `sysupgrade -b`, ukládá se do `/data/backups` (součást záloh HA), drží se posledních `backup_keep` (10). Stáhnout jen s plným přístupem (obsahuje hesla Wi-Fi).
+- Wi-Fi klienty lze z tabulek klientů odpojit nebo zablokovat na 10 min / 1 h / 24 h (na všech AP se stejným SSID) – jen plný přístup.
+- Stránka Nastavení: stav upozornění, kontroly aktualizací a záloh.
+
 ## 0.11.0
 - Map: wired devices at the router (not on Wi-Fi or AP ports) are split by network – one branch per LAN/VLAN (e.g. "VLAN 100 · dmz") in its color, matched by the router interface whose subnet contains the device IP. Empty networks are hidden.
 - Router page: new "Network" column in the device list and the number of active devices per interface.

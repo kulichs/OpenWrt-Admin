@@ -1,12 +1,13 @@
+<div id="kick-out" hx-preserve="true"></div>
 <table class="list">
   <thead><tr>
     <th>{{ t("col.device") }}</th><th>IP</th><th>MAC</th>{% if show_ap %}<th>AP</th>{% endif %}<th>SSID</th><th>{{ t("col.band") }}</th><th>{{ t("col.standard") }}</th>
-    <th class="num">{{ t("col.signal") }}</th><th class="num">{{ t("col.rate") }}</th><th class="num">{{ t("col.traffic") }}</th><th class="num">{{ t("col.connected") }}</th>
+    <th class="num">{{ t("col.signal") }}</th><th class="num">{{ t("col.rate") }}</th><th class="num">{{ t("col.traffic") }}</th><th class="num">{{ t("col.connected") }}</th>{% if can_edit %}<th></th>{% endif %}
   </tr></thead>
   <tbody>
   {% for c in clients %}
   <tr>
-    <td>{{ c.hostname or "–" }}{% if c.src in ('ha', 'manual') %} <span class="tag src-{{ c.src }}" title="{{ t('src.' ~ c.src ~ '_title') }}">{{ t('src.' ~ c.src) }}</span>{% endif %}</td>
+    <td>{{ c.hostname or "–" }}{% if c.src in ('ha', 'manual') %} <span class="tag src-{{ c.src }}" title="{{ t('src.' ~ c.src ~ '_title') }}">{{ t('src.' ~ c.src) }}</span>{% endif %}{% if c.first_seen is recent %} <span class="tag tag-new" title="{{ t('new.title', ago=(c.first_seen | ago)) }}">{{ t("new.tag") }}</span>{% endif %}</td>
     <td class="mono">{{ c.ip or "–" }}</td>
     <td class="mono">{{ c.mac }}</td>
     {% if show_ap %}<td><a href="{{ base }}/ap/{{ c.ap | urlencode }}">{{ c.ap }}</a></td>{% endif %}
@@ -17,9 +18,19 @@
     <td class="num">{{ c.tx_rate | rate }} / {{ c.rx_rate | rate }}</td>
     <td class="num">{{ c.tx_bytes | bytes }} / {{ c.rx_bytes | bytes }}</td>
     <td class="num">{{ c.connected | duration }}</td>
+    {% if can_edit %}<td class="kick">
+      <form hx-post="{{ base }}/clients/kick" hx-target="#kick-out" hx-trigger="change"
+            hx-confirm="{{ t('kick.confirm', who=(c.hostname or c.mac), ssid=c.ssid) }}" hx-on::after-request="this.reset()">
+        <input type="hidden" name="ap" value="{{ c.ap }}"><input type="hidden" name="ifname" value="{{ c.ifname }}"><input type="hidden" name="mac" value="{{ c.mac }}">
+        <select name="ban" title="{{ t('kick.ban_title') }}" aria-label="{{ t('kick.button') }}">
+          <option value="" selected disabled>{{ t("kick.button") }}…</option>
+          <option value="0">{{ t("kick.only") }}</option><option value="600">{{ t("kick.ban", d="10 min") }}</option>
+          <option value="3600">{{ t("kick.ban", d="1 h") }}</option><option value="86400">{{ t("kick.ban", d="24 h") }}</option>
+        </select>
+      </form></td>{% endif %}
   </tr>
   {% else %}
-  <tr><td colspan="11" class="empty">{{ t("clients.none") }}</td></tr>
+  <tr><td colspan="12" class="empty">{{ t("clients.none") }}</td></tr>
   {% endfor %}
   </tbody>
 </table>

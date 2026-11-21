@@ -1,7 +1,7 @@
 name: OpenWrt-Admin
-version: "0.11.0"
+version: "0.12.0"
 slug: openwrt_admin
-description: Manage OpenWrt access points and Wi-Fi clients over SSH (overview, SSIDs, reboot, package updates)
+description: Manage OpenWrt access points and Wi-Fi clients over SSH (overview, SSIDs, network map, updates, backups)
 arch:
   - aarch64
   - amd64
@@ -24,6 +24,12 @@ options:
   read_access: []
   ha_names: true
   names: []
+  notify_new_devices: true
+  notify_service: ""
+  notify_random_mac: true
+  update_check_hours: 12
+  backup_interval_days: 7
+  backup_keep: 10
   aps:
     - name: Router
       host: 192.168.1.1
@@ -50,6 +56,12 @@ schema:
   names:
     - mac: str
       name: str
+  notify_new_devices: bool?
+  notify_service: str?
+  notify_random_mac: bool?
+  update_check_hours: int(0,168)?
+  backup_interval_days: int(0,90)?
+  backup_keep: int(1,100)?
   aps:
     - name: str
       host: str

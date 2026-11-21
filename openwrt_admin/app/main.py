@@ -13,12 +13,12 @@ from pathlib import Path
 
 import asyncssh
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_states
 
@@ -26,6 +26,9 @@ DATA = Path(os.environ.get("OWADMIN_DATA", "/data"))
 OPTIONS = DATA / "options.json"
 KEYFILE = DATA / "id_ed25519"
 SEENFILE = DATA / "wired_seen.json"   # posledni zname misto kabelovych zarizeni (AP + port)
+KNOWNFILE = DATA / "known_devices.json"  # MAC, ktere add-on uz videl (upozorneni na nova zarizeni)
+UPDATESFILE = DATA / "updates.json"   # posledni kontrola aktualizaci
+BACKUPS = DATA / "backups"            # zalohy konfigurace (sysupgrade -b) – soucast zaloh HA
 INGRESS_IPS = {"172.30.32.2", "127.0.0.1"}
 ALLOW_ALL = os.environ.get("OWADMIN_ALLOW_ALL") == "1"
 
@@ -43,7 +46,8 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 def load_options() -> dict:
     opts = {"aps": [], "ssh_user": "root", "poll_interval": 30, "dhcp_router": "", "router_name": "Router", "demo": False,
             "full_access": [], "read_access": [], "refresh_interval": 30, "language": "auto",
-            "ha_names": True, "names": []}
+            "ha_names": True, "names": [], "notify_new_devices": True, "notify_service": "", "notify_random_mac": True,
+            "update_check_hours": 12, "backup_interval_days": 7, "backup_keep": 10}
     if OPTIONS.exists():
         opts.update(json.loads(OPTIONS.read_text()))
     return opts
@@ -103,6 +107,21 @@ class Store:
         self.lock = asyncio.Lock()
         self.ap_locks: dict[str, asyncio.Lock] = {}
         self.pending: dict[str, tuple[float, dict[str, list[actions.SsidChange]]]] = {}
+        # udrzba
+        self.known = maint.KnownDevices(KNOWNFILE) if not self.opts.get("demo") else maint.KnownDevices(Path("/nonexistent"))
+        self.updates: dict[str, dict] = self._load_json(UPDATESFILE) if not self.opts.get("demo") else {}
+        self.versions: dict = {}        # https://downloads.openwrt.org/.versions.json
+        self.versions_ts = 0.0
+        self.ha_lang = ""
+        self.notify_status = ""         # posledni chyba odeslani upozorneni
+        self.backup_busy: set[str] = set()
+
+    @staticmethod
+    def _load_json(path: Path) -> dict:
+        try:
+            return json.loads(path.read_text())
+        except (OSError, ValueError):
+            return {}
 
     @property
     def router_name(self) -> str:
@@ -175,6 +194,14 @@ class Store:
                                                 "02:00:00:00:30:01": {"name": "mailserver", "ip": "192.168.100.7"}}
                 self.info = self.build_info()
                 self.wired_state = wiredmod.locate(self.aps, self.router, self.info, self.seen, known=self._known())
+                # ukazka: nove zarizeni (stitek „nove“) a aktualizace
+                self.known.data = {"02:00:00:00:30:01": {"first": time.time() - 2 * 3600, "last": time.time()}}
+                self.versions = {"stable_version": "25.12.3", "oldstable_version": "24.10.6"}
+                self.updates = {a.name: {"ts": time.time() - 3 * 3600, "error": "", "pkgs": pk} for a, pk in zip(
+                    [*([self.router] if self.router else []), *self.aps],
+                    [[{"name": "dnsmasq-full", "old": "2.91-r1", "new": "2.91-r2"}],
+                     [{"name": "hostapd-utils", "old": "2025.08.26~1", "new": "2025.08.26~2"},
+                      {"name": "libubox20251010", "old": "2025.10.10~1", "new": "2025.10.10~2"}], [], []])}
                 self.last_poll = time.time()
                 return
             user = self.opts.get("ssh_user", "root")
@@ -193,6 +220,129 @@ class Store:
             self.wired_state = wiredmod.locate(self.aps, self.router, self.info, self.seen, known=self._known())
             self._save_seen()
             self.last_poll = time.time()
+        await self.track_new()
+
+    # ------------------------------------------------------------ nova zarizeni
+    def _t(self):
+        lang = self.opts.get("language") if self.opts.get("language") in i18n.LANGUAGES else (i18n.normalize(self.ha_lang) or "en")
+        return i18n.translator(lang)
+
+    def where(self, l: dict, t) -> str:
+        if l.get("ap"):
+            return t("notify.where_wifi", ap=l["ap"], ssid=l.get("ssid", ""))
+        if l.get("cable_ap"):
+            return t("notify.where_port", ap=l["cable_ap"], port=l.get("cable_port", "?"))
+        return t("notify.where_router")
+
+    async def track_new(self):
+        """MAC v siti, ktere add-on jeste nevidel -> notifikace v HA. AP a router se nepocitaji."""
+        try:
+            leases = {l["mac"]: l for l in self.lease_list(self.wired_state)}
+            present = self.present(self.wired_state) - (self.wired_state or {}).get("ap_macs", set())
+            new = self.known.update(present)
+            self.known.save()
+        except Exception:  # noqa: BLE001
+            log.exception("track_new")
+            return
+        if not new or not self.opts.get("notify_new_devices", True):
+            return
+        if not self.opts.get("notify_random_mac", True):
+            new = [m for m in new if not maint.is_random_mac(m)]
+        if not new:
+            return
+        if not self.ha_lang and self.opts.get("language", "auto") == "auto":
+            self.ha_lang = await ha.ha_language()
+        t = self._t()
+        lines = []
+        for m in new:
+            l = leases.get(m, {"mac": m})
+            net = ("LAN" if l.get("vlan") is None else f"VLAN {l['vlan']}") + (f" ({l['iface']})" if l.get("iface") else "") \
+                if l.get("known_net") else ""
+            parts = [f"**{l.get('hostname') or t('notify.unknown')}**", f"`{m}`", l.get("ip", ""), net, self.where(l, t)]
+            if maint.is_random_mac(m):
+                parts.append(t("notify.random_mac"))
+            lines.append(" · ".join(p for p in parts if p))
+            log.info("Nove zarizeni: %s", lines[-1])
+        title = t("notify.title", n=len(new))
+        msg = "\n".join(f"- {x}" for x in lines[:20]) + (f"\n- … +{len(lines) - 20}" if len(lines) > 20 else "")
+        try:
+            await ha.notify(title, msg, notification_id="openwrt_admin_new_" + new[0].replace(":", ""),
+                            service=self.opts.get("notify_service", ""))
+            self.notify_status = "ok"
+        except Exception as e:  # noqa: BLE001
+            self.notify_status = f"{type(e).__name__}: {e}"
+            log.warning("Upozorneni do HA se nepodarilo odeslat: %s", self.notify_status)
+
+    # ------------------------------------------------------------ aktualizace a zalohy
+    def managed(self) -> list[APState]:
+        return [d for d in [self.router, *self.aps] if d is not None]
+
+    def update_info(self, d: APState) -> dict:
+        """Pro sablony: {checked, pkgs, count, error, release}."""
+        u = self.updates.get(d.name) or {}
+        return {"checked": u.get("ts", 0), "pkgs": u.get("pkgs") or [], "count": len(u.get("pkgs") or []),
+                "error": u.get("error", ""), "release": maint.newer_release(d.release, self.versions) if self.versions else ""}
+
+    def updates_total(self) -> int:
+        return sum(len((self.updates.get(d.name) or {}).get("pkgs") or []) for d in self.managed())
+
+    def save_updates(self):
+        try:
+            UPDATESFILE.write_text(json.dumps(self.updates))
+        except OSError as e:
+            log.warning("Nelze ulozit %s: %s", UPDATESFILE, e)
+
+    async def check_one(self, d: APState):
+        if self.opts.get("demo"):
+            return
+        async with self.ap_lock(d.name):
+            self.updates[d.name] = await maint.check_updates(self.cfg(d.name), self.key, d.pkg or "apk")
+        self.save_updates()
+        log.info("Aktualizace %s: %d balicku%s", d.name, len(self.updates[d.name]["pkgs"]),
+                 f" ({self.updates[d.name]['error']})" if self.updates[d.name]["error"] else "")
+
+    async def refresh_versions(self):
+        if time.time() - self.versions_ts < 6 * 3600:
+            return
+        self.versions_ts = time.time()
+        try:
+            self.versions = await asyncio.to_thread(maint.fetch_versions)
+        except Exception as e:  # noqa: BLE001 - bez internetu jen nebude videt nova verze
+            log.info("Verze OpenWrt nezjisteny: %s", e)
+
+    def backups(self, d: APState) -> list[dict]:
+        return maint.list_backups(BACKUPS, d.name)
+
+    async def backup_one(self, d: APState) -> tuple[bool, str]:
+        if d.name in self.backup_busy:
+            return False, "busy"
+        self.backup_busy.add(d.name)
+        try:
+            async with self.ap_lock(d.name):
+                ok, msg = await maint.backup(self.cfg(d.name), self.key, BACKUPS, d.name,
+                                             int(self.opts.get("backup_keep", 10) or 10))
+        finally:
+            self.backup_busy.discard(d.name)
+        log.info("Zaloha %s: %s", d.name, msg if ok else "chyba: " + msg)
+        return ok, msg
+
+    async def maintenance(self):
+        """Jednou za cas: kontrola aktualizaci a automaticke zalohy (postupne, ne naraz)."""
+        if self.opts.get("demo"):
+            return
+        now = time.time()
+        hours = int(self.opts.get("update_check_hours", 12) or 0)
+        if hours > 0:
+            await self.refresh_versions()
+            for d in self.managed():
+                if d.online and now - (self.updates.get(d.name) or {}).get("ts", 0) > hours * 3600:
+                    await self.check_one(d)
+        days = int(self.opts.get("backup_interval_days", 7) or 0)
+        if days > 0:
+            for d in self.managed():
+                last = next(iter(self.backups(d)), None)
+                if d.online and (not last or now - last["ts"] > days * 86400):
+                    await self.backup_one(d)
 
     WAKE_EVERY = 240  # s; switch zapomina MAC po ~5 min, castejsi ping neni potreba
     _last_wake = 0.0
@@ -369,7 +519,8 @@ class Store:
                         "cable_stale": cab[2] if cab else None,
                         "is_ap": mac in wired["ap_macs"], "online": mac in present})
             n = resolve(e["ip"]) if e["ip"] else None
-            out[-1].update(iface=(n or {}).get("iface", ""), vlan=(n or {}).get("vlan"), known_net=bool(n))
+            out[-1].update(iface=(n or {}).get("iface", ""), vlan=(n or {}).get("vlan"), known_net=bool(n),
+                           first_seen=self.known.first_seen(mac))
 
         def ipkey(x):
             try:
@@ -383,7 +534,8 @@ class Store:
         for ap in self.aps:
             for c in ap.clients:
                 e = self.info.get(c["mac"]) or self.leases.get(c["mac"], {})
-                out.append({**c, "ip": e.get("ip", ""), "hostname": e.get("hostname", ""), "src": e.get("src", "")})
+                out.append({**c, "ip": e.get("ip", ""), "hostname": e.get("hostname", ""), "src": e.get("src", ""),
+                            "first_seen": self.known.first_seen(c["mac"])})
         return sorted(out, key=lambda c: (c["hostname"] or "~" + c["mac"]).lower())
 
 
@@ -399,6 +551,16 @@ async def poller():
         await asyncio.sleep(max(10, int(store.opts.get("poll_interval", 30))))
 
 
+async def maintainer():
+    await asyncio.sleep(60)  # nejdriv at se nactou zarizeni
+    while True:
+        try:
+            await store.maintenance()
+        except Exception:  # noqa: BLE001
+            log.exception("Chyba pri udrzbe (aktualizace/zalohy)")
+        await asyncio.sleep(600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global store
@@ -407,9 +569,10 @@ async def lifespan(app: FastAPI):
              ", ".join(f"{a['name']}={a['host']}" for a in store.ap_items) or "-",
              (f"{store.router_item['name']}={store.router_item['host']}" if store.router_item else "-"),
              store.opts.get("demo"))
-    task = asyncio.create_task(poller())
+    tasks = [asyncio.create_task(poller()), asyncio.create_task(maintainer())]
     yield
-    task.cancel()
+    for task in tasks:
+        task.cancel()
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
@@ -564,6 +727,7 @@ def fmt_band(ctx, b) -> str:
 
 templates.env.filters.update(band=fmt_band, bytes=fmt_bytes, duration=fmt_duration, rate=fmt_rate, interval=fmt_interval,
                              sigclass=signal_class, ago=ago)
+templates.env.tests["recent"] = lambda ts, hours=24: bool(ts) and time.time() - ts < hours * 3600
 
 
 REFRESH_CHOICES = [0, 10, 15, 30, 60, 120, 300]
@@ -722,7 +886,11 @@ async def ap_pkg_update(request: Request, name: str):
     t = request.state.t
 
     async def fn(cfg, key, ap, t):
-        return await actions.pkg_update(cfg, key, ap.pkg or "apk", t)
+        r = await actions.pkg_update(cfg, key, ap.pkg or "apk", t)
+        if r.ok:  # vysledek rucni kontroly = i prehled aktualizaci
+            store.updates[ap.name] = {"ts": time.time(), "pkgs": maint.parse_upgradable(r.output), "error": ""}
+            store.save_updates()
+        return r
     return await ap_action(request, name, t("ap.check_updates"), fn,
                            t("msg.upgradable_header") + "\nhostapd-utils-2025.08.26~1 < 2025.08.26~2\n"
                            "libubox20251010-2025.10.10~1 < 2025.10.10~2")
@@ -735,9 +903,86 @@ async def ap_pkg_upgrade(request: Request, name: str):
     async def fn(cfg, key, ap, t):
         r = await actions.pkg_upgrade(cfg, key, ap.pkg or "apk", t)
         asyncio.create_task(store.poll())  # overlay se zmenil
+
+        async def recheck():
+            await asyncio.sleep(5)
+            await store.check_one(ap)
+        asyncio.create_task(recheck())
         return r
     return await ap_action(request, name, t("ap.upgrade"), fn,
                            "(1/2) Upgrading hostapd-utils\n(2/2) Upgrading libubox20251010\nOK: 2 packages (demo)")
+
+
+@app.post("/ap/{name}/backup", response_class=HTMLResponse)
+async def ap_backup(request: Request, name: str):
+    require_htmx(request)
+    t = request.state.t
+    title = t("backup.now")
+    if request.state.user["role"] != "full":
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
+    ap = store.ap(name)
+    if store.opts.get("demo"):
+        await asyncio.sleep(1)
+        return result(request, title, actions.Result(True, t("backup.done", file=f"{maint.safe_name(name)}-demo.tar.gz") + " (demo)"))
+    log.info("%s: zaloha %s", who(request), name)
+    ok, msg = await store.backup_one(ap)
+    if msg == "busy":
+        return result(request, title, actions.Result(False, t("msg.busy")))
+    return result(request, title, actions.Result(ok, t("backup.done", file=msg) if ok else msg))
+
+
+@app.get("/backup/{name}/{file}")
+async def backup_download(request: Request, name: str, file: str):
+    """Stazeni zalohy – obsahuje hesla Wi-Fi a klice, proto jen plny pristup."""
+    require_full(request)
+    store.ap(name)  # 404 pro nezname zarizeni
+    if not maint.FILE_RE.match(file):
+        raise HTTPException(404)
+    path = maint.backup_dir(BACKUPS, name) / file
+    if not path.is_file():
+        raise HTTPException(404)
+    log.info("%s: stazena zaloha %s", who(request), file)
+    return FileResponse(path, media_type="application/gzip", filename=file)
+
+
+@app.post("/clients/kick", response_class=HTMLResponse)
+async def client_kick(request: Request, ap: str = Form(...), ifname: str = Form(...), mac: str = Form(...),
+                      ban: int = Form(0)):
+    """Odpojit klienta z Wi-Fi; s blokaci na vsech AP, ktere vysilaji stejne SSID (jinak by se pripojil jinde)."""
+    require_htmx(request)
+    t = request.state.t
+    mac = mac.strip().lower()
+    title = t("kick.title", who=(store.info.get(mac) or {}).get("hostname") or mac)
+    if request.state.user["role"] != "full":
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
+    dev = store.ap(ap)
+    ssid = next((x["ssid"] for x in dev.ssids if x["ifname"] == ifname), None)
+    if ssid is None or ban not in actions.BAN_CHOICES or not actions.MAC_RE.match(mac):
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    targets: dict[str, list[str]] = {ap: [ifname]}
+    if ban:
+        for a in store.aps:
+            if a.online:
+                for x in a.ssids:
+                    if x["ssid"] == ssid and x["ifname"] not in targets.get(a.name, []):
+                        targets.setdefault(a.name, []).append(x["ifname"])
+    log.info("%s: odpojit %s z %s (ban %s s) na %s", who(request), mac, ssid, ban, targets)
+    if store.opts.get("demo"):
+        await asyncio.sleep(1)
+        return result(request, title, actions.Result(True, "\n".join(f"{a} {i}: OK (demo)" for a, l in targets.items() for i in l)))
+    res = await asyncio.gather(*(actions.kick(store.cfg(a), store.key, l, mac, ban, t) for a, l in targets.items()))
+    ok = res[0].ok  # hlavni je AP, kde klient byl
+    if ok:
+        dev.clients = [c for c in dev.clients if c["mac"] != mac]
+
+        async def repoll():
+            await asyncio.sleep(5)
+            await store.poll()
+        asyncio.create_task(repoll())
+    out = "\n".join(r.output for r in res)
+    if ok and ban:
+        out += "\n\n" + t("kick.ban_note")
+    return result(request, title, actions.Result(ok, out))
 
 
 # ---------------------------------------------------------------- SSID

@@ -57,6 +57,7 @@
     </table>
   </div>
 </section>
+{% include "_maint.html" %}
 <h2>{{ t("ap.clients", n=(clients | length)) }}</h2>
 {% set show_ap = false %}
 {% include "_clients_table.html" %}

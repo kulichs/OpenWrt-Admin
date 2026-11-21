@@ -32,6 +32,24 @@ configuration:
   names:
     name: Manual names
     description: "Own names for devices by MAC (mac: aa:bb:cc:dd:ee:ff, name: …). They take precedence over all other sources."
+  notify_new_devices:
+    name: Notify about new devices
+    description: "When a device (MAC) the add-on has never seen appears on the network, send a notification to Home Assistant (bell). On the first start all devices are taken as known."
+  notify_service:
+    name: Notification service
+    description: "Optionally also a notify service, e.g. notify.mobile_app_phone (to your phone). Empty = Home Assistant notification only."
+  notify_random_mac:
+    name: Notify about random MACs too
+    description: "Phones use a private (random) MAC for each Wi-Fi. Off = do not notify about such addresses."
+  update_check_hours:
+    name: Update check (h)
+    description: "How often the packages to update (apk/opkg update) and a new OpenWrt release are checked on each device. 0 = off."
+  backup_interval_days:
+    name: Automatic backup (days)
+    description: "How often a configuration backup (sysupgrade -b) of each device is stored in the add-on's /data (also part of HA backups). 0 = off."
+  backup_keep:
+    name: Backups to keep
+    description: "How many of the latest backups are kept per device."
   aps:
     name: Devices
     description: "All managed OpenWrt devices – only these are used. Each has name, host, optional SSH port and type ap (default) or router. The router (one) is shown with interfaces and DHCP leases and provides client names and IPs."

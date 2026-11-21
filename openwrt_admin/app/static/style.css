@@ -142,3 +142,10 @@ svg.netmap.dragging { cursor: grabbing; }
 /* 0.10.1 – neaktivni zarizeni */
 details.offline-list { margin-top: 1rem; }
 details.offline-list summary { cursor: pointer; color: var(--muted); }
+/* 0.12.0: aktualizace, nova zarizeni, odpojeni klienta */
+.stat.stat-warn .num { color: var(--ok); }
+.tag.tag-new { color: var(--ok); border-color: var(--ok); font-weight: 600; }
+td.kick form { display: flex; gap: .3rem; align-items: center; margin: 0; }
+td.kick select { font: inherit; font-size: .8rem; padding: .15rem .2rem; width: 6.5rem; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; background: transparent; }
+.tag { white-space: nowrap; }
+button.small { padding: .15rem .55rem; font-size: .8rem; }

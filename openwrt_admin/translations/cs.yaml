@@ -32,6 +32,24 @@ configuration:
   names:
     name: Ruční jména
     description: "Vlastní jména zařízení podle MAC (mac: aa:bb:cc:dd:ee:ff, name: …). Mají přednost před všemi ostatními zdroji."
+  notify_new_devices:
+    name: Upozornit na nová zařízení
+    description: "Když se v síti objeví zařízení (MAC), které add-on ještě neviděl, pošle upozornění do Home Assistantu (zvoneček). Při prvním spuštění se všechna zařízení berou jako známá."
+  notify_service:
+    name: Služba pro upozornění
+    description: "Volitelně i služba notify, např. notify.mobile_app_telefon (upozornění do mobilu). Prázdné = jen upozornění v HA."
+  notify_random_mac:
+    name: Upozorňovat i na náhodné MAC
+    description: "Telefony používají pro každou Wi-Fi soukromou (náhodnou) MAC. Vypnuto = na takové adresy neupozorňovat."
+  update_check_hours:
+    name: Kontrola aktualizací (h)
+    description: "Jak často se na každém zařízení zjišťují balíčky k aktualizaci (apk/opkg update) a nová verze OpenWrt. 0 = vypnuto."
+  backup_interval_days:
+    name: Automatická záloha (dny)
+    description: "Jak často se ukládá záloha konfigurace (sysupgrade -b) každého zařízení do /data add-onu (je i v zálohách HA). 0 = vypnuto."
+  backup_keep:
+    name: Počet záloh
+    description: "Kolik posledních záloh se drží pro každé zařízení."
   aps:
     name: Zařízení
     description: "Všechna spravovaná OpenWrt zařízení – add-on používá jen tato. Každé má název, adresu, volitelně SSH port a type ap (výchozí) nebo router. Router (jeden) se zobrazí s rozhraními a DHCP klienty a dává jména a IP klientů."

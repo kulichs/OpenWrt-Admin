@@ -1,0 +1,44 @@
+{% set upd = store.update_info(ap) %}
+{% set bks = store.backups(ap) %}
+<section class="grid2">
+  <div class="panel">
+    <h2>{{ t("upd.title") }}</h2>
+    {% if upd.release %}<p class="warn">{{ t("upd.release", v=upd.release) }}</p>{% endif %}
+    {% if not upd.checked %}
+    <p class="muted">{{ t("upd.never") }}</p>
+    {% elif upd.error %}
+    <p class="err">{{ upd.error }}</p>
+    {% elif upd.count %}
+    <p><span class="warn">{{ t("upd.count", n=upd.count) }}</span> <span class="muted small">· {{ t("upd.checked", ago=(upd.checked | ago)) }}</span></p>
+    <table class="list">
+      <thead><tr><th>{{ t("upd.package") }}</th><th>{{ t("upd.installed") }}</th><th>{{ t("upd.available") }}</th></tr></thead>
+      {% for p in upd.pkgs %}<tr><td class="mono">{{ p.name }}</td><td class="mono muted">{{ p.old }}</td><td class="mono">{{ p.new }}</td></tr>{% endfor %}
+    </table>
+    {% else %}
+    <p><span class="sig good">{{ t("upd.none") }}</span> <span class="muted small">· {{ t("upd.checked", ago=(upd.checked | ago)) }}</span></p>
+    {% endif %}
+    <p class="muted small">{{ t("upd.hint", h=(store.opts.update_check_hours or 0)) if store.opts.update_check_hours else t("upd.hint_off") }}</p>
+  </div>
+  <div class="panel">
+    <h2>{{ t("backup.title") }}</h2>
+    {% if can_edit %}
+    <div class="btns">
+      <button class="secondary" hx-post="{{ base }}/ap/{{ ap.name | urlencode }}/backup" hx-target="#backup-out" hx-disabled-elt="this"
+              {{ 'disabled' if not ap.online }}>{{ t("backup.now") }}</button>
+      <span class="htmx-indicator muted">{{ t("ap.running") }}</span>
+    </div>
+    <div id="backup-out" hx-preserve="true"></div>
+    {% endif %}
+    <table class="list">
+      <thead><tr><th>{{ t("backup.file") }}</th><th>{{ t("backup.created") }}</th><th class="num">{{ t("backup.size") }}</th></tr></thead>
+      {% for b in bks %}
+      <tr><td class="mono">{% if can_edit %}<a href="{{ base }}/backup/{{ ap.name | urlencode }}/{{ b.file }}" download>{{ b.file }}</a>{% else %}{{ b.file }}{% endif %}</td>
+          <td>{{ b.ts | ago }}</td><td class="num">{{ b.size | bytes }}</td></tr>
+      {% else %}
+      <tr><td colspan="3" class="empty">{{ t("backup.none") }}</td></tr>
+      {% endfor %}
+    </table>
+    <p class="muted small">{{ t("backup.hint", d=store.opts.backup_interval_days, k=store.opts.backup_keep) if store.opts.backup_interval_days else t("backup.hint_off", k=store.opts.backup_keep) }}
+      {{ t("backup.restore") }}</p>
+  </div>
+</section>

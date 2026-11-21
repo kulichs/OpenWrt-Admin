@@ -39,6 +39,12 @@ ha_names: true               # device names from Home Assistant (by MAC), e.g. E
 names:                       # own names by MAC, highest priority
   - mac: aa:bb:cc:dd:ee:ff
     name: Boiler-relay
+notify_new_devices: true     # notification in HA when a never-seen device joins the network
+notify_service: ""           # optional, e.g. notify.mobile_app_phone (also to your phone)
+notify_random_mac: true      # false = no notifications for random (private) MACs of phones
+update_check_hours: 12       # h, 0 = off: check packages to update and new OpenWrt releases
+backup_interval_days: 7      # days, 0 = off: automatic configuration backup of every device
+backup_keep: 10              # backups kept per device
 aps:                         # all managed devices – the add-on uses only these
   - name: Router
     host: 192.168.1.1
@@ -74,10 +80,43 @@ chmod 600 /etc/dropbear/authorized_keys
 | Check for updates | AP page | `apk update && apk list --upgradable` (older APs: `opkg`) |
 | Upgrade packages | AP page | `apk upgrade` (older APs: `opkg upgrade …`) |
 | SSID name, password, hidden, on/off | SSID page | `uci set wireless.<section>.… && uci commit wireless && wifi reload` |
+| Back up configuration | AP or router page | `sysupgrade -b /tmp/…` (archive transferred over SSH, then deleted on the device) |
+| Disconnect / block a Wi-Fi client | client tables (AP page, Clients) | `ubus call hostapd.<if> del_client '{"addr":…,"deauth":true,"ban_time":…}'` |
 
 - SSID changes edit **existing** SSIDs (`wifi-iface` sections), they do not create new ones. Tick the APs/radios (bands) the change applies to. A preview of the `uci` commands is shown first; the change is written only after confirming. The password is never shown.
 - Reboot and upgrade ask for confirmation.
 - **Upgrading packages** is generally discouraged on OpenWrt: new versions go to the overlay and small APs (8 MB flash) may run out of space. For bigger changes build a new image and `sysupgrade`.
+
+### New devices on the network
+
+When a device (MAC address) the add-on has never seen appears on the network – on Wi-Fi, on an AP port or in the router's ARP table – a notification is sent to Home Assistant (the bell, `persistent_notification`). It shows the name (if known), MAC, IP, network/VLAN and where the device is (AP + SSID, AP port, router). With `notify_service` (e.g. `notify.mobile_app_phone`) it also goes to that service.
+
+- On the **first start** all devices currently on the network are taken as known – no flood of notifications. The list is in `/data/known_devices.json` (delete the file to start over).
+- Devices seen for the first time in the last 24 hours have a **new** tag in the client tables and on the router page.
+- Phones use a **random (private) MAC** per Wi-Fi network; such addresses are marked in the notification. `notify_random_mac: false` skips them.
+- APs and the router themselves are never reported.
+
+### Updates
+
+Every `update_check_hours` (default 12) the add-on runs `apk update` + `apk list --upgradable` (older devices `opkg update` + `opkg list-upgradable`) on each device, one after another. The overview shows the number of packages to update (tile and on every card), the device page lists them with the installed and new version. The **Check for updates** button refreshes the list right away; after **Upgrade packages** it is checked again.
+
+A new **OpenWrt release** is looked up in `https://downloads.openwrt.org/.versions.json` (needs internet from HA): a newer release of the same series (e.g. 25.12.2 → 25.12.3) has priority, otherwise a newer stable series. The firmware itself is not upgraded by the add-on – use firmware-selector and `sysupgrade`.
+
+### Configuration backups
+
+The **Back up now** button on an AP or router page (full access) and, every `backup_interval_days` (default 7), an automatic backup run `sysupgrade -b` on the device. The archive is transferred over SSH and stored in the add-on's `/data/backups/<device>/<device>-YYYY-mm-dd_HHMMSS.tar.gz`; the last `backup_keep` (default 10) are kept. `/data` is part of Home Assistant backups, so the AP configurations are backed up with HA.
+
+- The archive contains **Wi-Fi passwords and keys** – only users with full access can download it (link in the backup list).
+- **Restore:** upload the file to the device (e.g. `scp file.tar.gz root@ap:/tmp/`) and run `sysupgrade -r /tmp/file.tar.gz && reboot`, or use LuCI → System → Backup / Flash Firmware → Restore. The add-on does not restore by itself.
+- Which files are included is set on the device in `/etc/sysupgrade.conf` (same as for `sysupgrade`).
+
+### Disconnecting and blocking Wi-Fi clients
+
+In the client tables (AP page, **Clients**) users with full access have a **Disconnect…** menu:
+- **disconnect only** – the client is disconnected (deauthentication) and usually reconnects right away; useful to make it roam to a closer AP or to reconnect a stuck device,
+- **+ block 10 min / 1 h / 24 h** – disconnected and refused for that time on **all APs broadcasting the same SSID** (otherwise it would just join another AP).
+
+The block is kept in `hostapd` memory: a Wi-Fi restart (`wifi reload`, SSID change) or an AP reboot clears it. A permanent block is a MAC filter (`macfilter`/`maclist`) in the SSID configuration – not done by the add-on.
 
 ### Users and permissions
 
@@ -85,8 +124,8 @@ Login is handled by Home Assistant (Ingress); the add-on has no passwords of its
 
 | Role | Who | Can |
 |---|---|---|
-| full access | in `full_access` | everything: reboot, packages, SSID changes |
-| read-only | in `read_access` | overview, clients, SSIDs, AP details – no action buttons |
+| full access | in `full_access` | everything: reboot, packages, SSID changes, backups (incl. download), disconnecting clients |
+| read-only | in `read_access` | overview, clients, SSIDs, AP details, list of updates and backups – no action buttons, no backup download |
 | no access | in neither list | "Access denied" page |
 
 - Use the HA **username** (Settings → People → Users) or the display name, case-insensitive.
@@ -160,6 +199,8 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | clients (signal, rate, traffic) | `ubus call hostapd.<if> get_clients` |
 | switch MAC table (wired devices on AP ports) | `swconfig dev <switch> get arl_table`, `/proc/net/arp` |
 | waking quiet wired devices (router, every 4 min) | `ping -c1 -W1 <ip>` |
+| packages to update (every `update_check_hours`) | `apk update -q; apk list --upgradable` / `opkg update; opkg list-upgradable` |
+| configuration backup | `sysupgrade -b` |
 | interfaces and VLANs (router, APs) | `ubus call network.interface dump`, `ubus call network.device status` |
 | client names and IPs (router) | `ubus call luci-rpc getDHCPLeases`, else `/tmp/dhcp.leases`; `uci show dhcp` (reservations), `/proc/net/arp` |
 | device names (Home Assistant) | websocket `config/device_registry/list` (MAC connections) |
@@ -190,6 +231,8 @@ Missing keys fall back to English.
 | `TimeoutError` / `ConnectionRefused` | AP off, wrong IP, or dropbear not listening on LAN. |
 | Clients without name/IP | `dhcp_router` not set, key not on the router, or a static IP. |
 | No SSIDs | Wi-Fi disabled on the AP (`ubus list 'hostapd.*'` is empty). |
+| No notification about a new device | `notify_new_devices` off, the device was already known (first start = baseline), or the call to HA failed (Settings page shows the error). |
+| Backup fails | `sysupgrade -b` missing or `/tmp` full on the device; the error is shown after **Back up now** and in the add-on log. |
 | Wired device under the router instead of its AP | Open the AP page → **Switch diagnostics**: is the uplink detected, is the MAC on a local port, is it in "last seen"? Quiet devices are found within a few minutes (router ping). |
 | "Access denied" | HA user is in neither `full_access` nor `read_access`. |
 | Everyone is read-only | Ingress sends no username (Settings shows "Přihlášen jako –"), or the name does not match the HA username. |
@@ -233,6 +276,12 @@ ha_names: true               # jména zařízení z Home Assistantu (podle MAC),
 names:                       # vlastní jména podle MAC, nejvyšší priorita
   - mac: aa:bb:cc:dd:ee:ff
     name: Rele-kotel
+notify_new_devices: true     # upozornění v HA, když se v síti objeví zařízení, které add-on ještě neviděl
+notify_service: ""           # volitelně, např. notify.mobile_app_telefon (i do mobilu)
+notify_random_mac: true      # false = neupozorňovat na náhodné (soukromé) MAC telefonů
+update_check_hours: 12       # h, 0 = vypnuto: kontrola balíčků k aktualizaci a nové verze OpenWrt
+backup_interval_days: 7      # dny, 0 = vypnuto: automatická záloha konfigurace každého zařízení
+backup_keep: 10              # kolik záloh se drží pro každé zařízení
 aps:                         # všechna spravovaná zařízení – add-on používá jen tato
   - name: Router
     host: 192.168.1.1
@@ -268,10 +317,43 @@ chmod 600 /etc/dropbear/authorized_keys
 | Zkontrolovat aktualizace | stránka AP | `apk update && apk list --upgradable` (starší AP: `opkg`) |
 | Upgrade balíčků | stránka AP | `apk upgrade` (starší AP: `opkg upgrade …`) |
 | Název, heslo, skrytí, zapnutí SSID | stránka SSID | `uci set wireless.<sekce>.… && uci commit wireless && wifi reload` |
+| Záloha konfigurace | stránka AP nebo routeru | `sysupgrade -b /tmp/…` (archiv se přenese přes SSH a na zařízení smaže) |
+| Odpojit / zablokovat Wi-Fi klienta | tabulky klientů (stránka AP, Klienti) | `ubus call hostapd.<if> del_client '{"addr":…,"deauth":true,"ban_time":…}'` |
 
 - Změna SSID upravuje **existující** SSID (sekce `wifi-iface`), nová nepřidává. Zaškrtnutím se vybírají AP a rádia (pásma), kterých se změna týká. Nejdřív se zobrazí náhled příkazů `uci`, zapíše se až po potvrzení. Heslo se nikde nezobrazuje.
 - Restart a upgrade se potvrzují.
 - **Upgrade balíčků** OpenWrt obecně nedoporučuje: nové verze jdou do overlay a na malých AP (8 MB flash) může místo dojít. Pro větší změny je lepší nový image a `sysupgrade`.
+
+### Nová zařízení v síti
+
+Když se v síti objeví zařízení (MAC adresa), které add-on ještě nikdy neviděl – na Wi-Fi, na portu AP nebo v ARP tabulce routeru – pošle upozornění do Home Assistantu (zvoneček, `persistent_notification`). Je v něm jméno (pokud je známé), MAC, IP, síť/VLAN a kde zařízení je (AP + SSID, port AP, router). S `notify_service` (např. `notify.mobile_app_telefon`) jde upozornění i do té služby.
+
+- Při **prvním spuštění** se všechna zařízení, která jsou zrovna v síti, berou jako známá – žádná záplava upozornění. Seznam je v `/data/known_devices.json` (smazáním souboru se začne znovu).
+- Zařízení poprvé viděná za posledních 24 hodin mají v tabulkách klientů a na stránce routeru štítek **nové**.
+- Telefony používají pro každou Wi-Fi **náhodnou (soukromou) MAC**; takové adresy jsou v upozornění označené. `notify_random_mac: false` je vynechá.
+- Samotné AP a router se nehlásí.
+
+### Aktualizace
+
+Každých `update_check_hours` (výchozí 12) spustí add-on na každém zařízení postupně `apk update` + `apk list --upgradable` (starší zařízení `opkg update` + `opkg list-upgradable`). Přehled ukazuje počet balíčků k aktualizaci (dlaždice a na každé kartě), stránka zařízení je vypíše s nainstalovanou a novou verzí. Tlačítko **Zkontrolovat aktualizace** seznam hned obnoví; po **Upgrade balíčků** se zkontroluje znovu.
+
+Nová **verze OpenWrt** se zjišťuje z `https://downloads.openwrt.org/.versions.json` (HA potřebuje internet): přednost má novější verze stejné řady (např. 25.12.2 → 25.12.3), jinak novější stabilní řada. Firmware add-on neaktualizuje – na to firmware-selector a `sysupgrade`.
+
+### Zálohy konfigurace
+
+Tlačítko **Zálohovat teď** na stránce AP nebo routeru (plný přístup) a jednou za `backup_interval_days` (výchozí 7) automatická záloha spustí na zařízení `sysupgrade -b`. Archiv se přenese přes SSH a uloží do `/data/backups/<zařízení>/<zařízení>-RRRR-mm-dd_HHMMSS.tar.gz` add-onu; drží se posledních `backup_keep` (výchozí 10). `/data` je součástí záloh Home Assistantu, takže konfigurace AP se zálohují spolu s HA.
+
+- Archiv obsahuje **hesla Wi-Fi a klíče** – stáhnout ho může jen uživatel s plným přístupem (odkaz v seznamu záloh).
+- **Obnova:** soubor nahrát na zařízení (např. `scp soubor.tar.gz root@ap:/tmp/`) a spustit `sysupgrade -r /tmp/soubor.tar.gz && reboot`, nebo LuCI → Systém → Zálohování / Flash firmware → Obnovit. Add-on sám neobnovuje.
+- Které soubory se zálohují, určuje na zařízení `/etc/sysupgrade.conf` (stejně jako pro `sysupgrade`).
+
+### Odpojení a blokace Wi-Fi klientů
+
+V tabulkách klientů (stránka AP, **Klienti**) mají uživatelé s plným přístupem nabídku **Odpojit…**:
+- **jen odpojit** – klient se odpojí (deautentizace) a obvykle se hned připojí znovu; hodí se, aby přešel na bližší AP nebo aby se zaseklé zařízení znovu připojilo,
+- **+ blokovat 10 min / 1 h / 24 h** – odpojí a po tu dobu nepustí zpět na **všech AP, která vysílají stejné SSID** (jinak by se připojil k jinému AP).
+
+Blokaci drží `hostapd` v paměti: restart Wi-Fi (`wifi reload`, změna SSID) nebo restart AP ji zruší. Trvalé blokování je MAC filtr (`macfilter`/`maclist`) v nastavení SSID – to add-on nedělá.
 
 ### Uživatelé a oprávnění
 
@@ -279,8 +361,8 @@ Přihlášení řeší Home Assistant (Ingress), add-on vlastní hesla nemá. Po
 
 | Role | Kdo | Co smí |
 |---|---|---|
-| plný přístup | je v `full_access` | vše: restart, balíčky, změny SSID |
-| jen čtení | je v `read_access` | přehled, klienti, SSID, detail AP – bez tlačítek akcí |
+| plný přístup | je v `full_access` | vše: restart, balíčky, změny SSID, zálohy (i stažení), odpojení klientů |
+| jen čtení | je v `read_access` | přehled, klienti, SSID, detail AP, seznam aktualizací a záloh – bez tlačítek akcí, bez stažení záloh |
 | bez přístupu | není v žádném seznamu | stránka „Přístup odepřen“ |
 
 - Píše se **uživatelské jméno** HA (Nastavení → Lidé → Uživatelé) nebo zobrazované jméno, velikost písmen nehraje roli.
@@ -354,6 +436,8 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | klienti (signál, rychlost, data) | `ubus call hostapd.<if> get_clients` |
 | tabulka MAC adres switche (kabel na portech AP) | `swconfig dev <switch> get arl_table`, `/proc/net/arp` |
 | buzení tichých kabelových zařízení (router, každé 4 min) | `ping -c1 -W1 <ip>` |
+| balíčky k aktualizaci (každých `update_check_hours`) | `apk update -q; apk list --upgradable` / `opkg update; opkg list-upgradable` |
+| záloha konfigurace | `sysupgrade -b` |
 | rozhraní a VLANy (router, AP) | `ubus call network.interface dump`, `ubus call network.device status` |
 | jména a IP klientů (router) | `ubus call luci-rpc getDHCPLeases`, jinak `/tmp/dhcp.leases`; `uci show dhcp` (rezervace), `/proc/net/arp` |
 | jména zařízení (Home Assistant) | websocket `config/device_registry/list` (MAC v connections) |
@@ -384,6 +468,8 @@ Chybějící klíče se vezmou z angličtiny.
 | `TimeoutError` / `ConnectionRefused` | AP vypnutý, špatná IP, nebo dropbear neposlouchá na LAN. |
 | Klienti bez jména/IP | `dhcp_router` nenastaven, klíč není na routeru, nebo statická IP. |
 | Žádná SSID | Wi-Fi na AP vypnutá (`ubus list 'hostapd.*'` je prázdné). |
+| Nepřišlo upozornění na nové zařízení | `notify_new_devices` vypnuté, zařízení už bylo známé (první spuštění = výchozí stav), nebo selhalo volání HA (chybu ukáže stránka Nastavení). |
+| Záloha selže | Na zařízení chybí `sysupgrade -b` nebo je plné `/tmp`; chyba se ukáže po **Zálohovat teď** a v logu add-onu. |
 | Kabelové zařízení u routeru místo u svého AP | Stránka AP → **Diagnostika switche**: je poznaný uplink, je MAC na lokálním portu, je v „naposledy viděno“? Tichá zařízení se najdou do pár minut (ping z routeru). |
 | „Přístup odepřen“ | Uživatel HA není v `full_access` ani `read_access`. |
 | Všichni mají jen čtení | Ingress neposílá jméno uživatele (Nastavení ukáže „Přihlášen jako –“), nebo jméno neodpovídá uživatelskému jménu HA. |

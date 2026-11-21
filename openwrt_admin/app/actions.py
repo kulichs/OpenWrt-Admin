@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import shlex
@@ -118,3 +119,24 @@ async def apply_ssid(cfg: APConfig, key, changes: list[SsidChange], t) -> Result
     r = await run(cfg, key, f"{script} || {{ uci revert wireless; echo {shlex.quote(t('msg.reverted'))}; exit 1; }}",
                   timeout=60, t=t)
     return r
+
+
+# ---------------------------------------------------------------- odpojeni klienta
+
+MAC_RE = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
+IFNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,32}$")
+BAN_CHOICES = (0, 600, 3600, 86400)  # s: jen odpojit, 10 min, 1 h, 24 h
+
+
+def kick_cmd(ifname: str, mac: str, ban: int) -> str:
+    """hostapd del_client: deauth; ban_time (ms) drzi hostapd v pameti – do restartu Wi-Fi/AP."""
+    if not IFNAME_RE.match(ifname) or not MAC_RE.match(mac) or ban not in BAN_CHOICES:
+        raise ValueError("bad kick args")
+    args = {"addr": mac, "reason": 5, "deauth": True, "ban_time": ban * 1000}
+    return f"ubus call hostapd.{ifname} del_client {shlex.quote(json.dumps(args))}"
+
+
+async def kick(cfg: APConfig, key, targets: list[str], mac: str, ban: int, t) -> Result:
+    """targets = ifname na tomto AP (vic, kdyz se blokuje na vsech rozhranich se stejnym SSID)."""
+    cmd = " ; ".join(f"{kick_cmd(i, mac, ban)} && echo {shlex.quote(cfg.name + ' ' + i + ': OK')}" for i in targets)
+    return await run(cfg, key, cmd, timeout=20, t=t)

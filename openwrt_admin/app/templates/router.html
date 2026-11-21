@@ -55,6 +55,7 @@
     </table>
   </div>
 </section>
+{% include "_maint.html" %}
 {% set on = leases | selectattr("online") | list %}
 {% set off = leases | rejectattr("online") | list %}
 <h2>{{ t("router.leases", n=(on | length)) }}</h2>
@@ -63,7 +64,7 @@
   <thead><tr><th>{{ t("col.device") }}</th><th>IP</th><th>MAC</th><th>{{ t("col.network") }}</th><th>{{ t("router.connection") }}</th></tr></thead>
   {% for l in rows %}
   <tr class="{{ '' if l.online else 'row-off' }}">
-    <td>{{ l.hostname or "–" }}{% if l.src in ('ha', 'manual', 'static') %} <span class="tag src-{{ l.src }}" title="{{ t('src.' ~ l.src ~ '_title') }}">{{ t('src.' ~ l.src) }}</span>{% endif %}</td>
+    <td>{{ l.hostname or "–" }}{% if l.src in ('ha', 'manual', 'static') %} <span class="tag src-{{ l.src }}" title="{{ t('src.' ~ l.src ~ '_title') }}">{{ t('src.' ~ l.src) }}</span>{% endif %}{% if l.first_seen is recent %} <span class="tag tag-new" title="{{ t('new.title', ago=(l.first_seen | ago)) }}">{{ t("new.tag") }}</span>{% endif %}</td>
     <td class="mono">{{ l.ip or "–" }}{% if l.static %} <span class="muted small">{{ t("router.static_ip") }}</span>{% endif %}</td>
     <td class="mono">{{ l.mac }}</td>
     <td>{% if l.known_net %}{{ t("map.lan") if l.vlan is none else "VLAN " ~ l.vlan }} <span class="muted small">{{ l.iface }}</span>{% else %}–{% endif %}</td>

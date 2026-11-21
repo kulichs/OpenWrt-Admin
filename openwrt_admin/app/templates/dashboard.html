@@ -3,6 +3,8 @@
 <section class="summary">
   <div class="stat" title="{{ devices | map(attribute='name') | join(', ') }}"><span class="num">{{ devices | selectattr('online') | list | length }}/{{ devices | length }}</span><span class="lbl">{{ t("dash.devices_online") }}</span></div>
   <div class="stat"><span class="num">{{ clients | length }}</span><span class="lbl">{{ t("dash.clients") }}</span></div>
+  {% set ut = store.updates_total() %}
+  <div class="stat {{ 'stat-warn' if ut }}"><span class="num">{{ ut }}</span><span class="lbl">{{ t("dash.updates") }}</span></div>
   {% for ssid, group in clients | groupby("ssid") %}
   <div class="stat"><span class="num">{{ group | length }}</span><span class="lbl">{{ ssid }}</span></div>
   {% endfor %}
@@ -30,6 +32,8 @@
       <dt>{{ i.name | upper }}</dt><dd><span class="{{ '' if i.up else 'err' }}">{{ i.ipv4 or (t("state.on") if i.up else t("state.down")) }}</span></dd>
       {% endfor %}
       <dt>{{ t("router.dhcp") }}</dt><dd>{{ t("setup.leases", n=(store.leases | length)) }}</dd>
+      {% set u = store.update_info(r) %}
+      <dt>{{ t("upd.short") }}</dt><dd>{% if u.error %}<span class="err">!</span>{% elif not u.checked %}<span class="muted">–</span>{% elif u.count %}<span class="warn">{{ t("upd.count", n=u.count) }}</span>{% else %}<span class="sig good">{{ t("upd.none") }}</span>{% endif %}{% if u.release %} · <span class="warn">OpenWrt {{ u.release }}</span>{% endif %}</dd>
     </dl>
     <table class="mini">
       {% for i in r.interfaces if not i.wan %}
@@ -59,6 +63,8 @@
       <dt>{{ t("sys.overlay") }}</dt><dd><span class="{{ 'warn' if ap.overlay_avail < 300*1024 }}">{{ t("dash.free", size=(ap.overlay_avail | bytes)) }}</span>
         <span class="bar"><span style="width: {{ pct }}%"></span></span></dd>
       {% endif %}
+      {% set u = store.update_info(ap) %}
+      <dt>{{ t("upd.short") }}</dt><dd>{% if u.error %}<span class="err">!</span>{% elif not u.checked %}<span class="muted">–</span>{% elif u.count %}<span class="warn">{{ t("upd.count", n=u.count) }}</span>{% else %}<span class="sig good">{{ t("upd.none") }}</span>{% endif %}{% if u.release %} · <span class="warn">OpenWrt {{ u.release }}</span>{% endif %}</dd>
       <dt>{{ t("ap.radios") }}</dt><dd>{% for r in ap.radios %}<span class="tag {{ 'tag-off' if not r.up }}">{{ (r.band | band) or r.name }} ch {{ r.channel }} {{ r.htmode }}</span>{% endfor %}</dd>
     </dl>
     <table class="mini">
