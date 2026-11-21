@@ -24,7 +24,21 @@ chmod 600 /etc/dropbear/authorized_keys</pre>
   </table>
 </div>
 <div class="panel">
-  <h2>3. JSON API</h2>
+  <h2>3. Uživatelé a oprávnění</h2>
+  <p>Přihlášení řeší Home Assistant, add-on podle jména uživatele HA rozhoduje, co smí.</p>
+  <dl>
+    <dt>Přihlášen jako</dt><dd>{{ user.name or "–" }}{% if user.display %} ({{ user.display }}){% endif %}{% if user.id %} <span class="muted small mono">{{ user.id }}</span>{% endif %}</dd>
+    <dt>Role</dt><dd><span class="user-badge role-{{ user.role }}">{{ user.label }}</span> <span class="muted small">{{ user.why }}</span></dd>
+    <dt>full_access</dt><dd class="mono">{{ (store.opts.full_access or []) | join(", ") or "–" }}</dd>
+    <dt>read_access</dt><dd class="mono">{{ (store.opts.read_access or []) | join(", ") or "–" }}</dd>
+  </dl>
+  {% if not store.opts.full_access and not store.opts.read_access %}
+  <p class="warn small">Role nejsou nastavené, každý uživatel HA, který otevře panel, má plný přístup (restart, apk, SSID). Doplň v konfiguraci add-onu <code>full_access</code> a <code>read_access</code>.</p>
+  {% endif %}
+  <p class="muted small">Do seznamů se píše uživatelské jméno HA (Nastavení → Lidé → Uživatelé), případně zobrazované jméno; velikost písmen nehraje roli.</p>
+</div>
+<div class="panel">
+  <h2>4. JSON API</h2>
   <p>Aktuální stav je i ve strojově čitelné podobě: <a href="{{ base }}/api/state"><code>api/state</code></a>.</p>
 </div>
 {% endblock %}

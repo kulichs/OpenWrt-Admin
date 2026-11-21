@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>SSID</h1>
+{% if can_edit %}
 <p class="muted">Změna se zapíše přes <code>uci</code> na všechny zaškrtnuté AP. Prázdné pole = beze změny. Před zápisem se zobrazí náhled.</p>
+{% else %}
+<p class="muted">Máš přístup jen pro čtení, SSID nelze měnit.</p>
+{% endif %}
 {% if not groups %}<p class="empty">Žádná SSID (AP nejsou online, nebo se ještě nenačetla).</p>{% endif %}
 {% for g in groups %}
 <div class="panel">
@@ -12,13 +16,14 @@
       <thead><tr><th></th><th>AP</th><th>Rádio</th><th>Pásmo</th><th>Síť</th><th>Šifrování</th><th>Skryté</th><th>Stav</th><th class="mono">uci sekce</th></tr></thead>
       {% for i in g["items"] %}
       <tr class="{{ 'row-off' if i.disabled }}">
-        <td><input type="checkbox" name="target" value="{{ i.ap }}|{{ i.section }}" checked></td>
+        <td>{% if can_edit %}<input type="checkbox" name="target" value="{{ i.ap }}|{{ i.section }}" checked>{% endif %}</td>
         <td>{{ i.ap }}</td><td>{{ i.device }}</td><td>{{ i.band or "–" }}</td><td>{{ i.network }}</td>
         <td>{{ i.encryption or "none" }}</td><td>{{ 'ano' if i.hidden else 'ne' }}</td>
         <td>{{ 'vypnuto' if i.disabled else 'zapnuto' }}</td><td class="mono small">{{ i.section }}</td>
       </tr>
       {% endfor %}
     </table>
+    {% if can_edit %}
     <div class="filters edit">
       <label>Nový název <input name="new_ssid" maxlength="32" placeholder="{{ g.ssid }}"></label>
       <label>Nové heslo <input name="new_key" type="password" minlength="8" maxlength="63" autocomplete="new-password" placeholder="beze změny"></label>
@@ -26,6 +31,7 @@
       <label>Stav <select name="disabled"><option value="">beze změny</option><option value="0">zapnout</option><option value="1">vypnout</option></select></label>
       <button type="submit">Náhled změn</button>
     </div>
+    {% endif %}
   </form>
   <div class="ssid-out"></div>
 </div>

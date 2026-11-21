@@ -2,7 +2,7 @@
 
 | Add-on | Popis |
 |---|---|
-| [OpenWrt-Admin](openwrt_admin/) | Správa OpenWrt AP a Wi-Fi klientů (SSH/ubus): přehled, SSID, restart, aktualizace |
+| [OpenWrt-Admin](openwrt_admin/) | Správa OpenWrt AP a Wi-Fi klientů (SSH/ubus): přehled, SSID, restart, aktualizace, role podle uživatelů HA |
 
 ## Instalace do HA
 

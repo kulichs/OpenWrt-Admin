@@ -24,3 +24,12 @@
 
 ## 0.2.1
 - Oprava: add-on 0.2.0 nenastartoval, chyběla závislost `python-multipart` (formuláře SSID).
+
+## 0.3.0
+- **Uživatelé a oprávnění** podle přihlášeného uživatele Home Assistantu (hlavičky Ingressu): `full_access` (restart, apk, SSID), `read_access` (jen čtení), ostatní „Přístup odepřen“. Bez nastavení rolí mají plný přístup všichni (jako dřív).
+- Když Ingress nepošle jméno uživatele a role jsou nastavené, add-on přepne do režimu jen pro čtení.
+- Kontrola oprávnění na serveru, uživatel s právem jen pro čtení nevidí tlačítka akcí ani formuláře SSID.
+- `panel_admin: false`: panel vidí i běžní uživatelé HA, o přístupu rozhoduje add-on.
+- V horní liště je jméno a role, v Nastavení kdo je přihlášený a proč má danou roli.
+- V logu je u akcí jméno uživatele (např. `radim: Restart OpenWrt_Puda`).
+- Oprava: pásmo rádia u AP se starším `hwmode` (11g/11a) se zobrazuje jako 2,4/5 GHz.

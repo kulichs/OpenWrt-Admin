@@ -31,6 +31,10 @@ ssh_user: root
 poll_interval: 30            # s, 10–600
 dhcp_router: 192.168.223.1   # router s DHCP (jména a IP klientů); prázdné = vypnuto; lze i "host:port"
 demo: false                  # true = vymyšlená data, bez SSH
+full_access:                 # uživatelé HA s plným přístupem (restart, apk, SSID)
+  - radim
+read_access:                 # uživatelé HA jen pro čtení
+  - jana
 aps:
   - name: OpenWrt_UnifiAP1
     host: 192.168.223.18
@@ -40,6 +44,23 @@ aps:
     host: 192.168.223.y
     port: 22                 # volitelné
 ```
+
+## Uživatelé a oprávnění (od 0.3)
+
+Přihlášení řeší Home Assistant (Ingress), add-on vlastní hesla nemá. Podle uživatele HA, který panel otevřel, přidělí roli:
+
+| Role | Kdo | Co smí |
+|---|---|---|
+| plný přístup | je v `full_access` | vše: restart, aktualizace balíčků, změny SSID |
+| jen čtení | je v `read_access` | přehled, klienti, SSID, detail AP – bez tlačítek akcí |
+| bez přístupu | není v žádném seznamu | stránka „Přístup odepřen“ |
+
+- Do seznamů se píše **uživatelské jméno** HA (Nastavení → Lidé → Uživatelé), případně zobrazované jméno. Velikost písmen nehraje roli.
+- **Oba seznamy prázdné:** plný přístup má každý, kdo panel otevře (stejně jako do 0.2). Stránka Nastavení na to upozorní.
+- **Ingress nepošle jméno uživatele:** režim jen pro čtení, nikdy plný přístup.
+- Kontroluje se na serveru, ne jen v zobrazení: akce uživatele s právem jen pro čtení skončí chybou.
+- Panel je viditelný všem uživatelům HA (`panel_admin: false`). Samotné schování panelu by nestačilo, HA ingress adresu u běžného uživatele neblokuje.
+- Kdo je přihlášený a proč má danou roli, ukazuje stránka **Nastavení → Uživatelé a oprávnění**. Akce se logují i se jménem (`radim: Restart OpenWrt_Puda`).
 
 ## SSH klíč
 
@@ -80,5 +101,7 @@ Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každ
 | `TimeoutError` / `ConnectionRefused` | AP je vypnutý, špatná IP, nebo SSH (dropbear) neposlouchá na LAN. |
 | Klienti bez jména/IP | `dhcp_router` nenastaven, klíč není na routeru, nebo klient má statickou IP. |
 | Žádná SSID | AP nemá zapnutou Wi-Fi (`ubus list 'hostapd.*'` je prázdné). |
+| „Přístup odepřen“ | Uživatel HA není v `full_access` ani `read_access`. |
+| Všichni mají jen čtení | Ingress neposílá jméno uživatele (Nastavení v add-onu ukáže „Přihlášen jako –“), nebo jméno v seznamu neodpovídá uživatelskému jménu HA. |
 
 Logy: karta **Protokol** u add-onu.

@@ -1,5 +1,5 @@
 name: OpenWrt-Admin
-version: "0.2.1"
+version: "0.3.0"
 slug: openwrt_admin
 description: Správa OpenWrt access pointů a Wi-Fi klientů přes SSH (přehled, SSID, restart, aktualizace balíčků)
 arch:
@@ -12,11 +12,14 @@ ingress: true
 ingress_port: 8099
 panel_icon: mdi:access-point-network
 panel_title: OpenWrt-Admin
+panel_admin: false
 options:
   ssh_user: root
   poll_interval: 30
   dhcp_router: 192.168.223.1
   demo: false
+  full_access: []
+  read_access: []
   aps:
     - name: OpenWrt_UnifiAP1
       host: 192.168.223.18
@@ -25,6 +28,10 @@ schema:
   poll_interval: int(10,600)
   dhcp_router: str?
   demo: bool
+  full_access:
+    - str
+  read_access:
+    - str
   aps:
     - name: str
       host: str

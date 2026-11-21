@@ -96,6 +96,19 @@ def band_of(freq) -> str:
     return ""
 
 
+BAND_NAMES = {
+    "2g": "2,4 GHz", "11b": "2,4 GHz", "11g": "2,4 GHz", "11ng": "2,4 GHz", "11bg": "2,4 GHz",
+    "5g": "5 GHz", "11a": "5 GHz", "11na": "5 GHz", "11ac": "5 GHz",
+    "6g": "6 GHz", "60g": "60 GHz",
+}
+
+
+def norm_band(v) -> str:
+    """Pasmo radia z uci: novejsi `band` (2g/5g/6g) i starsi `hwmode` (11g/11a) -> '2,4 GHz' apod."""
+    v = str(v or "").strip()
+    return BAND_NAMES.get(v.lower(), v)
+
+
 def wifi_standard(c: dict, freq) -> str:
     """Nejvyssi standard, ktery klient s AP vyjednal (hostapd flagy he/vht/ht)."""
     if c.get("eht"):
@@ -205,7 +218,7 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
                     "disabled": bool(r.get("disabled")),
                     "channel": rc.get("channel", ""),
                     "htmode": rc.get("htmode", ""),
-                    "band": rc.get("band", rc.get("hwmode", "")),
+                    "band": norm_band(rc.get("band") or rc.get("hwmode")),
                     "txpower": rc.get("txpower", "auto"),
                     "country": rc.get("country", ""),
                 })

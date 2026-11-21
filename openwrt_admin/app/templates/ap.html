@@ -2,6 +2,7 @@
 {% block content %}
 <h1><span class="dot {{ 'on' if ap.online else 'off' }}"></span> {{ ap.name }} <span class="muted">{{ ap.host }}</span></h1>
 {% set act = base ~ "/ap/" ~ (ap.name | urlencode) %}
+{% if can_edit %}
 <div class="panel actions">
   <h2>Akce</h2>
   <div class="btns">
@@ -20,6 +21,7 @@
   {% endif %}
   <div id="action-out" hx-preserve="true"></div>
 </div>
+{% endif %}
 {% if not ap.online %}
 <p class="err">Nedostupný: {{ ap.error or "zatím nenačteno" }}</p>
 {% else %}
@@ -46,7 +48,7 @@
           <td>{{ r.txpower }}</td><td>{{ r.country }}</td><td>{{ 'zapnuto' if r.up else ('vypnuto' if r.disabled else 'dole') }}</td></tr>
       {% endfor %}
     </table>
-    <h2>SSID <a class="small" href="{{ base }}/ssids">upravit</a></h2>
+    <h2>SSID {% if can_edit %}<a class="small" href="{{ base }}/ssids">upravit</a>{% endif %}</h2>
     <table class="list">
       <thead><tr><th>SSID</th><th>Síť</th><th>Pásmo</th><th>Rozhraní</th><th>Šifrování</th><th class="num">Klienti</th></tr></thead>
       {% for s in ap.ssids %}

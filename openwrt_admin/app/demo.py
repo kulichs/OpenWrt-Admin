@@ -30,7 +30,7 @@ def demo_states() -> tuple[list[APState], dict]:
                 mem_total=60 * 2**20, mem_avail=31 * 2**20,
                 overlay_size=1600 * 1024, overlay_used=420 * 1024, overlay_avail=1180 * 1024)
     a.radios = [{"name": "radio0", "up": True, "disabled": False, "channel": 6, "htmode": "HT20",
-                 "band": "2g", "txpower": "auto", "country": "CZ"}]
+                 "band": "2,4 GHz", "txpower": "auto", "country": "CZ"}]
     specs = [("phy0-ap0", "kulichap1", "lan", 3), ("phy0-ap1", "kulich_host", "host", 1),
              ("phy0-ap2", "kulichiot", "iot", 6)]
     for ifn, ssid, net, n in specs:
@@ -45,9 +45,9 @@ def demo_states() -> tuple[list[APState], dict]:
                 mem_total=120 * 2**20, mem_avail=70 * 2**20,
                 overlay_size=12 * 2**20, overlay_used=3 * 2**20, overlay_avail=9 * 2**20)
     b.radios = [{"name": "radio0", "up": True, "disabled": False, "channel": 1, "htmode": "HT20",
-                 "band": "2g", "txpower": 20, "country": "CZ"},
+                 "band": "2,4 GHz", "txpower": 20, "country": "CZ"},
                 {"name": "radio1", "up": True, "disabled": False, "channel": 36, "htmode": "VHT80",
-                 "band": "5g", "txpower": "auto", "country": "CZ"}]
+                 "band": "5 GHz", "txpower": "auto", "country": "CZ"}]
     specs = [("phy0-ap0", "kulichap1", "lan", "radio0", 2), ("phy1-ap0", "kulichap1", "lan", "radio1", 4),
              ("phy0-ap1", "kulichiot", "iot", "radio0", 5), ("phy0-ap2", "kulich_host", "host", "radio0", 0)]
     for ifn, ssid, net, radio, n in specs:

@@ -79,3 +79,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .filters.edit { margin: .8rem 0 0; }
 .filters.edit label { display: flex; flex-direction: column; font-size: .85em; color: var(--muted); gap: .15rem; }
 tr.row-off td { opacity: .6; }
+
+/* 0.3.0 – uzivatel a role */
+.user-badge { font-size: .85em; border: 1px solid var(--line); border-radius: 10px; padding: .1rem .55rem; color: var(--muted); }
+.user-badge.role-full { border-color: var(--good); color: var(--good); }
+.user-badge.role-read { border-color: var(--ok); color: var(--ok); }
+.user-badge.role-none { border-color: var(--bad); color: var(--bad); }

@@ -29,6 +29,7 @@ try {
     <a href="{{ base }}/setup" class="{{ 'active' if page == 'setup' }}">Nastavení</a>
   </nav>
   <form method="post" action="{{ base }}/refresh?back={{ request.url.path | urlencode }}{{ ('%3F' ~ request.url.query | urlencode) if request.url.query }}">
+    <span class="user-badge role-{{ user.role }}" title="{{ user.why }}">{{ user.display or user.name or "?" }} · {{ user.label }}</span>
     <span class="muted">Aktualizováno {{ store.last_poll | ago }}</span>
     <button type="submit">Obnovit</button>
   </form>
