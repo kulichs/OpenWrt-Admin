@@ -3,7 +3,7 @@
 <h1>Nastavení</h1>
 <div class="panel">
   <h2>1. SSH klíč add-onu</h2>
-  <p>Add-on se na AP i router přihlašuje tímto klíčem (pouze čtení přes <code>ubus</code>). Přidej ho na každé zařízení:</p>
+  <p>Add-on se na AP i router přihlašuje tímto klíčem (čtení přes <code>ubus</code>, změny přes <code>uci</code>). Přidej ho na každé zařízení:</p>
   <pre id="pub">{{ store.pubkey }}</pre>
   <p>Na AP/routeru:</p>
   <pre>echo '{{ store.pubkey }}' &gt;&gt; /etc/dropbear/authorized_keys

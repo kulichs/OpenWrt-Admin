@@ -1,22 +1,24 @@
-"""OpenWrt-Admin - Home Assistant add-on (jen cteni)."""
+"""OpenWrt-Admin - Home Assistant add-on."""
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import os
+import secrets
 import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 
 import asyncssh
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .collector import APConfig, APState, collect_ap, collect_leases
+from . import actions
+from .collector import APConfig, APState, band_of, collect_ap, collect_leases
 from .demo import demo_states
 
 DATA = Path(os.environ.get("OWADMIN_DATA", "/data"))
@@ -65,6 +67,39 @@ class Store:
         self.leases: dict[str, dict] = {}
         self.last_poll = 0.0
         self.lock = asyncio.Lock()
+        self.ap_locks: dict[str, asyncio.Lock] = {}
+        self.pending: dict[str, tuple[float, dict[str, list[actions.SsidChange]]]] = {}
+
+    def ap(self, name: str) -> APState:
+        ap = next((a for a in self.aps if a.name == name), None)
+        if not ap:
+            raise HTTPException(404, "AP nenalezen")
+        return ap
+
+    def cfg(self, name: str) -> APConfig:
+        a = next((a for a in self.opts["aps"] if a["name"] == name), None)
+        if not a:
+            raise HTTPException(404, "AP nenalezen")
+        return APConfig(name=a["name"], host=a["host"], port=int(a.get("port") or 22),
+                        user=self.opts.get("ssh_user", "root"))
+
+    def ap_lock(self, name: str) -> asyncio.Lock:
+        return self.ap_locks.setdefault(name, asyncio.Lock())
+
+    def ssid_groups(self) -> list[dict]:
+        """SSID napric AP: [{ssid, items:[{ap, section, device, band, network, hidden, disabled, ...}]}]."""
+        groups: dict[str, list] = {}
+        for ap in self.aps:
+            bands = {r["name"]: r.get("band", "") for r in ap.radios}
+            live = {s["radio"]: s for s in ap.ssids}
+            for i in ap.wifi_ifaces:
+                if i["mode"] not in ("ap", ""):
+                    continue
+                band = bands.get(i["device"], "")
+                band = {"2g": "2,4 GHz", "5g": "5 GHz", "6g": "6 GHz"}.get(band, band) or \
+                    band_of((live.get(i["device"]) or {}).get("freq"))
+                groups.setdefault(i["ssid"], []).append({**i, "ap": ap.name, "band": band})
+        return [{"ssid": k, "items": v} for k, v in sorted(groups.items(), key=lambda kv: kv[0].lower())]
 
     async def poll(self):
         async with self.lock:
@@ -181,7 +216,7 @@ templates.env.filters.update(bytes=fmt_bytes, duration=fmt_duration, rate=fmt_ra
 def render(request: Request, name: str, **ctx):
     base = request.headers.get("X-Ingress-Path", "").rstrip("/")
     return templates.TemplateResponse(request, name, {
-        "base": base, "store": store, "now": time.time(), **ctx})
+        "base": base, "store": store, "now": time.time(), "autorefresh": True, **ctx})
 
 
 # ---------------------------------------------------------------- stranky
@@ -212,11 +247,9 @@ async def clients_page(request: Request, q: str = "", ssid: str = "", ap: str = 
 
 @app.get("/ap/{name}", response_class=HTMLResponse)
 async def ap_page(request: Request, name: str):
-    ap = next((a for a in store.aps if a.name == name), None)
-    if not ap:
-        raise HTTPException(404, "AP nenalezen")
+    ap = store.ap(name)
     clients = [c for c in store.all_clients() if c["ap"] == name]
-    return render(request, "ap.html", page="ap", ap=ap, clients=clients)
+    return render(request, "ap.html", page="ap:" + name, ap=ap, clients=clients)
 
 
 @app.get("/setup", response_class=HTMLResponse)
@@ -241,3 +274,137 @@ async def api_state():
                 for a in store.aps],
         "clients": store.all_clients(),
     }
+
+
+# ---------------------------------------------------------------- akce
+
+def require_htmx(request: Request):
+    """Akce jen z UI (htmx posila hlavicku, cizi formular ji nastavit nemuze -> CSRF)."""
+    if request.headers.get("HX-Request") != "true":
+        raise HTTPException(400, "Akce jen z rozhraní add-onu")
+
+
+def result(request: Request, title: str, r: actions.Result):
+    return render(request, "_result.html", title=title, ok=r.ok, output=r.output)
+
+
+async def ap_action(request: Request, name: str, title: str, fn, demo_text: str):
+    require_htmx(request)
+    ap = store.ap(name)
+    lock = store.ap_lock(name)
+    if lock.locked():
+        return result(request, title, actions.Result(False, "Na tomto AP už běží jiná akce, počkej na dokončení."))
+    async with lock:
+        if store.opts.get("demo"):
+            await asyncio.sleep(1)
+            return result(request, title, actions.Result(True, demo_text))
+        log.info("%s: %s", name, title)
+        r = await fn(store.cfg(name), store.key, ap)
+    log.info("%s: %s -> %s", name, title, "OK" if r.ok else "chyba")
+    return result(request, title, r)
+
+
+@app.post("/ap/{name}/reboot", response_class=HTMLResponse)
+async def ap_reboot(request: Request, name: str):
+    async def fn(cfg, key, ap):
+        r = await actions.reboot(cfg, key)
+        if r.ok:
+            ap.online, ap.error = False, "restartuje se"
+        return r
+    return await ap_action(request, name, "Restart", fn, "Restart odeslán (demo).")
+
+
+@app.post("/ap/{name}/pkg-update", response_class=HTMLResponse)
+async def ap_pkg_update(request: Request, name: str):
+    async def fn(cfg, key, ap):
+        return await actions.pkg_update(cfg, key, ap.pkg or "apk")
+    return await ap_action(request, name, "Kontrola aktualizací", fn,
+                           "== Dostupné aktualizace ==\nhostapd-utils-2025.08.26~1 < 2025.08.26~2\n"
+                           "libubox20251010-2025.10.10~1 < 2025.10.10~2")
+
+
+@app.post("/ap/{name}/pkg-upgrade", response_class=HTMLResponse)
+async def ap_pkg_upgrade(request: Request, name: str):
+    async def fn(cfg, key, ap):
+        r = await actions.pkg_upgrade(cfg, key, ap.pkg or "apk")
+        asyncio.create_task(store.poll())  # overlay se zmenil
+        return r
+    return await ap_action(request, name, "Upgrade balíčků", fn,
+                           "(1/2) Upgrading hostapd-utils\n(2/2) Upgrading libubox20251010\nOK: 2 packages (demo)")
+
+
+# ---------------------------------------------------------------- SSID
+
+@app.get("/ssids", response_class=HTMLResponse)
+async def ssids_page(request: Request):
+    return render(request, "ssids.html", page="ssids", groups=store.ssid_groups(), autorefresh=False)
+
+
+def _tri(v: str) -> bool | None:
+    return {"1": True, "0": False}.get(v)
+
+
+@app.post("/ssids/preview", response_class=HTMLResponse)
+async def ssids_preview(request: Request, ssid: str = Form(...), new_ssid: str = Form(""),
+                        new_key: str = Form(""), hidden: str = Form(""), disabled: str = Form("")):
+    require_htmx(request)
+    form = await request.form()
+    targets = form.getlist("target")  # "ap|section"
+    group = next((g for g in store.ssid_groups() if g["ssid"] == ssid), None)
+    if not group:
+        return result(request, "Náhled", actions.Result(False, "SSID nenalezeno, obnov stránku."))
+    known = {(i["ap"], i["section"]): i for i in group["items"]}
+    plan: dict[str, list[actions.SsidChange]] = {}
+    rows = []
+    for t in targets:
+        ap_name, _, section = t.partition("|")
+        item = known.get((ap_name, section))
+        if not item:
+            continue
+        ch = actions.SsidChange(
+            section=section,
+            ssid=new_ssid if new_ssid and new_ssid != item["ssid"] else None,
+            key=new_key or None,
+            hidden=_tri(hidden) if _tri(hidden) is not None and _tri(hidden) != item["hidden"] else None,
+            disabled=_tri(disabled) if _tri(disabled) is not None and _tri(disabled) != item["disabled"] else None,
+        )
+        err = actions.validate(ch)
+        if err:
+            return result(request, "Náhled", actions.Result(False, err))
+        cmds = actions.uci_commands(ch)
+        if cmds:
+            plan.setdefault(ap_name, []).append(ch)
+            rows.append({"ap": ap_name, "item": item, "ch": ch, "cmds": [actions.mask(c) for c in cmds]})
+    if not rows:
+        return result(request, "Náhled", actions.Result(False, "Žádná změna (nic nevybráno nebo hodnoty stejné)."))
+    # cekajici zmena na serveru, heslo se do stranky nevraci
+    now = time.time()
+    store.pending = {k: v for k, v in store.pending.items() if now - v[0] < 600}
+    token = secrets.token_urlsafe(16)
+    store.pending[token] = (now, plan)
+    return render(request, "_ssid_preview.html", rows=rows, token=token)
+
+
+@app.post("/ssids/apply", response_class=HTMLResponse)
+async def ssids_apply(request: Request, token: str = Form(...)):
+    require_htmx(request)
+    entry = store.pending.pop(token, None)
+    if not entry or time.time() - entry[0] > 600:
+        return result(request, "Použít", actions.Result(False, "Náhled vypršel, vytvoř ho znovu."))
+    plan = entry[1]
+    if store.opts.get("demo"):
+        await asyncio.sleep(1)
+        return result(request, "Použít", actions.Result(True, "\n".join(f"{ap}: OK (demo)" for ap in plan)))
+
+    async def one(ap_name, changes):
+        async with store.ap_lock(ap_name):
+            r = await actions.apply_ssid(store.cfg(ap_name), store.key, changes)
+        return f"== {ap_name} ==\n{r.output}", r.ok
+
+    res = await asyncio.gather(*(one(a, c) for a, c in plan.items()))
+
+    async def repoll():
+        await asyncio.sleep(8)  # wifi reload chvili trva
+        await store.poll()
+    asyncio.create_task(repoll())
+    return result(request, "Použít", actions.Result(all(ok for _, ok in res), "\n\n".join(t for t, _ in res)))

@@ -61,6 +61,15 @@ def demo_states() -> tuple[list[APState], dict]:
     c = APState(name="OpenWrt_Sklep", host="192.168.223.21", online=False, updated=now,
                 error="TimeoutError: connect timed out")
 
+    for ap in (a, b):
+        ap.pkg = "apk"
+        ap.wifi_ifaces = [{"section": f"wifi_{s['ifname'].replace('-', '_')}", "device": s["radio"], "mode": "ap",
+                           "ssid": s["ssid"], "network": s["network"], "encryption": "psk2+ccmp",
+                           "has_key": True, "hidden": False, "disabled": False} for s in ap.ssids]
+    b.wifi_ifaces.append({"section": "guest5", "device": "radio1", "mode": "ap", "ssid": "kulich_host",
+                          "network": "host", "encryption": "psk2", "has_key": True, "hidden": False,
+                          "disabled": True})
+
     leases = {}
     names = ["telefon-radim", "notebook", "esp-teplomer", "tv-obyvak", "shelly-1", "tablet"]
     for i, cl in enumerate(a.clients + b.clients):

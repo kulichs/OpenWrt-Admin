@@ -1,6 +1,25 @@
 {% extends "base.html" %}
 {% block content %}
 <h1><span class="dot {{ 'on' if ap.online else 'off' }}"></span> {{ ap.name }} <span class="muted">{{ ap.host }}</span></h1>
+{% set act = base ~ "/ap/" ~ (ap.name | urlencode) %}
+<div class="panel actions">
+  <h2>Akce</h2>
+  <div class="btns">
+    <button class="secondary" hx-post="{{ act }}/pkg-update" hx-target="#action-out" hx-disabled-elt=".btns button"
+            {{ 'disabled' if not ap.online }}>Zkontrolovat aktualizace</button>
+    <button class="warnbtn" hx-post="{{ act }}/pkg-upgrade" hx-target="#action-out" hx-disabled-elt=".btns button"
+            hx-confirm="Spustit {{ ap.pkg or 'apk' }} upgrade na {{ ap.name }}? Může to trvat několik minut a zabrat místo na overlay."
+            {{ 'disabled' if not ap.online }}>Upgrade balíčků</button>
+    <button class="danger" hx-post="{{ act }}/reboot" hx-target="#action-out" hx-disabled-elt=".btns button"
+            hx-confirm="Restartovat {{ ap.name }}? Klienti se na 1–2 minuty odpojí."
+            {{ 'disabled' if not ap.online }}>Restart</button>
+    <span class="htmx-indicator muted">běží…</span>
+  </div>
+  {% if ap.online and ap.overlay_size and ap.overlay_avail < 1024*1024 %}
+  <p class="warn small">Na overlay zbývá jen {{ ap.overlay_avail | bytes }}. Upgrade víc balíčků se nemusí vejít, raději aktualizuj celý image (sysupgrade).</p>
+  {% endif %}
+  <div id="action-out" hx-preserve="true"></div>
+</div>
 {% if not ap.online %}
 <p class="err">Nedostupný: {{ ap.error or "zatím nenačteno" }}</p>
 {% else %}
@@ -27,7 +46,7 @@
           <td>{{ r.txpower }}</td><td>{{ r.country }}</td><td>{{ 'zapnuto' if r.up else ('vypnuto' if r.disabled else 'dole') }}</td></tr>
       {% endfor %}
     </table>
-    <h2>SSID</h2>
+    <h2>SSID <a class="small" href="{{ base }}/ssids">upravit</a></h2>
     <table class="list">
       <thead><tr><th>SSID</th><th>Síť</th><th>Pásmo</th><th>Rozhraní</th><th>Šifrování</th><th class="num">Klienti</th></tr></thead>
       {% for s in ap.ssids %}

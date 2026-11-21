@@ -1,4 +1,4 @@
-"""Sber dat z OpenWrt AP pres SSH (ubus). Pouze cteni."""
+"""Sber dat z OpenWrt AP pres SSH (ubus)."""
 from __future__ import annotations
 
 import asyncio
@@ -43,6 +43,9 @@ class APState:
     radios: list[dict[str, Any]] = field(default_factory=list)
     ssids: list[dict[str, Any]] = field(default_factory=list)
     clients: list[dict[str, Any]] = field(default_factory=list)
+    # wifi-iface sekce z uci (vcetne vypnutych SSID), bez hesel
+    wifi_ifaces: list[dict[str, Any]] = field(default_factory=list)
+    pkg: str = ""  # "apk" / "opkg"
 
     @property
     def client_count(self) -> int:
@@ -109,6 +112,45 @@ def wifi_standard(c: dict, freq) -> str:
         return "legacy"
 
 
+def parse_uci_show(text: str) -> dict[str, dict]:
+    """Vystup `uci show <config>` -> {sekce: {".type": typ, volba: hodnota nebo list}}."""
+    secs: dict[str, dict] = {}
+    for line in text.splitlines():
+        if "=" not in line:
+            continue
+        path, val = line.split("=", 1)
+        parts = path.split(".")
+        try:
+            words = shlex.split(val)
+        except ValueError:
+            words = [val]
+        if len(parts) == 2:
+            secs.setdefault(parts[1], {})[".type"] = val
+        elif len(parts) == 3:
+            secs.setdefault(parts[1], {})[parts[2]] = words[0] if len(words) == 1 else words
+    return secs
+
+
+def parse_wifi_ifaces(text: str) -> list[dict]:
+    """wifi-iface sekce z `uci show wireless` (heslo se neuklada)."""
+    out = []
+    for name, sec in parse_uci_show(text or "").items():
+        if sec.get(".type") != "wifi-iface":
+            continue
+        out.append({
+            "section": name,
+            "device": sec.get("device", ""),
+            "mode": sec.get("mode", ""),
+            "ssid": sec.get("ssid", ""),
+            "network": ", ".join(_as_list(sec.get("network"))),
+            "encryption": sec.get("encryption", ""),
+            "has_key": bool(sec.get("key")),
+            "hidden": sec.get("hidden") in ("1", "true", "on", "yes"),
+            "disabled": sec.get("disabled") in ("1", "true", "on", "yes"),
+        })
+    return sorted(out, key=lambda i: (i["ssid"], i["device"]))
+
+
 # ---------------------------------------------------------------- AP
 
 async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0) -> APState:
@@ -122,13 +164,17 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
             known_hosts=None,  # host klice se meni pri sysupgrade -n; jen LAN a jen cteni
             connect_timeout=timeout,
         ) as conn:
-            board, info, wstatus, df_out, hostapd_list = await asyncio.gather(
+            board, info, wstatus, df_out, hostapd_list, uci_wl, pkg = await asyncio.gather(
                 _ubus(conn, "system", "board", timeout),
                 _ubus(conn, "system", "info", timeout),
                 _ubus(conn, "network.wireless", "status", timeout),
                 _run(conn, "df -k /overlay 2>/dev/null | tail -n 1", timeout),
                 _run(conn, "ubus list 'hostapd.*'", timeout),
+                _run(conn, "uci -q show wireless", timeout),
+                _run(conn, "command -v apk >/dev/null && echo apk || (command -v opkg >/dev/null && echo opkg)", timeout),
             )
+            st.pkg = pkg.strip()
+            st.wifi_ifaces = parse_wifi_ifaces(uci_wl)
 
             if board:
                 st.hostname = board.get("hostname", "")

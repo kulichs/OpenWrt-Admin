@@ -1,8 +1,19 @@
 # OpenWrt-Admin
 
-Přehled OpenWrt access pointů přímo v Home Assistantu: stav AP (uptime, load, RAM, volné místo na overlay), rádia, SSID a seznam připojených Wi-Fi klientů včetně jmen a IP z DHCP na routeru.
+Správa OpenWrt access pointů přímo v Home Assistantu: stav AP (uptime, load, RAM, volné místo na overlay), rádia, SSID a seznam připojených Wi-Fi klientů včetně jmen a IP z DHCP na routeru. Na AP se nic neinstaluje, vše jde přes SSH.
 
-**Verze 0.1 je jen pro čtení.** Na AP nic nemění, jen volá `ubus call …` přes SSH. Na AP se nic neinstaluje.
+## Co umí měnit (od 0.2)
+
+| Akce | Kde | Příkaz na AP |
+|---|---|---|
+| Restart | stránka AP | `reboot` |
+| Zkontrolovat aktualizace | stránka AP | `apk update && apk list --upgradable` (u starších AP `opkg`) |
+| Upgrade balíčků | stránka AP | `apk upgrade` (u starších AP `opkg upgrade …`) |
+| Název, heslo, skrytí, zapnutí SSID | stránka SSID | `uci set wireless.<sekce>.… && uci commit wireless && wifi reload` |
+
+Změna SSID se nejdřív zobrazí jako náhled a zapíše se až po potvrzení. Restart a upgrade se potvrzují dialogem.
+
+> **Upgrade balíčků** OpenWrt obecně nedoporučuje, nové verze se instalují do overlay a na malých AP (UnifiAP1 s 8 MB flash) může místo dojít. Pro velké změny je lepší nový image a `sysupgrade`.
 
 ## Instalace (lokální add-on)
 
@@ -41,7 +52,7 @@ chmod 600 /etc/dropbear/authorized_keys
 
 `/etc/dropbear/authorized_keys` přežije běžný `sysupgrade`. Po `sysupgrade -n` ho přidej znovu, nebo ho rovnou zapiš ve first-boot skriptu (uci-defaults).
 
-> Klíč se přihlašuje jako `root`. Add-on sám jen čte, ale kdo má přístup do `/data` add-onu (zálohy HA), má root na AP. Zálohy HA proto šifruj.
+> Klíč se přihlašuje jako `root` a add-on umí AP restartovat a měnit jeho konfiguraci. Kdo má přístup do `/data` add-onu (zálohy HA), má root na AP. Zálohy HA proto šifruj.
 
 ## Co se čte z AP
 
@@ -51,6 +62,7 @@ chmod 600 /etc/dropbear/authorized_keys
 | uptime, load, RAM | `ubus call system info` |
 | overlay | `df -k /overlay` |
 | rádia, SSID → síť/VLAN | `ubus call network.wireless status` |
+| SSID včetně vypnutých | `uci show wireless` (bez hesel) |
 | klienti (signál, rychlost, data) | `ubus call hostapd.<if> get_clients` |
 | jména a IP klientů (router) | `ubus call luci-rpc getDHCPLeases`, jinak `/tmp/dhcp.leases` |
 

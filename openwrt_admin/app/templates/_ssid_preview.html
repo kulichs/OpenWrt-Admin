@@ -1,0 +1,27 @@
+<div class="result preview">
+  <strong>Náhled změn</strong>
+  <table class="list">
+    <thead><tr><th>AP</th><th>Rádio</th><th>Změna</th><th>Příkazy</th></tr></thead>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.ap }}</td>
+      <td>{{ r.item.device }} <span class="muted small">{{ r.item.band }}</span></td>
+      <td>
+        {% if r.ch.ssid is not none %}SSID: <s>{{ r.item.ssid }}</s> → <b>{{ r.ch.ssid }}</b><br>{% endif %}
+        {% if r.ch.key is not none %}heslo: změněno<br>{% endif %}
+        {% if r.ch.hidden is not none %}skryté: {{ 'ano' if r.item.hidden else 'ne' }} → <b>{{ 'ano' if r.ch.hidden else 'ne' }}</b><br>{% endif %}
+        {% if r.ch.disabled is not none %}stav: {{ 'vypnuto' if r.item.disabled else 'zapnuto' }} → <b>{{ 'vypnuto' if r.ch.disabled else 'zapnuto' }}</b>{% endif %}
+      </td>
+      <td><pre class="small">{{ r.cmds | join('\n') }}
+uci commit wireless
+wifi reload</pre></td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">Po <code>wifi reload</code> se klienti na dotčených AP na pár sekund odpojí.</p>
+  <form hx-post="{{ base }}/ssids/apply" hx-target="closest .ssid-out" hx-disabled-elt="find button">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button type="submit" class="warnbtn">Použít na {{ rows | map(attribute='ap') | unique | list | length }} AP</button>
+    <span class="htmx-indicator muted">zapisuji…</span>
+  </form>
+</div>

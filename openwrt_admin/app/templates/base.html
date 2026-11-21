@@ -20,6 +20,12 @@ try {
   <nav>
     <a href="{{ base }}/" class="{{ 'active' if page == 'dashboard' }}">Přehled</a>
     <a href="{{ base }}/clients" class="{{ 'active' if page == 'clients' }}">Klienti</a>
+    <a href="{{ base }}/ssids" class="{{ 'active' if page == 'ssids' }}">SSID</a>
+    <span class="nav-sep"></span>
+    {% for a in store.aps %}
+    <a href="{{ base }}/ap/{{ a.name | urlencode }}" class="ap-tab {{ 'active' if page == 'ap:' ~ a.name }}"><span class="dot {{ 'on' if a.online else 'off' }}"></span>{{ a.name | replace('OpenWrt_', '') }}<span class="cnt">{{ a.client_count }}</span></a>
+    {% endfor %}
+    <span class="nav-sep"></span>
     <a href="{{ base }}/setup" class="{{ 'active' if page == 'setup' }}">Nastavení</a>
   </nav>
   <form method="post" action="{{ base }}/refresh?back={{ request.url.path | urlencode }}{{ ('%3F' ~ request.url.query | urlencode) if request.url.query }}">
@@ -28,8 +34,8 @@ try {
   </form>
 </header>
 <main id="content"
-      hx-get="{{ base }}{{ request.url.path }}{{ ('?' ~ request.url.query) if request.url.query }}"
-      hx-trigger="every 30s" hx-select="#content" hx-target="#content" hx-swap="outerHTML">
+      {% if autorefresh %}hx-get="{{ base }}{{ request.url.path }}{{ ('?' ~ request.url.query) if request.url.query }}"
+      hx-trigger="every 30s" hx-select="#content" hx-target="#content" hx-swap="outerHTML" hx-disinherit="*"{% endif %}>
 {% if store.opts.demo %}<div class="banner">Demo režim – zobrazená data jsou vymyšlená.</div>{% endif %}
 {% block content %}{% endblock %}
 </main>
