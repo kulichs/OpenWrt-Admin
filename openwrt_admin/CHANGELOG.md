@@ -21,3 +21,6 @@
 - Nová stránka **SSID**: změna názvu, hesla, skrytí a zapnutí/vypnutí najednou na více AP. Před zápisem náhled `uci` příkazů, pak `uci commit wireless && wifi reload`. Heslo se nikde nezobrazuje.
 - SSID se čtou z `uci show wireless`, takže jsou vidět i vypnutá.
 - Akce jdou spustit jen z rozhraní add-onu (ochrana proti CSRF), na jednom AP vždy jen jedna akce naráz.
+
+## 0.2.1
+- Oprava: add-on 0.2.0 nenastartoval, chyběla závislost `python-multipart` (formuláře SSID).

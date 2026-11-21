@@ -1,5 +1,5 @@
 name: OpenWrt-Admin
-version: "0.2.0"
+version: "0.2.1"
 slug: openwrt_admin
 description: Správa OpenWrt access pointů a Wi-Fi klientů přes SSH (přehled, SSID, restart, aktualizace balíčků)
 arch:
