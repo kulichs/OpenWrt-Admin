@@ -1,6 +1,6 @@
 <table class="list">
   <thead><tr>
-    <th>Zařízení</th><th>IP</th><th>MAC</th>{% if show_ap %}<th>AP</th>{% endif %}<th>SSID</th>
+    <th>Zařízení</th><th>IP</th><th>MAC</th>{% if show_ap %}<th>AP</th>{% endif %}<th>SSID</th><th>Pásmo</th><th>Standard</th>
     <th class="num">Signál</th><th class="num">Rychlost ↓/↑</th><th class="num">Přeneseno ↓/↑</th><th class="num">Připojen</th>
   </tr></thead>
   <tbody>
@@ -11,13 +11,15 @@
     <td class="mono">{{ c.mac }}</td>
     {% if show_ap %}<td><a href="{{ base }}/ap/{{ c.ap | urlencode }}">{{ c.ap }}</a></td>{% endif %}
     <td>{{ c.ssid }} <span class="muted small">{{ c.network }}</span></td>
+    <td><span class="tag band-{{ '5' if c.band == '5 GHz' else ('6' if c.band == '6 GHz' else '24') }}">{{ c.band or "–" }}</span></td>
+    <td>{{ c.standard or "–" }}</td>
     <td class="num"><span class="sig {{ c.signal | sigclass }}">{{ c.signal if c.signal is not none else "–" }}{% if c.signal is not none %} dBm{% endif %}</span></td>
     <td class="num">{{ c.tx_rate | rate }} / {{ c.rx_rate | rate }}</td>
     <td class="num">{{ c.tx_bytes | bytes }} / {{ c.rx_bytes | bytes }}</td>
     <td class="num">{{ c.connected | duration }}</td>
   </tr>
   {% else %}
-  <tr><td colspan="9" class="empty">Žádní klienti</td></tr>
+  <tr><td colspan="11" class="empty">Žádní klienti</td></tr>
   {% endfor %}
   </tbody>
 </table>

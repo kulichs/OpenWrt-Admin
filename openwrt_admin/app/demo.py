@@ -5,7 +5,7 @@ import time
 from .collector import APState
 
 
-def _clients(ap, ssid, net, ifname, n):
+def _clients(ap, ssid, net, ifname, n, freq=2437):
     out = []
     for i in range(n):
         mac = "02:00:%02x:%02x:%02x:%02x" % tuple(random.randrange(256) for _ in range(4))
@@ -14,7 +14,10 @@ def _clients(ap, ssid, net, ifname, n):
             "signal": random.randint(-82, -38), "rx_rate": random.choice([65000, 72200, 144400, 866700]),
             "tx_rate": random.choice([58500, 72200, 130000, 780000]),
             "rx_bytes": random.randint(10**5, 10**9), "tx_bytes": random.randint(10**5, 10**9),
-            "connected": random.randint(30, 200000), "ht": True, "vht": False, "he": False,
+            "connected": random.randint(30, 200000), "freq": freq,
+            "band": "5 GHz" if freq >= 4900 else "2,4 GHz",
+            "standard": random.choice(["Wi-Fi 5 (ac)", "Wi-Fi 6 (ax)", "Wi-Fi 4 (n)"]) if freq >= 4900
+                        else random.choice(["Wi-Fi 4 (n)", "Wi-Fi 4 (n)", "802.11b/g"]),
         })
     return out
 
@@ -34,7 +37,7 @@ def demo_states() -> tuple[list[APState], dict]:
         cl = _clients(a.name, ssid, net, ifn, n)
         a.clients += cl
         a.ssids.append({"ifname": ifn, "ssid": ssid, "network": net, "radio": "radio0",
-                        "encryption": "psk2+ccmp", "channel": 6, "freq": 2437, "clients": n})
+                        "encryption": "psk2+ccmp", "channel": 6, "freq": 2437, "band": "2,4 GHz", "clients": n})
 
     b = APState(name="OpenWrt_Puda", host="192.168.223.20", online=True, updated=now,
                 hostname="OpenWrt_puda", model="Xiaomi Mi Router 4A Gigabit",
@@ -48,11 +51,12 @@ def demo_states() -> tuple[list[APState], dict]:
     specs = [("phy0-ap0", "kulichap1", "lan", "radio0", 2), ("phy1-ap0", "kulichap1", "lan", "radio1", 4),
              ("phy0-ap1", "kulichiot", "iot", "radio0", 5), ("phy0-ap2", "kulich_host", "host", "radio0", 0)]
     for ifn, ssid, net, radio, n in specs:
-        cl = _clients(b.name, ssid, net, ifn, n)
+        cl = _clients(b.name, ssid, net, ifn, n, 2412 if radio == "radio0" else 5180)
         b.clients += cl
         b.ssids.append({"ifname": ifn, "ssid": ssid, "network": net, "radio": radio,
                         "encryption": "psk2+ccmp", "channel": 1 if radio == "radio0" else 36,
-                        "freq": 2412 if radio == "radio0" else 5180, "clients": n})
+                        "freq": 2412 if radio == "radio0" else 5180,
+                        "band": "2,4 GHz" if radio == "radio0" else "5 GHz", "clients": n})
 
     c = APState(name="OpenWrt_Sklep", host="192.168.223.21", online=False, updated=now,
                 error="TimeoutError: connect timed out")

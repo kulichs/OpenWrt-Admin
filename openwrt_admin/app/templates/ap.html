@@ -29,9 +29,9 @@
     </table>
     <h2>SSID</h2>
     <table class="list">
-      <thead><tr><th>SSID</th><th>Síť</th><th>Rozhraní</th><th>Šifrování</th><th class="num">Klienti</th></tr></thead>
+      <thead><tr><th>SSID</th><th>Síť</th><th>Pásmo</th><th>Rozhraní</th><th>Šifrování</th><th class="num">Klienti</th></tr></thead>
       {% for s in ap.ssids %}
-      <tr><td>{{ s.ssid }}</td><td>{{ s.network }}</td><td class="mono">{{ s.ifname }}</td><td>{{ s.encryption }}</td><td class="num">{{ s.clients }}</td></tr>
+      <tr><td>{{ s.ssid }}</td><td>{{ s.network }}</td><td>{{ s.band }}</td><td class="mono">{{ s.ifname }}</td><td>{{ s.encryption }}</td><td class="num">{{ s.clients }}</td></tr>
       {% endfor %}
     </table>
   </div>

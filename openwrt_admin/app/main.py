@@ -193,18 +193,21 @@ async def dashboard(request: Request):
 
 
 @app.get("/clients", response_class=HTMLResponse)
-async def clients_page(request: Request, q: str = "", ssid: str = "", ap: str = ""):
+async def clients_page(request: Request, q: str = "", ssid: str = "", ap: str = "", band: str = ""):
     clients = store.all_clients()
     if q:
         ql = q.lower()
         clients = [c for c in clients if ql in c["mac"] or ql in c["hostname"].lower() or ql in c["ip"]]
+    if band:
+        clients = [c for c in clients if c.get("band") == band]
     if ssid:
         clients = [c for c in clients if c["ssid"] == ssid]
     if ap:
         clients = [c for c in clients if c["ap"] == ap]
     ssids = sorted({c["ssid"] for a in store.aps for c in a.clients})
     return render(request, "clients.html", page="clients", clients=clients,
-                  q=q, ssid=ssid, ap=ap, ssids=ssids)
+                  q=q, ssid=ssid, ap=ap, band=band, ssids=ssids,
+                  bands=sorted({c.get("band") for a in store.aps for c in a.clients if c.get("band")}))
 
 
 @app.get("/ap/{name}", response_class=HTMLResponse)

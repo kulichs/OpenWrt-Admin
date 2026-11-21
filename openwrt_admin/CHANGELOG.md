@@ -10,3 +10,7 @@
 
 ## 0.1.2
 - Přejmenováno na OpenWrt-Admin (slug `openwrt_admin`).
+
+## 0.1.3
+- U klientů pásmo (2,4/5/6 GHz) a vyjednaný standard: Wi-Fi 4 (n), 5 (ac), 6 (ax), 7 (be), případně 802.11a/b/g.
+- Filtr klientů podle pásma, pásmo u SSID v detailu AP.

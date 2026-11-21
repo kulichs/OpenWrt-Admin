@@ -6,6 +6,8 @@
     {% for s in ssids %}<option {{ 'selected' if s == ssid }}>{{ s }}</option>{% endfor %}</select>
   <select name="ap"><option value="">Všechny AP</option>
     {% for a in store.aps %}<option {{ 'selected' if a.name == ap }}>{{ a.name }}</option>{% endfor %}</select>
+  <select name="band"><option value="">Všechna pásma</option>
+    {% for b in bands %}<option {{ 'selected' if b == band }}>{{ b }}</option>{% endfor %}</select>
   <button type="submit">Filtrovat</button>
   <span class="muted">{{ clients | length }} klientů</span>
 </form>

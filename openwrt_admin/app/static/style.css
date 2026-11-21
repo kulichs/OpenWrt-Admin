@@ -56,3 +56,5 @@ input, select { font: inherit; padding: .35rem .6rem; border: 1px solid var(--li
 @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } table.list { display: block; overflow-x: auto; } }
 pre { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: .6rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
 .panel { margin-bottom: 1rem; }
+.tag.band-5 { border-color: var(--accent); color: var(--accent); }
+.tag.band-6 { border-color: var(--good); color: var(--good); }

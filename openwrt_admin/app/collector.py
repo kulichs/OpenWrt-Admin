@@ -79,6 +79,36 @@ def _as_list(v) -> list:
     return v if isinstance(v, list) else [v]
 
 
+def band_of(freq) -> str:
+    try:
+        f = int(freq)
+    except (TypeError, ValueError):
+        return ""
+    if f >= 5925:
+        return "6 GHz"
+    if f >= 4900:
+        return "5 GHz"
+    if f >= 2400:
+        return "2,4 GHz"
+    return ""
+
+
+def wifi_standard(c: dict, freq) -> str:
+    """Nejvyssi standard, ktery klient s AP vyjednal (hostapd flagy he/vht/ht)."""
+    if c.get("eht"):
+        return "Wi-Fi 7 (be)"
+    if c.get("he"):
+        return "Wi-Fi 6 (ax)"
+    if c.get("vht"):
+        return "Wi-Fi 5 (ac)"
+    if c.get("ht"):
+        return "Wi-Fi 4 (n)"
+    try:
+        return "802.11a" if int(freq) >= 4900 else "802.11b/g"
+    except (TypeError, ValueError):
+        return "legacy"
+
+
 # ---------------------------------------------------------------- AP
 
 async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0) -> APState:
@@ -154,6 +184,7 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
                     _ubus(conn, obj, "get_clients", timeout),
                 )
                 meta = iface_meta.get(ifname, {})
+                freq = (status or {}).get("freq") or (clients or {}).get("freq") or 0
                 ssid = (status or {}).get("ssid") or meta.get("ssid", "")
                 cl = (clients or {}).get("clients") or {}
                 st.ssids.append({
@@ -163,7 +194,8 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
                     "radio": meta.get("radio", ""),
                     "encryption": meta.get("encryption", ""),
                     "channel": (status or {}).get("channel", ""),
-                    "freq": (status or {}).get("freq", (clients or {}).get("freq", "")),
+                    "freq": freq,
+                    "band": band_of(freq),
                     "clients": len(cl),
                 })
                 for mac, c in cl.items():
@@ -181,9 +213,9 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
                         "rx_bytes": byts.get("rx"),
                         "tx_bytes": byts.get("tx"),
                         "connected": c.get("connected_time"),
-                        "ht": bool(c.get("ht")),
-                        "vht": bool(c.get("vht")),
-                        "he": bool(c.get("he")),
+                        "freq": freq,
+                        "band": band_of(freq),
+                        "standard": wifi_standard(c, freq),
                     })
             st.online = True
     except (OSError, asyncssh.Error, asyncio.TimeoutError) as e:
