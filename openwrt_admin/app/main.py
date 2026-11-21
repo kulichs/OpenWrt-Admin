@@ -167,11 +167,12 @@ class Store:
                 self.ha_names = {m: f"esp-{n}" for m, n in zip(nameless, ["teplomer-obyvak", "rele-garaz", "plyn"])}
                 self.ha_status = "ok"
                 if self.router:
-                    self.router.arp = {f"192.168.1.{60 + i}": m for i, m in enumerate(nameless)}
+                    self.router.arp.update({f"192.168.1.{60 + i}": m for i, m in enumerate(nameless)})
                     # rezervace pro zarizeni, ktera ted nejsou v siti (vypnuta / mimo Wi-Fi)
                     self.router.static_hosts = {"02:00:00:00:20:01": {"name": "tv-bedroom", "ip": "192.168.1.207"},
                                                 "02:00:00:00:20:02": {"name": "phone-guest", "ip": "192.168.1.208"},
-                                                "02:00:00:00:20:03": {"name": "xbox", "ip": "192.168.1.218"}}
+                                                "02:00:00:00:20:03": {"name": "xbox", "ip": "192.168.1.218"},
+                                                "02:00:00:00:30:01": {"name": "mailserver", "ip": "192.168.100.7"}}
                 self.info = self.build_info()
                 self.wired_state = wiredmod.locate(self.aps, self.router, self.info, self.seen, known=self._known())
                 self.last_poll = time.time()
@@ -181,7 +182,7 @@ class Store:
             tasks = [collect_ap(c, self.key) for c in cfgs]
             rc = self.router_cfg()
             if rc:
-                tasks.append(collect_router(rc, self.key))
+                tasks.append(collect_router(rc, self.key, wake=self.wake_ips()))
             res = await asyncio.gather(*tasks)
             if rc:
                 self.router, leases = res.pop()
@@ -192,6 +193,56 @@ class Store:
             self.wired_state = wiredmod.locate(self.aps, self.router, self.info, self.seen, known=self._known())
             self._save_seen()
             self.last_poll = time.time()
+
+    WAKE_EVERY = 240  # s; switch zapomina MAC po ~5 min, castejsi ping neni potreba
+    _last_wake = 0.0
+
+    def wake_ips(self) -> list[str]:
+        """IP kabelovych zarizeni, ktera router vidi, ale zadny AP je nema na portu (switch je zapomnel).
+        Router je pingne -> pri dalsim nacteni je switch AP zase zna. Jen kdyz nejaky AP umi tabulku switche."""
+        if not self.router or not self.router.online or not any(a.arl for a in self.aps) or self.wired_state is None:
+            return []
+        now = time.time()
+        if now - self._last_wake < self.WAKE_EVERY:
+            return []
+        self._last_wake = now
+        try:
+            return [l["ip"] for l in self.lease_list(self.wired_state)
+                    if l["online"] and l["ip"] and not l["ap"] and not l["cable_ap"] and not l["is_ap"]
+                    and l["known_net"] and l["ip"] != self.router.host.split(":")[0]]
+        except Exception:  # diagnosticka vec, nesmi shodit sber
+            log.exception("wake_ips")
+            return []
+
+    def switch_diag(self, ap) -> dict | None:
+        """Diagnostika switche AP pro stranku AP: porty, MAC, uplink/CPU, pamet 'naposledy videno'."""
+        if not ap.online:
+            return None
+        info = self.info or {}
+        a = wiredmod.analyze(ap, self.router)
+        wifi = {c["mac"] for x in self.aps for c in x.clients}
+        ap_macs = {x.mac: x.name for x in self.aps if x.mac}
+        if self.router and self.router.mac:
+            ap_macs[self.router.mac] = self.router.name
+        ports = []
+        for port in sorted(ap.arl, key=lambda p: (p.split(":")[0], int(p.split(":")[1]) if p.split(":")[1].isdigit() else 99)):
+            role = "uplink" if port in a["uplink"] else ("cpu" if port in a["cpu"] else "local")
+            macs = []
+            for m in ap.arl[port]:
+                e = info.get(m) or {}
+                macs.append({"mac": m, "name": e.get("hostname") or ap_macs.get(m, ""), "ip": e.get("ip", ""),
+                             "gw": m in a["gw_macs"], "wifi": m in wifi, "ap": m in ap_macs})
+            ports.append({"port": port, "num": port.split(":")[1], "role": role, "macs": macs})
+        mem = []
+        for m, v in (self.seen or {}).items():
+            if v.get("ap") == ap.name:
+                e = info.get(m) or {}
+                mem.append({"mac": m, "name": e.get("hostname") or v.get("hostname", ""), "ip": e.get("ip") or v.get("ip", ""),
+                            "port": v.get("port", "?"), "ts": v.get("ts", 0),
+                            "live": m in a["local"]})
+        mem.sort(key=lambda x: (str(x["port"]), x["name"] or "~"))
+        return {"has_arl": bool(ap.arl), "gw_ip": a["gw_ip"], "gw_found": bool(a["gw_macs"]),
+                "uplink": bool(a["uplink"]), "ports": ports, "memory": mem}
 
     def devices(self) -> list[dict]:
         """Vsechna spravovana zarizeni (AP + router) pro souhrn na prehledu."""
@@ -306,6 +357,7 @@ class Store:
         if self.router:
             macs |= set(self.router.arp.values()) | {m for m, h in self.router.static_hosts.items() if h.get("ip")}
         present = self.present(wired)
+        resolve = topology.net_resolver(self.router)
         out = []
         for mac in macs:
             e = self.info.get(mac) or {"ip": "", "hostname": "", "src": "", "lease": mac in self.leases}
@@ -316,6 +368,8 @@ class Store:
                         "cable_ap": cab[0] if cab else "", "cable_port": cab[1] if cab else "",
                         "cable_stale": cab[2] if cab else None,
                         "is_ap": mac in wired["ap_macs"], "online": mac in present})
+            n = resolve(e["ip"]) if e["ip"] else None
+            out[-1].update(iface=(n or {}).get("iface", ""), vlan=(n or {}).get("vlan"), known_net=bool(n))
 
         def ipkey(x):
             try:
@@ -569,9 +623,14 @@ async def clients_page(request: Request, q: str = "", ssid: str = "", ap: str = 
 async def ap_page(request: Request, name: str):
     ap = store.ap(name)
     if ap.kind == "router":
-        return render(request, "router.html", page="ap:" + name, ap=ap, leases=store.lease_list())
+        leases = store.lease_list()
+        counts: dict[str, int] = {}
+        for l in leases:
+            if l["online"] and l["iface"]:
+                counts[l["iface"]] = counts.get(l["iface"], 0) + 1
+        return render(request, "router.html", page="ap:" + name, ap=ap, leases=leases, iface_counts=counts)
     clients = [c for c in store.all_clients() if c["ap"] == name]
-    return render(request, "ap.html", page="ap:" + name, ap=ap, clients=clients)
+    return render(request, "ap.html", page="ap:" + name, ap=ap, clients=clients, diag=store.switch_diag(ap))
 
 
 @app.get("/map", response_class=HTMLResponse)
@@ -579,7 +638,8 @@ async def map_page(request: Request, clients: str = "1", empty: str = "0"):
     show_clients, show_empty = clients != "0", empty == "1"
     w = store.wired()
     router_wired = [l for l in store.lease_list(w)
-                    if l["online"] and not l["ap"] and not l["cable_ap"] and not l["is_ap"]]
+                    if l["online"] and not l["ap"] and not l["cable_ap"] and not l["is_ap"]
+                    and (l["known_net"] or not l["ip"] or not store.router)]  # IP mimo LAN/VLAN routeru (WAN) ne
     topo = topology.build(store.router, store.aps, router_wired, request.state.t, clients=store.all_clients(),
                           show_clients=show_clients, show_empty=show_empty,
                           ap_wired=w["by_ap"], parent=w["parent"])

@@ -6,10 +6,11 @@ br-lan.10) nebo z clenu bridge (br-host -> eth0.30), netagovana sit = LAN.
 """
 from __future__ import annotations
 
+import ipaddress
 import time
 from urllib.parse import quote, urlencode
 
-from .collector import APState
+from .collector import APState, is_l2_iface
 
 PALETTE = ["#03a9f4", "#8e44ad", "#e67e22", "#16a085", "#c0392b", "#2c7be5", "#b7950b", "#7f8c8d"]
 
@@ -45,11 +46,43 @@ def _eff_vlans(dev: APState) -> dict[str, int | None]:
     out = {}
     host = (dev.host or "").split(":")[0]
     for i in dev.interfaces:
-        if i.get("wan"):
+        if not is_l2_iface(i):  # WAN, wg0 a jine tunely nejsou LAN ani VLAN
             continue
         mgmt = i["name"] == "lan" or any(a.split("/")[0] == host for a in (i.get("ipv4") or "").split(", ") if a)
         out[i["name"]] = None if mgmt else i.get("vlan")
     return out
+
+
+def net_resolver(router: APState | None):
+    """-> funkce ip -> {"iface": jmeno, "vlan": VLAN ID nebo None (LAN)} podle podsiti rozhrani routeru;
+    None, kdyz IP nepatri do zadne LAN/VLAN routeru."""
+    nets = []
+    if router:
+        vl = _eff_vlans(router)
+        for i in router.interfaces:
+            if i["name"] not in vl:
+                continue
+            for a in (i.get("ipv4") or "").split(", "):
+                try:
+                    nets.append((ipaddress.ip_interface(a).network, i["name"], vl[i["name"]]))
+                except ValueError:
+                    pass
+    nets.sort(key=lambda n: -n[0].prefixlen)
+
+    def resolve(ip: str):
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            return None
+        for net, name, vlan in nets:
+            if addr in net:
+                return {"iface": name, "vlan": vlan}
+        return None
+    return resolve
+
+
+def net_label(vlan, t) -> str:
+    return t("map.lan") if vlan is None else f"VLAN {vlan}"
 
 
 def _ago(ts: float, t) -> str:
@@ -111,7 +144,6 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
     clients = clients or []
     ap_wired = ap_wired or {}
     parent = parent or {}
-    wired_count = len(wired)
     # ---- site (podle VLAN ID), nazvy primarne z routeru
     nets: dict[str, dict] = {}
 
@@ -229,21 +261,32 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
                 nodes.append(cn)
                 edges.append({"from": sn, "to": cn, "kind": "client", "color": n["color"]})
 
-    wired_node = None
-    if router or wired_count:
-        cl = sorted(wired, key=lambda c: tuple(int(p) if p.isdigit() else 0 for p in (c.get("ip") or "0").split("."))) \
+    # kabelova zarizeni u routeru (mimo Wi-Fi a porty AP), rozdelena podle site (podsit rozhrani routeru)
+    groups: dict[str, list[dict]] = {}
+    for c in wired:
+        vlan = c.get("vlan")
+        k = _net_key(vlan)
+        if k not in nets:
+            net(vlan, c.get("iface", ""))
+            nets[k].update(color=PALETTE[len(nets) % len(PALETTE)], label=f"VLAN {vlan}", names_str=c.get("iface", ""))
+        groups.setdefault(k, []).append(c)
+    wired_nodes = []
+    for k in sorted(groups, key=lambda k: (nets[k]["vlan"] is not None, nets[k]["vlan"] or 0)):
+        n = nets[k]
+        cl = sorted(groups[k], key=lambda c: tuple(int(p) if p.isdigit() else 0 for p in (c.get("ip") or "0").split("."))) \
             if show_clients else []
         h = max(ROW, len(cl) * CROW + (ROW - CROW))
-        wired_node = {"id": "wired", "kind": "wired", "x": COL_X["ap"], "y": y + (h - ROW) / 2 + (ROW - NODE_H) / 2,
-                      "w": NODE_W["wired"], "title": t("map.wired"), "sub": t("map.wired_sub"),
-                      "extra": t("map.clients", n=wired_count), "online": True,
-                      "href": ("/ap/" + quote(router.name)) if router else ""}
-        nodes.append(wired_node)
-        lanc = nets["lan"]["color"]
-        for k, c in enumerate(cl):
-            cn = _client_node(c, COL_X["ssid"], y + (ROW - CROW) / 2 + k * CROW + (CROW - CLIENT_H) / 2, lanc, True, t)
+        title = t("map.wired") if k == "lan" else n["label"] + (f" · {n['names_str']}" if n.get("names_str") else "")
+        wn = {"id": "wired:" + k, "kind": "wired", "x": COL_X["ap"], "y": y + (h - ROW) / 2 + (ROW - NODE_H) / 2,
+              "w": NODE_W["wired"], "title": title, "sub": t("map.wired_sub"),
+              "extra": t("map.clients", n=len(groups[k])), "online": True, "color": n["color"],
+              "href": ("/ap/" + quote(router.name)) if router else ""}
+        nodes.append(wn)
+        wired_nodes.append(wn)
+        for j, c in enumerate(cl):
+            cn = _client_node(c, COL_X["ssid"], y + (ROW - CROW) / 2 + j * CROW + (CROW - CLIENT_H) / 2, n["color"], True, t)
             nodes.append(cn)
-            edges.append({"from": wired_node, "to": cn, "kind": "cable", "color": lanc})
+            edges.append({"from": wn, "to": cn, "kind": "cable", "color": n["color"]})
         y += h
 
     height = max(y, TOP + ROW) + 10
@@ -279,8 +322,8 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
     if router:
         rv = sorted({v for v in router_vl.values() if v is not None})
         rn["chips"] = _chips(rn, [{"label": nets[_net_key(v)]["label"], "color": nets[_net_key(v)]["color"]} for v in rv])
-    if wired_node:
-        edges.append({"from": rn, "to": wired_node, "kind": "lan", "color": lan_color, "chips": [], "up": True})
+    for wn in wired_nodes:
+        edges.append({"from": rn, "to": wn, "kind": "lan", "color": wn["color"], "chips": [], "up": True})
 
     # ---- geometrie spojnic (bezier z praveho okraje rodice do leveho okraje potomka)
     for e in edges:

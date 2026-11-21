@@ -240,5 +240,21 @@
     "Inactive ({n})",
     "Inactive ({n})"
   ],
-  "router.inactive_hint": "Devices the router knows (DHCP lease or reservation) that are not on the network now – not on Wi-Fi, on a switch port or in an ARP table."
+  "router.inactive_hint": "Devices the router knows (DHCP lease or reservation) that are not on the network now – not on Wi-Fi, on a switch port or in an ARP table.",
+  "router.iface_devices": "Active",
+  "diag.title": "Switch diagnostics (wired clients)",
+  "diag.no_arl": "This AP's switch cannot list its MAC table (swconfig arl_table) – wired clients behind it stay at the router.",
+  "diag.gateway": "Gateway (router): {ip}.",
+  "diag.gw_missing": "The AP does not have it in its ARP table right now – the uplink cannot be detected, wired clients will not be placed until the next refresh.",
+  "diag.no_uplink": "The gateway MAC is not on any switch port – the uplink cannot be detected.",
+  "diag.port": "Port",
+  "diag.role": "Role",
+  "diag.role_uplink": "uplink",
+  "diag.role_cpu": "CPU (AP)",
+  "diag.role_local": "local",
+  "diag.router": "router",
+  "diag.memory": "Last seen at this AP",
+  "diag.memory_hint": "The switch forgets a MAC address after a few minutes without traffic. The add-on remembers the last port so the device does not jump to the router; the router also pings quiet devices now and then.",
+  "diag.seen": "Seen",
+  "diag.now": "now"
 }

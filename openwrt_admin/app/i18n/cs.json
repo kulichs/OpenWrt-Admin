@@ -243,5 +243,21 @@
     "Neaktivní ({n})",
     "Neaktivní ({n})"
   ],
-  "router.inactive_hint": "Zařízení, která router zná (DHCP záznam nebo rezervace), ale teď nejsou v síti – nejsou na Wi-Fi, na portu switche ani v ARP tabulce."
+  "router.inactive_hint": "Zařízení, která router zná (DHCP záznam nebo rezervace), ale teď nejsou v síti – nejsou na Wi-Fi, na portu switche ani v ARP tabulce.",
+  "router.iface_devices": "Aktivních",
+  "diag.title": "Diagnostika switche (kabeloví klienti)",
+  "diag.no_arl": "Switch tohoto AP neumí vypsat tabulku MAC adres (swconfig arl_table) – kabeloví klienti za ním zůstanou u routeru.",
+  "diag.gateway": "Brána (router): {ip}.",
+  "diag.gw_missing": "AP ji teď nemá v ARP tabulce – uplink nejde poznat, kabeloví klienti se do příštího načtení neumístí.",
+  "diag.no_uplink": "MAC brány není na žádném portu switche – uplink nejde poznat.",
+  "diag.port": "Port",
+  "diag.role": "Role",
+  "diag.role_uplink": "uplink",
+  "diag.role_cpu": "CPU (AP)",
+  "diag.role_local": "lokální",
+  "diag.router": "router",
+  "diag.memory": "Naposledy viděno u tohoto AP",
+  "diag.memory_hint": "Switch MAC adresu po pár minutách bez provozu zapomene. Add-on si pamatuje poslední port, aby zařízení nepřeskakovalo k routeru; tichá zařízení router navíc občas pingne.",
+  "diag.seen": "Viděno",
+  "diag.now": "teď"
 }

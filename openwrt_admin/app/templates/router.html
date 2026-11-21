@@ -40,16 +40,17 @@
   <div class="panel">
     <h2>{{ t("router.interfaces") }}</h2>
     <table class="list">
-      <thead><tr><th>{{ t("col.name") }}</th><th>{{ t("col.state") }}</th><th>{{ t("router.proto") }}</th><th>{{ t("router.device") }}</th><th>IPv4</th><th>{{ t("router.gateway") }}</th><th class="num">{{ t("router.up_for") }}</th></tr></thead>
+      <thead><tr><th>{{ t("col.name") }}</th><th>{{ t("col.state") }}</th><th>{{ t("router.proto") }}</th><th>{{ t("router.device") }}</th><th>IPv4</th><th>{{ t("router.gateway") }}</th><th class="num">{{ t("router.iface_devices") }}</th><th class="num">{{ t("router.up_for") }}</th></tr></thead>
       {% for i in ap.interfaces %}
       <tr><td><b>{{ i.name }}</b>{% if i.wan %} <span class="tag">WAN</span>{% endif %}</td>
           <td><span class="dot {{ 'on' if i.up else 'off' }}"></span> {{ t("state.on") if i.up else t("state.down") }}</td>
           <td>{{ i.proto }}</td><td class="mono">{{ i.device }}</td>
           <td class="mono">{{ i.ipv4 or "–" }}{% if i.ipv6 %}<br><span class="muted small">{{ i.ipv6 }}</span>{% endif %}</td>
           <td class="mono">{{ i.gateway or "–" }}</td>
+          <td class="num">{{ iface_counts.get(i.name, "–") if not i.wan else "–" }}</td>
           <td class="num">{{ (i.uptime | duration) if i.up else "–" }}</td></tr>
       {% else %}
-      <tr><td colspan="7" class="empty">–</td></tr>
+      <tr><td colspan="8" class="empty">–</td></tr>
       {% endfor %}
     </table>
   </div>
@@ -59,16 +60,17 @@
 <h2>{{ t("router.leases", n=(on | length)) }}</h2>
 {% macro lease_table(rows) %}
 <table class="list">
-  <thead><tr><th>{{ t("col.device") }}</th><th>IP</th><th>MAC</th><th>{{ t("router.connection") }}</th></tr></thead>
+  <thead><tr><th>{{ t("col.device") }}</th><th>IP</th><th>MAC</th><th>{{ t("col.network") }}</th><th>{{ t("router.connection") }}</th></tr></thead>
   {% for l in rows %}
   <tr class="{{ '' if l.online else 'row-off' }}">
     <td>{{ l.hostname or "–" }}{% if l.src in ('ha', 'manual', 'static') %} <span class="tag src-{{ l.src }}" title="{{ t('src.' ~ l.src ~ '_title') }}">{{ t('src.' ~ l.src) }}</span>{% endif %}</td>
     <td class="mono">{{ l.ip or "–" }}{% if l.static %} <span class="muted small">{{ t("router.static_ip") }}</span>{% endif %}</td>
     <td class="mono">{{ l.mac }}</td>
+    <td>{% if l.known_net %}{{ t("map.lan") if l.vlan is none else "VLAN " ~ l.vlan }} <span class="muted small">{{ l.iface }}</span>{% else %}–{% endif %}</td>
     <td>{% if l.ap %}Wi-Fi · <a href="{{ base }}/ap/{{ l.ap | urlencode }}">{{ l.ap }}</a> · {{ l.ssid }} <span class="muted small">{{ l.band | band }}</span>{% elif l.cable_ap %}{{ t("router.cable_at") }} · <a href="{{ base }}/ap/{{ l.cable_ap | urlencode }}">{{ l.cable_ap }}</a> · port {{ l.cable_port }}{% if l.cable_stale %} <span class="muted small">({{ t("map.last_seen", ago=(l.cable_stale | ago)) }})</span>{% endif %}{% elif l.is_ap %}<span class="muted">{{ t("router.is_ap") }}</span>{% elif l.online %}<span class="muted">{{ t("router.not_wifi") }}</span>{% else %}<span class="muted">{{ t("router.offline") }}</span>{% endif %}</td>
   </tr>
   {% else %}
-  <tr><td colspan="4" class="empty">{{ t("router.no_leases") }}</td></tr>
+  <tr><td colspan="5" class="empty">{{ t("router.no_leases") }}</td></tr>
   {% endfor %}
 </table>
 {% endmacro %}

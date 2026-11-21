@@ -60,5 +60,42 @@
 <h2>{{ t("ap.clients", n=(clients | length)) }}</h2>
 {% set show_ap = false %}
 {% include "_clients_table.html" %}
+{% if diag %}
+<details class="offline-list diag">
+  <summary>{{ t("diag.title") }}</summary>
+  {% if not diag.has_arl %}
+  <p class="muted small">{{ t("diag.no_arl") }}</p>
+  {% else %}
+  <p class="muted small">{{ t("diag.gateway", ip=diag.gw_ip) }}
+    {% if not diag.gw_found %}<span class="warn">{{ t("diag.gw_missing") }}</span>
+    {% elif not diag.uplink %}<span class="warn">{{ t("diag.no_uplink") }}</span>{% endif %}</p>
+  <table class="list">
+    <thead><tr><th>{{ t("diag.port") }}</th><th>{{ t("diag.role") }}</th><th>MAC</th><th>{{ t("col.device") }}</th><th>IP</th></tr></thead>
+    {% for p in diag.ports %}
+    {% for m in p.macs %}
+    <tr>
+      {% if loop.first %}<td rowspan="{{ p.macs | length }}"><b>{{ p.num }}</b> <span class="muted small">{{ p.port.split(':')[0] }}</span></td>
+      <td rowspan="{{ p.macs | length }}"><span class="tag">{{ t("diag.role_" ~ p.role) }}</span></td>{% endif %}
+      <td class="mono">{{ m.mac }}</td>
+      <td>{{ m.name or "–" }}{% if m.gw %} <span class="tag">{{ t("diag.router") }}</span>{% endif %}{% if m.ap %} <span class="tag">AP</span>{% endif %}{% if m.wifi %} <span class="muted small">Wi-Fi</span>{% endif %}</td>
+      <td class="mono">{{ m.ip or "–" }}</td>
+    </tr>
+    {% endfor %}
+    {% endfor %}
+  </table>
+  <h3>{{ t("diag.memory") }}</h3>
+  <p class="muted small">{{ t("diag.memory_hint") }}</p>
+  <table class="list">
+    <thead><tr><th>{{ t("col.device") }}</th><th>IP</th><th>MAC</th><th>{{ t("diag.port") }}</th><th>{{ t("diag.seen") }}</th></tr></thead>
+    {% for m in diag.memory %}
+    <tr><td>{{ m.name or "–" }}</td><td class="mono">{{ m.ip or "–" }}</td><td class="mono">{{ m.mac }}</td><td>{{ m.port }}</td>
+        <td>{% if m.live %}<span class="dot on"></span> {{ t("diag.now") }}{% else %}{{ m.ts | ago }}{% endif %}</td></tr>
+    {% else %}
+    <tr><td colspan="5" class="empty">–</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</details>
+{% endif %}
 {% endif %}
 {% endblock %}

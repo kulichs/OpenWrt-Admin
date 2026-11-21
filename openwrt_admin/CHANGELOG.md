@@ -2,6 +2,21 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.11.0
+- Map: wired devices at the router (not on Wi-Fi or AP ports) are split by network – one branch per LAN/VLAN (e.g. "VLAN 100 · dmz") in its color, matched by the router interface whose subnet contains the device IP. Empty networks are hidden.
+- Router page: new "Network" column in the device list and the number of active devices per interface.
+- The router's ARP entries on WAN and tunnel/VPN interfaces (e.g. the ISP gateway, `wg0`) are no longer treated as clients; WireGuard and other tunnels are left out of the map networks.
+- AP page: collapsible "Switch diagnostics" – ports with MAC addresses, which port is the uplink and the CPU, whether the AP sees the router, and the "last seen" memory for this AP.
+- Quiet wired devices: the switch forgets a MAC after about 5 minutes without traffic, so a rarely talking device (e.g. a Cisco phone) jumped to the router. The router now pings wired devices with an unknown place once every 4 minutes, so the AP switch learns them again.
+- The "last seen" memory is no longer erased when an AP is briefly missing from the configuration (e.g. while being renamed).
+---
+- Mapa: kabelová zařízení u routeru (mimo Wi-Fi a porty AP) jsou rozdělená podle sítě – každá LAN/VLAN má vlastní větev ve své barvě (např. „VLAN 100 · dmz“), podle rozhraní routeru, do jehož podsítě patří IP zařízení. Prázdné sítě se nezobrazují.
+- Stránka routeru: nový sloupec „Síť“ v seznamu zařízení a počet aktivních zařízení u každého rozhraní.
+- Záznamy ARP routeru na WAN a tunelových/VPN rozhraních (např. brána poskytovatele, `wg0`) už se neberou jako klienti; WireGuard a jiné tunely nejsou mezi sítěmi na mapě.
+- Stránka AP: sbalitelná „Diagnostika switche“ – porty s MAC adresami, který port je uplink a CPU, jestli AP vidí router, a paměť „naposledy viděno“ pro tento AP.
+- Tichá kabelová zařízení: switch MAC adresu po zhruba 5 minutách bez provozu zapomene, takže zařízení, které se ozývá jen občas (např. telefon Cisco), přeskakovalo k routeru. Router teď kabelová zařízení s neznámým místem jednou za 4 minuty pingne a switch AP se je znovu naučí.
+- Paměť „naposledy viděno“ se už nemaže, když AP na chvíli zmizí z konfigurace (např. při přejmenování).
+
 ## 0.10.1
 - Fix: since 0.10.0 static DHCP reservations made switched-off devices and Wi-Fi devices that were currently away show up under "LAN / other" on the map. Presence is now decided only by Wi-Fi, switch ports and ARP tables; reservations are used just for names. The router page shows inactive devices in a collapsed "Inactive" section.
 ---

@@ -118,5 +118,13 @@ def demo_router(name: str, host: str) -> APState:
          "ipv6": "", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False, "vlan": 30},
         {"name": "iot", "up": True, "proto": "static", "device": "br-lan.10", "ipv4": "192.168.10.1/24",
          "ipv6": "", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False, "vlan": 10},
+        {"name": "dmz", "up": True, "proto": "static", "device": "eth1.100", "ipv4": "192.168.100.1/24",
+         "ipv6": "", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False, "vlan": 100},
+        {"name": "wg0", "up": True, "proto": "wireguard", "device": "wg0", "ipv4": "10.9.0.1/24",
+         "ipv6": "", "gateway": "", "dns": "", "uptime": 1_950_000, "wan": False, "vlan": None},
     ]
+    # server v DMZ (pevna IP, bez DHCP) a zarizeni ve VLAN IoT na kabelu u routeru
+    r.arp = {"192.168.100.7": "02:00:00:00:30:01", "192.168.10.20": "02:00:00:00:30:02"}
+    r.arp_dev = {"192.168.100.7": "eth1.100", "192.168.10.20": "br-lan.10"}
+    r.static_hosts = {}
     return r

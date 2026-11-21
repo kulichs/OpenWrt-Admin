@@ -54,6 +54,7 @@ class APState:
     mac: str = ""
     arl: dict[str, list[str]] = field(default_factory=dict)   # "switch0:2" -> [mac, ...]
     arp: dict[str, str] = field(default_factory=dict)          # ip -> mac (jedna MAC muze mit vic IP, napr. router ve VLAN)
+    arp_dev: dict[str, str] = field(default_factory=dict)      # ip -> zarizeni (br-lan, eth0.100, ...)
     switch_vlans: list[str] = field(default_factory=list)      # ["0t 2 3 4 5", "0t 2t", ...]
     # router: staticke DHCP rezervace z `uci show dhcp` (host sekce) -> {mac: {name, ip}}
     static_hosts: dict[str, dict] = field(default_factory=dict)
@@ -359,12 +360,32 @@ def parse_arl(text: str) -> dict[str, list[str]]:
 
 def parse_arp(text: str) -> dict[str, str]:
     """/proc/net/arp -> {ip: mac} (ne podle MAC: router ma stejnou MAC v LAN i ve VLAN)."""
+    return {ip: mac for ip, (mac, _) in parse_arp_full(text).items()}
+
+
+def parse_arp_full(text: str) -> dict[str, tuple[str, str]]:
+    """/proc/net/arp -> {ip: (mac, zarizeni)}; jen kompletni zaznamy."""
     out = {}
     for line in (text or "").splitlines()[1:]:
         p = line.split()
         if len(p) >= 4 and p[3] != "00:00:00:00:00:00" and p[2] != "0x0":
-            out[p[0]] = p[3].lower()
+            out[p[0]] = (p[3].lower(), p[5] if len(p) >= 6 else "")
     return out
+
+
+# rozhrani bez L2 (tunely, VPN) – na mape ani v ARP nemaji co delat
+NON_L2_PROTOS = {"wireguard", "openvpn", "pppoe", "pppoa", "ppp", "3g", "qmi", "ncm", "mbim", "l2tp", "pptp",
+                 "gre", "gretap", "ipip", "6in4", "6to4", "6rd", "dslite", "map", "vti", "xfrm", "zerotier", "tailscale"}
+
+
+def is_l2_iface(i: dict) -> bool:
+    """LAN/VLAN rozhrani: ne WAN, ne tunel/VPN (wg0 apod.)."""
+    if i.get("wan"):
+        return False
+    name = (i.get("name") or "").lower()
+    dev = (i.get("device") or "").lower()
+    return (i.get("proto") or "") not in NON_L2_PROTOS and not name.startswith(("wg", "tun", "tap", "vpn")) \
+        and not dev.startswith(("wg", "tun", "tap", "pppoe-", "ppp", "lo"))
 
 
 def parse_static_hosts(text: str) -> dict[str, dict]:
@@ -458,8 +479,22 @@ async def _read_leases(conn, timeout: float) -> dict[str, dict]:
     return leases
 
 
-async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0) -> tuple[APState, dict[str, dict]]:
-    """Router: system jako u AP + rozhrani + DHCP leases, jedno SSH spojeni."""
+WAKE_MAX = 64
+
+
+def wake_cmd(ips: list[str]) -> str:
+    """Jeden ping na kazdou IP (paralelne, max ~1 s). Tiche zarizeni odpovi a switch AP se znovu nauci,
+    na kterem portu je – pri dalsim nacteni ho add-on najde."""
+    ips = [ip for ip in ips if re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", ip)][:WAKE_MAX]
+    if not ips:
+        return ""
+    return "for ip in " + " ".join(ips) + "; do ping -c1 -W1 $ip >/dev/null 2>&1 & done; wait"
+
+
+async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0,
+                         wake: list[str] | None = None) -> tuple[APState, dict[str, dict]]:
+    """Router: system jako u AP + rozhrani + DHCP leases, jedno SSH spojeni.
+    wake: IP kabelovych zarizeni s neznamym mistem – router je pingne (viz wake_cmd)."""
     st = APState(name=cfg.name, host=cfg.host, kind="router")
     leases: dict[str, dict] = {}
     try:
@@ -474,8 +509,16 @@ async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 1
                 _run(conn, "uci -q show dhcp", timeout),
                 _run(conn, "cat /proc/net/arp", timeout),
             )
-            st.static_hosts, st.arp = parse_static_hosts(ucidhcp), parse_arp(arp)
+            st.static_hosts = parse_static_hosts(ucidhcp)
             st.interfaces = parse_interfaces(dump, devstatus, uci_vlans(ucinet))
+            # ARP jen z LAN/VLAN: brana poskytovatele na WAN ani VPN peery nejsou klienti
+            skip = {i["device"] for i in st.interfaces if i.get("device") and not is_l2_iface(i)}
+            full = parse_arp_full(arp)
+            st.arp = {ip: m for ip, (m, d) in full.items() if d not in skip}
+            st.arp_dev = {ip: d for ip, (m, d) in full.items() if d not in skip}
+            cmd = wake_cmd(wake or [])
+            if cmd:
+                await _run(conn, cmd, timeout)
             st.online = True
     except (OSError, asyncssh.Error, asyncio.TimeoutError) as e:
         st.error = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__

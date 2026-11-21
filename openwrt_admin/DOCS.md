@@ -112,9 +112,12 @@ The router (the device with `type: router`) is a device of its own, without radi
 - system info (model, firmware, uptime, load, RAM, overlay),
 - **interfaces** from `ubus call network.interface dump`: WAN/LAN/VLANs, state, protocol, IPv4/IPv6, gateway, uptime,
 - **DHCP leases**: every device with an IP from the router, Wi-Fi clients with their AP/SSID/band, the rest marked as wired or not on Wi-Fi,
+- the **network** of each device (LAN / VLAN and interface name, by the subnet its IP belongs to) and the number of active devices per interface,
 - the same actions as APs: reboot, check for updates, upgrade packages. Rebooting the router takes the whole network and the internet down for a moment.
 
 The add-on's SSH key must be on the router too.
+
+ARP entries on the WAN and on tunnel/VPN interfaces (WireGuard `wg*`, PPPoE, OpenVPN…) are ignored – the ISP gateway or VPN peers are not clients.
 
 ### Network map
 
@@ -123,8 +126,10 @@ The **Map** page draws the network as a tree: Internet → router → access poi
 - **Clients** are shown with name (or MAC) and signal (green ≥ −60 dBm, orange ≥ −72 dBm, red below); wired devices with their IP. The **Clients** toggle switches them off (then SSIDs show only the count).
 - **SSIDs without clients are hidden** by default; the **SSIDs without clients** toggle shows them.
 - **Zoom and pan:** mouse wheel zooms around the cursor, dragging moves the map, buttons **+ / − / Fit**. The position is kept when the page refreshes itself.
-- **APs working as switches:** wired devices plugged into an AP's ports are shown under that AP in a **LAN** group with the port number, and an AP plugged into another AP is drawn under it (elbow line). Source: the switch MAC table on each AP (`swconfig dev switch0 get arl_table`); the uplink is the port where the router's MAC is seen (from the AP's ARP table), the CPU port is the one tagged in all `switch_vlan`s. If the same MAC is seen on several chained APs, it belongs to the last one. Wired devices that are on no AP port stay under the router (**LAN / other**); the router page shows for each DHCP lease whether it is on Wi-Fi, on an AP port, or elsewhere.
-- **Last known place:** a switch forgets a MAC after a few minutes without traffic (e.g. a TV that is switched off). The add-on remembers where each wired device was last seen (AP + port, stored in `/data/wired_seen.json`) and keeps it there, greyed out with "last seen …", while it still has a DHCP lease on the router (without a lease for 24 hours). Entries older than 30 days or for removed APs are deleted.
+- **APs working as switches:** wired devices plugged into an AP's ports are shown under that AP in a **LAN** group with the port number, and an AP plugged into another AP is drawn under it (elbow line). Source: the switch MAC table on each AP (`swconfig dev switch0 get arl_table`); the uplink is the port where the router's MAC is seen (from the AP's ARP table), the CPU port is the one tagged in all `switch_vlan`s. If the same MAC is seen on several chained APs, it belongs to the last one. Wired devices that are on no AP port stay under the router, **split by network**: **LAN / other** for the untagged LAN and one branch per VLAN (e.g. **VLAN 100 · dmz**) in that network's colour. The network is the router interface whose subnet contains the device IP. The router page shows for each DHCP lease whether it is on Wi-Fi, on an AP port, or elsewhere.
+- **Last known place:** a switch forgets a MAC after a few minutes without traffic (e.g. a TV that is switched off). The add-on remembers where each wired device was last seen (AP + port, stored in `/data/wired_seen.json`) and keeps it there, greyed out with "last seen …", while it still has a DHCP lease on the router (without a lease for 24 hours). Entries older than 30 days are deleted.
+- **Quiet devices:** a device that rarely sends anything (e.g. an IP phone) drops out of the switch table before it is ever seen. Once every 4 minutes the router pings wired devices whose place is unknown (one `ping -c1 -W1` each, at most 64), so the AP switch learns them again and the next refresh places them.
+- **Switch diagnostics** (collapsible section at the bottom of an AP page): every switch port with its MAC addresses and role (uplink, CPU, local), whether the AP sees the router in its ARP table, and the "last seen" memory for that AP. Use it when a device appears in the wrong place.
 - Works only where the switch can list its MAC table (swconfig chips such as Atheros/Qualcomm AR8xxx, MediaTek). Unmanaged switches in between are not visible: devices behind them appear at the nearest OpenWrt AP.
 - Lines to Wi-Fi clients are dotted, wired lines are solid.
 
@@ -154,6 +159,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | SSIDs incl. disabled ones | `uci -q show wireless` (without passwords) |
 | clients (signal, rate, traffic) | `ubus call hostapd.<if> get_clients` |
 | switch MAC table (wired devices on AP ports) | `swconfig dev <switch> get arl_table`, `/proc/net/arp` |
+| waking quiet wired devices (router, every 4 min) | `ping -c1 -W1 <ip>` |
 | interfaces and VLANs (router, APs) | `ubus call network.interface dump`, `ubus call network.device status` |
 | client names and IPs (router) | `ubus call luci-rpc getDHCPLeases`, else `/tmp/dhcp.leases`; `uci show dhcp` (reservations), `/proc/net/arp` |
 | device names (Home Assistant) | websocket `config/device_registry/list` (MAC connections) |
@@ -184,6 +190,7 @@ Missing keys fall back to English.
 | `TimeoutError` / `ConnectionRefused` | AP off, wrong IP, or dropbear not listening on LAN. |
 | Clients without name/IP | `dhcp_router` not set, key not on the router, or a static IP. |
 | No SSIDs | Wi-Fi disabled on the AP (`ubus list 'hostapd.*'` is empty). |
+| Wired device under the router instead of its AP | Open the AP page → **Switch diagnostics**: is the uplink detected, is the MAC on a local port, is it in "last seen"? Quiet devices are found within a few minutes (router ping). |
 | "Access denied" | HA user is in neither `full_access` nor `read_access`. |
 | Everyone is read-only | Ingress sends no username (Settings shows "Přihlášen jako –"), or the name does not match the HA username. |
 | Add-on does not start, `python-multipart` | Old version 0.2.0, update. |
@@ -299,9 +306,12 @@ Router (zařízení s `type: router`) je samostatné zařízení, bez rádií a 
 - informacemi o systému (model, firmware, uptime, load, RAM, overlay),
 - **rozhraními** z `ubus call network.interface dump`: WAN/LAN/VLANy, stav, protokol, IPv4/IPv6, brána, jak dlouho běží,
 - **DHCP klienty**: všechna zařízení, která mají IP od routeru; Wi-Fi klienti s AP/SSID/pásmem, ostatní jako kabel nebo nepřipojeno k Wi-Fi,
+- **sítí** každého zařízení (LAN / VLAN a název rozhraní, podle podsítě, do které patří jeho IP) a počtem aktivních zařízení u každého rozhraní,
 - stejnými akcemi jako AP: restart, kontrola aktualizací, upgrade balíčků. Restart routeru na chvíli odpojí celou síť i internet.
 
 SSH klíč add-onu musí být i na routeru.
+
+Záznamy ARP na WAN a na tunelových/VPN rozhraních (WireGuard `wg*`, PPPoE, OpenVPN…) se ignorují – brána poskytovatele ani VPN protějšky nejsou klienti.
 
 ### Mapa sítě
 
@@ -310,8 +320,10 @@ Stránka **Mapa** kreslí síť jako strom: Internet → router → access point
 - **Klienti** jsou se jménem (nebo MAC) a signálem (zeleně ≥ −60 dBm, oranžově ≥ −72 dBm, červeně slabší); zařízení na kabelu s IP. Přepínač **Klienti** je vypne (SSID pak ukazují jen počet).
 - **SSID bez klientů se skrývají**, přepínač **SSID bez klientů** je zobrazí.
 - **Zoom a posun:** kolečko myši přibližuje kolem kurzoru, tažením se mapa posouvá, tlačítka **+ / − / Vše**. Pozice zůstane i po automatickém obnovení stránky.
-- **AP jako switch:** zařízení zapojená kabelem do portů AP se ukážou pod tím AP ve skupině **LAN** s číslem portu a AP zapojený přes jiný AP se nakreslí pod ním (lomená čára). Zdroj: tabulka MAC adres switche na každém AP (`swconfig dev switch0 get arl_table`); uplink je port, na kterém je MAC routeru (z ARP tabulky AP), CPU port je ten tagovaný ve všech `switch_vlan`. Když stejnou MAC vidí víc AP zapojených za sebou, patří poslednímu. Kabelová zařízení, která nejsou na portu žádného AP, zůstávají u routeru (**LAN / ostatní**); stránka routeru u každého DHCP klienta ukazuje, jestli je na Wi-Fi, na portu AP, nebo jinde.
-- **Poslední známé místo:** switch MAC po pár minutách bez provozu zapomene (např. vypnutá televize). Add-on si pamatuje, kde bylo každé kabelové zařízení naposledy vidět (AP + port, v `/data/wired_seen.json`), a nechá ho tam šedě s „naposledy viděno …“, dokud má na routeru DHCP záznam (bez záznamu 24 hodin). Záznamy starší než 30 dní nebo pro odebrané AP se mažou.
+- **AP jako switch:** zařízení zapojená kabelem do portů AP se ukážou pod tím AP ve skupině **LAN** s číslem portu a AP zapojený přes jiný AP se nakreslí pod ním (lomená čára). Zdroj: tabulka MAC adres switche na každém AP (`swconfig dev switch0 get arl_table`); uplink je port, na kterém je MAC routeru (z ARP tabulky AP), CPU port je ten tagovaný ve všech `switch_vlan`. Když stejnou MAC vidí víc AP zapojených za sebou, patří poslednímu. Kabelová zařízení, která nejsou na portu žádného AP, zůstávají u routeru **rozdělená podle sítě**: **LAN / ostatní** pro netagovanou LAN a pro každou VLAN vlastní větev (např. **VLAN 100 · dmz**) v barvě té sítě. Síť je rozhraní routeru, do jehož podsítě patří IP zařízení. Stránka routeru u každého DHCP klienta ukazuje, jestli je na Wi-Fi, na portu AP, nebo jinde.
+- **Poslední známé místo:** switch MAC po pár minutách bez provozu zapomene (např. vypnutá televize). Add-on si pamatuje, kde bylo každé kabelové zařízení naposledy vidět (AP + port, v `/data/wired_seen.json`), a nechá ho tam šedě s „naposledy viděno …“, dokud má na routeru DHCP záznam (bez záznamu 24 hodin). Záznamy starší než 30 dní se mažou.
+- **Tichá zařízení:** zařízení, které skoro nic nevysílá (např. IP telefon), vypadne z tabulky switche dřív, než ho add-on uvidí. Router proto jednou za 4 minuty pingne kabelová zařízení s neznámým místem (každé jedním `ping -c1 -W1`, nejvýš 64), switch AP se je znovu naučí a při dalším načtení se umístí.
+- **Diagnostika switche** (sbalená sekce dole na stránce AP): každý port switche s MAC adresami a rolí (uplink, CPU, lokální), jestli AP vidí router ve své ARP tabulce, a paměť „naposledy viděno“ pro ten AP. Hodí se, když je zařízení na mapě jinde, než má být.
 - Funguje jen tam, kde switch umí vypsat tabulku MAC adres (swconfig čipy jako Atheros/Qualcomm AR8xxx, MediaTek). Hloupé switche mezi zařízeními vidět nejsou: zařízení za nimi se ukážou u nejbližšího OpenWrt AP.
 - Čáry ke klientům na Wi-Fi jsou tečkované, kabelové plné.
 
@@ -341,6 +353,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | SSID včetně vypnutých | `uci -q show wireless` (bez hesel) |
 | klienti (signál, rychlost, data) | `ubus call hostapd.<if> get_clients` |
 | tabulka MAC adres switche (kabel na portech AP) | `swconfig dev <switch> get arl_table`, `/proc/net/arp` |
+| buzení tichých kabelových zařízení (router, každé 4 min) | `ping -c1 -W1 <ip>` |
 | rozhraní a VLANy (router, AP) | `ubus call network.interface dump`, `ubus call network.device status` |
 | jména a IP klientů (router) | `ubus call luci-rpc getDHCPLeases`, jinak `/tmp/dhcp.leases`; `uci show dhcp` (rezervace), `/proc/net/arp` |
 | jména zařízení (Home Assistant) | websocket `config/device_registry/list` (MAC v connections) |
@@ -371,6 +384,7 @@ Chybějící klíče se vezmou z angličtiny.
 | `TimeoutError` / `ConnectionRefused` | AP vypnutý, špatná IP, nebo dropbear neposlouchá na LAN. |
 | Klienti bez jména/IP | `dhcp_router` nenastaven, klíč není na routeru, nebo statická IP. |
 | Žádná SSID | Wi-Fi na AP vypnutá (`ubus list 'hostapd.*'` je prázdné). |
+| Kabelové zařízení u routeru místo u svého AP | Stránka AP → **Diagnostika switche**: je poznaný uplink, je MAC na lokálním portu, je v „naposledy viděno“? Tichá zařízení se najdou do pár minut (ping z routeru). |
 | „Přístup odepřen“ | Uživatel HA není v `full_access` ani `read_access`. |
 | Všichni mají jen čtení | Ingress neposílá jméno uživatele (Nastavení ukáže „Přihlášen jako –“), nebo jméno neodpovídá uživatelskému jménu HA. |
 | Add-on nenastartuje, `python-multipart` | Stará verze 0.2.0, aktualizovat. |

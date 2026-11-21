@@ -44,15 +44,18 @@ def _gateway_ip(ap: APState, router: APState | None) -> str:
     return (lan or {}).get("gateway", "")
 
 
-def local_ports(ap: APState, router: APState | None) -> dict[str, str]:
-    """{mac: "switch0:5"} – zarizeni na lokalnich portech AP (bez uplinku a CPU portu)."""
+def analyze(ap: APState, router: APState | None) -> dict:
+    """Rozbor tabulky switche AP: {"uplink": {port}, "cpu": {port}, "local": {mac: port}, "gw_ip", "gw_macs"}.
+    Pouziva i diagnostika na strance AP."""
+    res = {"uplink": set(), "cpu": set(), "local": {}, "gw_ip": _gateway_ip(ap, router), "gw_macs": set()}
     if not ap.arl:
-        return {}
-    gw_ip = _gateway_ip(ap, router)
-    gw_macs = {mac for ip, mac in ap.arp.items() if ip == gw_ip}
+        return res
+    gw_macs = {mac for ip, mac in ap.arp.items() if ip == res["gw_ip"]}
+    res["gw_macs"] = gw_macs
     uplink = {port for port, macs in ap.arl.items() if gw_macs & set(macs)}
+    res["uplink"] = uplink
     if not uplink:
-        return {}  # bez uplinku nejde poznat, co je lokalni
+        return res  # bez uplinku nejde poznat, co je lokalni
     up_nums = {p.split(":")[1] for p in uplink}
     cpu_nums = _tagged_everywhere(ap.switch_vlans) - up_nums
     cpu = {p for p in ap.arl if p.split(":")[1] in cpu_nums}
@@ -65,13 +68,18 @@ def local_ports(ap: APState, router: APState | None) -> dict[str, str]:
             best = max(ap.arl.items(), key=lambda kv: len(wifi & set(kv[1])), default=(None, []))
             if best[0] and wifi & set(best[1]):
                 cpu = {best[0]}
-    out = {}
+    res["cpu"] = cpu
     for port, macs in ap.arl.items():
         if port in uplink or port in cpu:
             continue
         for mac in macs:
-            out[mac] = port
-    return out
+            res["local"][mac] = port
+    return res
+
+
+def local_ports(ap: APState, router: APState | None) -> dict[str, str]:
+    """{mac: "switch0:5"} – zarizeni na lokalnich portech AP (bez uplinku a CPU portu)."""
+    return analyze(ap, router)["local"]
 
 
 def locate(aps: list[APState], router: APState | None, leases: dict[str, dict],
@@ -124,8 +132,10 @@ def locate(aps: list[APState], router: APState | None, leases: dict[str, dict],
         online = {ap.name for ap in aps if ap.online}
         for mac, m in list(memory.items()):
             age = now - m.get("ts", 0)
-            if age > MEMORY_MAX or m.get("ap") not in names:
+            if age > MEMORY_MAX:
                 del memory[mac]
+                continue
+            if m.get("ap") not in names:  # AP zrovna neni v konfiguraci (prejmenovani…) – nemazat hned
                 continue
             if mac in placed or mac in wifi or mac in ap_mac or m["ap"] not in online:
                 continue
