@@ -35,6 +35,10 @@ full_access:                 # HA usernames with full access (reboot, packages, 
   - alice
 read_access:                 # HA usernames with read-only access
   - bob
+ha_names: true               # device names from Home Assistant (by MAC), e.g. ESPHome
+names:                       # own names by MAC, highest priority
+  - mac: aa:bb:cc:dd:ee:ff
+    name: Boiler-relay
 aps:                         # all managed devices – the add-on uses only these
   - name: Router
     host: 192.168.1.1
@@ -91,6 +95,17 @@ Login is handled by Home Assistant (Ingress); the add-on has no passwords of its
 - Permissions are enforced on the server, not only hidden in the UI. Actions are logged with the user name.
 - The panel is visible to all HA users (`panel_admin: false`). Hiding the panel alone would not be enough: HA does not block the ingress URL for regular users.
 
+### Device names
+
+Devices with a static IP (typically ESPHome) never ask the router for DHCP, so the router does not know their name. The add-on therefore combines several sources; the name is taken in this order:
+
+1. **`names`** in the add-on configuration (manual, tag *manual*),
+2. **Home Assistant** – device registry by MAC (ESPHome, Shelly, …; tag *HA*). The add-on has `homeassistant_api: true` and reads `config/device_registry/list` over the Supervisor websocket every 10 minutes; switch off with `ha_names: false`,
+3. **DHCP lease** on the router,
+4. **static DHCP reservation** on the router (`uci show dhcp`, `host` sections; tag *reservation*).
+
+IPs come from the DHCP lease, the reservation, or the ARP tables of the router and APs (marked *static IP*). The router page lists all devices the router knows (lease, reservation or ARP), not only DHCP clients. The Settings page shows how many names came from each source.
+
 ### Router
 
 The router (the device with `type: router`) is a device of its own, without radios and SSIDs. It has its own tab, card on the overview and page with:
@@ -140,7 +155,8 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | clients (signal, rate, traffic) | `ubus call hostapd.<if> get_clients` |
 | switch MAC table (wired devices on AP ports) | `swconfig dev <switch> get arl_table`, `/proc/net/arp` |
 | interfaces and VLANs (router, APs) | `ubus call network.interface dump`, `ubus call network.device status` |
-| client names and IPs (router) | `ubus call luci-rpc getDHCPLeases`, else `/tmp/dhcp.leases` |
+| client names and IPs (router) | `ubus call luci-rpc getDHCPLeases`, else `/tmp/dhcp.leases`; `uci show dhcp` (reservations), `/proc/net/arp` |
+| device names (Home Assistant) | websocket `config/device_registry/list` (MAC connections) |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
 
@@ -206,6 +222,10 @@ full_access:                 # uživatelská jména HA s plným přístupem (res
   - alice
 read_access:                 # uživatelská jména HA jen pro čtení
   - bob
+ha_names: true               # jména zařízení z Home Assistantu (podle MAC), např. ESPHome
+names:                       # vlastní jména podle MAC, nejvyšší priorita
+  - mac: aa:bb:cc:dd:ee:ff
+    name: Rele-kotel
 aps:                         # všechna spravovaná zařízení – add-on používá jen tato
   - name: Router
     host: 192.168.1.1
@@ -262,6 +282,17 @@ Přihlášení řeší Home Assistant (Ingress), add-on vlastní hesla nemá. Po
 - Kontroluje se na serveru, ne jen v zobrazení. Akce se logují se jménem uživatele.
 - Panel vidí všichni uživatelé HA (`panel_admin: false`). Samotné schování panelu by nestačilo, HA ingress adresu u běžného uživatele neblokuje.
 
+### Jména zařízení
+
+Zařízení s pevnou IP (typicky ESPHome) o DHCP nežádají, takže router jejich jméno nezná. Add-on proto skládá jména z více zdrojů v tomto pořadí:
+
+1. **`names`** v konfiguraci add-onu (ručně, štítek *ručně*),
+2. **Home Assistant** – registr zařízení podle MAC (ESPHome, Shelly…; štítek *HA*). Add-on má `homeassistant_api: true` a každých 10 minut čte `config/device_registry/list` přes websocket Supervisoru; vypnout jde přes `ha_names: false`,
+3. **DHCP** na routeru,
+4. **statická rezervace DHCP** na routeru (`uci show dhcp`, sekce `host`; štítek *rezervace*).
+
+IP se bere z DHCP, z rezervace, nebo z ARP tabulek routeru a AP (označeno *pevná IP*). Stránka routeru ukazuje všechna zařízení, která router zná (DHCP, rezervace nebo ARP), ne jen DHCP klienty. Na stránce Nastavení je vidět, kolik jmen přišlo z kterého zdroje.
+
 ### Router
 
 Router (zařízení s `type: router`) je samostatné zařízení, bez rádií a SSID. Má vlastní záložku, kartu na přehledu a stránku s:
@@ -311,7 +342,8 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | klienti (signál, rychlost, data) | `ubus call hostapd.<if> get_clients` |
 | tabulka MAC adres switche (kabel na portech AP) | `swconfig dev <switch> get arl_table`, `/proc/net/arp` |
 | rozhraní a VLANy (router, AP) | `ubus call network.interface dump`, `ubus call network.device status` |
-| jména a IP klientů (router) | `ubus call luci-rpc getDHCPLeases`, jinak `/tmp/dhcp.leases` |
+| jména a IP klientů (router) | `ubus call luci-rpc getDHCPLeases`, jinak `/tmp/dhcp.leases`; `uci show dhcp` (rezervace), `/proc/net/arp` |
+| jména zařízení (Home Assistant) | websocket `config/device_registry/list` (MAC v connections) |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).
 

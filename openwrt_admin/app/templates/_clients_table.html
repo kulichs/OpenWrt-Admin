@@ -6,7 +6,7 @@
   <tbody>
   {% for c in clients %}
   <tr>
-    <td>{{ c.hostname or "–" }}</td>
+    <td>{{ c.hostname or "–" }}{% if c.src in ('ha', 'manual') %} <span class="tag src-{{ c.src }}" title="{{ t('src.' ~ c.src ~ '_title') }}">{{ t('src.' ~ c.src) }}</span>{% endif %}</td>
     <td class="mono">{{ c.ip or "–" }}</td>
     <td class="mono">{{ c.mac }}</td>
     {% if show_ap %}<td><a href="{{ base }}/ap/{{ c.ap | urlencode }}">{{ c.ap }}</a></td>{% endif %}

@@ -169,7 +169,7 @@
   "router.device": "Zařízení",
   "router.gateway": "Brána",
   "router.up_for": "Běží",
-  "router.leases": "DHCP klienti ({n})",
+  "router.leases": "Zařízení v síti ({n})",
   "router.connection": "Připojení",
   "router.not_wifi": "LAN u routeru nebo nepřipojeno",
   "router.no_leases": "Žádné DHCP záznamy",
@@ -218,5 +218,23 @@
   "router.is_ap": "access point",
   "fmt.ago_h": "před {h} h",
   "fmt.ago_d": "před {d} d",
-  "map.last_seen": "naposledy viděno {ago}"
+  "map.last_seen": "naposledy viděno {ago}",
+  "src.ha": "HA",
+  "src.ha_title": "jméno z Home Assistantu",
+  "src.manual": "ručně",
+  "src.manual_title": "jméno z konfigurace add-onu (names)",
+  "src.static": "rezervace",
+  "src.static_title": "jméno ze statické DHCP rezervace na routeru",
+  "router.static_ip": "pevná IP",
+  "setup.names_title": "Jména zařízení",
+  "setup.names_text": "Jméno se bere v tomto pořadí: ruční seznam names v konfiguraci add-onu → Home Assistant (registr zařízení podle MAC, např. ESPHome) → DHCP na routeru → statická rezervace na routeru. IP i pro zařízení s pevnou adresou z ARP tabulky routeru a AP.",
+  "setup.ha_ok": [
+    "{n} zařízení s MAC",
+    "{n} zařízení s MAC",
+    "{n} zařízení s MAC"
+  ],
+  "setup.ha_off": "vypnuto (ha_names: false) nebo add-on neběží v Home Assistantu",
+  "setup.names_manual": "Ručně (names)",
+  "setup.names_static": "Rezervace na routeru",
+  "setup.names_hint": "Jména z Home Assistantu se načítají každých 10 minut a při restartu add-onu. Ruční jméno: v konfiguraci add-onu names → mac + name."
 }

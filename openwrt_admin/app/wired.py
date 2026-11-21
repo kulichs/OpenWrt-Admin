@@ -75,10 +75,11 @@ def local_ports(ap: APState, router: APState | None) -> dict[str, str]:
 
 
 def locate(aps: list[APState], router: APState | None, leases: dict[str, dict],
-           memory: dict[str, dict] | None = None, now: float | None = None) -> dict:
+           memory: dict[str, dict] | None = None, now: float | None = None, known: set[str] | None = None) -> dict:
     """-> {"by_ap": {ap: [zarizeni]}, "parent": {ap: nadrazeny_ap}, "placed": {mac}, "ap_macs": {mac}}
     memory: {mac: {ap, port, ts, hostname, ip}} – posledni zname misto; aktualizuje se zde (in place)."""
     now = now or time.time()
+    known = set(leases) if known is None else known  # leases = {mac: {ip, hostname}} (i jmena z HA apod.)
     local = {ap.name: local_ports(ap, router) for ap in aps if ap.online}
     ap_mac = {ap.mac: ap.name for ap in aps if ap.mac}
     wifi = {c["mac"] for ap in aps for c in ap.clients}
@@ -128,7 +129,7 @@ def locate(aps: list[APState], router: APState | None, leases: dict[str, dict],
                 continue
             if mac in placed or mac in wifi or mac in ap_mac or m["ap"] not in online:
                 continue
-            if mac not in leases and age > STALE_KEEP:
+            if mac not in known and age > STALE_KEEP:
                 continue
             l = leases.get(mac, {})
             by_ap.setdefault(m["ap"], []).append({

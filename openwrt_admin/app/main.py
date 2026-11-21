@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, i18n, topology, wired as wiredmod
+from . import actions, ha, i18n, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_states
 
@@ -42,7 +42,8 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 def load_options() -> dict:
     opts = {"aps": [], "ssh_user": "root", "poll_interval": 30, "dhcp_router": "", "router_name": "Router", "demo": False,
-            "full_access": [], "read_access": [], "refresh_interval": 30, "language": "auto"}
+            "full_access": [], "read_access": [], "refresh_interval": 30, "language": "auto",
+            "ha_names": True, "names": []}
     if OPTIONS.exists():
         opts.update(json.loads(OPTIONS.read_text()))
     return opts
@@ -94,6 +95,11 @@ class Store:
         self.last_poll = 0.0
         self.seen: dict[str, dict] = self._load_seen()
         self.wired_state: dict | None = None
+        # jmena a IP zarizeni: {mac: {ip, hostname, src, lease}} – viz build_info()
+        self.info: dict[str, dict] = {}
+        self.ha_names: dict[str, str] = {}
+        self.ha_status = "off"   # off / ok / chybova hlaska
+        self.ha_fetched = 0.0
         self.lock = asyncio.Lock()
         self.ap_locks: dict[str, asyncio.Lock] = {}
         self.pending: dict[str, tuple[float, dict[str, list[actions.SsidChange]]]] = {}
@@ -156,7 +162,14 @@ class Store:
                 # ukazka "naposledy videno": vypnuta TV na portu 4 AP-Office
                 self.seen = {"02:00:00:00:10:04": {"ap": "AP-Office", "port": "4", "ts": time.time() - 3 * 3600,
                                                    "hostname": "tv-office", "ip": "192.168.1.13"}}
-                self.wired_state = wiredmod.locate(self.aps, self.router, self.leases, self.seen)
+                # ukazka jmen z HA: Wi-Fi klienti bez jmena (ESPHome s pevnou IP)
+                nameless = [c["mac"] for a in self.aps for c in a.clients if c["mac"] not in self.leases]
+                self.ha_names = {m: f"esp-{n}" for m, n in zip(nameless, ["teplomer-obyvak", "rele-garaz", "plyn"])}
+                self.ha_status = "ok"
+                if self.router:
+                    self.router.arp = {f"192.168.1.{60 + i}": m for i, m in enumerate(nameless)}
+                self.info = self.build_info()
+                self.wired_state = wiredmod.locate(self.aps, self.router, self.info, self.seen, known=self._known())
                 self.last_poll = time.time()
                 return
             user = self.opts.get("ssh_user", "root")
@@ -170,7 +183,9 @@ class Store:
                 self.router, leases = res.pop()
                 self.leases = leases or self.leases
             self.aps = list(res)
-            self.wired_state = wiredmod.locate(self.aps, self.router, self.leases, self.seen)
+            await self.refresh_ha()
+            self.info = self.build_info()
+            self.wired_state = wiredmod.locate(self.aps, self.router, self.info, self.seen, known=self._known())
             self._save_seen()
             self.last_poll = time.time()
 
@@ -197,21 +212,89 @@ class Store:
         except OSError as e:
             log.warning("Nelze ulozit %s: %s", SEENFILE, e)
 
+    HA_REFRESH = 600  # s
+
+    async def refresh_ha(self, force: bool = False):
+        if not self.opts.get("ha_names", True):
+            self.ha_names, self.ha_status = {}, "off"
+            return
+        if not force and time.time() - self.ha_fetched < self.HA_REFRESH:
+            return
+        self.ha_fetched = time.time()
+        try:
+            names = await ha.fetch_names()
+            if names or os.environ.get("SUPERVISOR_TOKEN"):
+                self.ha_names, self.ha_status = names, "ok"
+            else:
+                self.ha_status = "off"
+        except Exception as e:  # noqa: BLE001 - jmena z HA jsou jen bonus
+            self.ha_status = f"{type(e).__name__}: {e}"
+            log.warning("Jmena z Home Assistantu: %s", self.ha_status)
+
+    def build_info(self) -> dict[str, dict]:
+        """MAC -> {ip, hostname, src, lease}. Jmeno: rucne (names) > Home Assistant > DHCP lease > rezervace
+        na routeru. IP: DHCP lease > rezervace > ARP routeru > ARP AP (zarizeni s pevnou IP)."""
+        info: dict[str, dict] = {}
+
+        def get(mac):
+            return info.setdefault(mac, {"ip": "", "hostname": "", "src": "", "lease": False})
+        for ap in self.aps:
+            for ip, mac in ap.arp.items():
+                if not get(mac)["ip"]:
+                    get(mac)["ip"] = ip
+        if self.router:
+            for ip, mac in self.router.arp.items():
+                get(mac)["ip"] = ip
+            for mac, h in self.router.static_hosts.items():
+                e = get(mac)
+                if h.get("ip"):
+                    e["ip"] = h["ip"]
+                if h.get("name"):
+                    e["hostname"], e["src"] = h["name"], "static"
+        for mac, l in self.leases.items():
+            e = get(mac)
+            e["lease"] = True
+            if l.get("ip"):
+                e["ip"] = l["ip"]
+            if l.get("hostname"):
+                e["hostname"], e["src"] = l["hostname"], "dhcp"
+        for mac, name in self.ha_names.items():
+            e = get(mac)
+            e["hostname"], e["src"] = name, "ha"
+        for n in self.opts.get("names") or []:
+            mac = str(n.get("mac", "")).strip().lower().replace("-", ":")
+            if len(mac) == 17 and n.get("name"):
+                e = get(mac)
+                e["hostname"], e["src"] = str(n["name"]), "manual"
+        return info
+
+    def _known(self) -> set[str]:
+        """MAC, ktere router porad zna (DHCP lease nebo ARP) – pro drzeni 'naposledy videno'."""
+        k = set(self.leases)
+        if self.router:
+            k |= set(self.router.arp.values())
+        return k
+
     def wired(self) -> dict:
         if self.wired_state is None:
-            self.wired_state = wiredmod.locate(self.aps, self.router, self.leases, self.seen)
+            self.info = self.info or self.build_info()
+            self.wired_state = wiredmod.locate(self.aps, self.router, self.info, self.seen, known=self._known())
         return self.wired_state
 
     def lease_list(self, wired: dict | None = None) -> list[dict]:
-        """DHCP leases z routeru, u Wi-Fi klientu doplneno AP/SSID/pasmo, u kabelovych AP a port."""
+        """Zarizeni, ktera zna router (DHCP lease, rezervace, ARP), s Wi-Fi AP/SSID/pasmem nebo AP+portem LAN."""
         wifi = {c["mac"]: c for a in self.aps for c in a.clients}
         wired = wired or self.wired()
         cable = {d["mac"]: (ap, d["port"], d.get("stale")) for ap, devs in wired["by_ap"].items() for d in devs}
+        macs = set(self.leases)
+        if self.router:
+            macs |= set(self.router.arp.values()) | {m for m, h in self.router.static_hosts.items() if h.get("ip")}
         out = []
-        for mac, l in self.leases.items():
+        for mac in macs:
+            e = self.info.get(mac) or {"ip": "", "hostname": "", "src": "", "lease": mac in self.leases}
             c = wifi.get(mac)
             cab = cable.get(mac)
-            out.append({"mac": mac, "ip": l.get("ip", ""), "hostname": l.get("hostname", ""),
+            out.append({"mac": mac, "ip": e["ip"], "hostname": e["hostname"], "src": e["src"], "static": not e["lease"],
                         "ap": c["ap"] if c else "", "ssid": c["ssid"] if c else "", "band": c.get("band", "") if c else "",
                         "cable_ap": cab[0] if cab else "", "cable_port": cab[1] if cab else "",
                         "cable_stale": cab[2] if cab else None,
@@ -228,8 +311,8 @@ class Store:
         out = []
         for ap in self.aps:
             for c in ap.clients:
-                l = self.leases.get(c["mac"], {})
-                out.append({**c, "ip": l.get("ip", ""), "hostname": l.get("hostname", "")})
+                e = self.info.get(c["mac"]) or self.leases.get(c["mac"], {})
+                out.append({**c, "ip": e.get("ip", ""), "hostname": e.get("hostname", ""), "src": e.get("src", "")})
         return sorted(out, key=lambda c: (c["hostname"] or "~" + c["mac"]).lower())
 
 

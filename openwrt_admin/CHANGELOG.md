@@ -2,6 +2,15 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.10.0
+- Device names from more sources: `names` in the configuration (manual) → Home Assistant device registry by MAC (ESPHome, Shelly…; `homeassistant_api: true`, option `ha_names`) → DHCP lease → static DHCP reservation on the router. Names show a small tag with their source.
+- IPs for devices with a static address from the ARP tables of the router and APs; the router page lists all devices the router knows, marked "static IP".
+- Settings page: overview of name sources. New dependency `websockets`.
+---
+- Jména zařízení z více zdrojů: `names` v konfiguraci (ručně) → registr zařízení Home Assistantu podle MAC (ESPHome, Shelly…; `homeassistant_api: true`, volba `ha_names`) → DHCP → statická rezervace DHCP na routeru. U jména je štítek se zdrojem.
+- IP i pro zařízení s pevnou adresou z ARP tabulek routeru a AP; stránka routeru ukazuje všechna zařízení, která router zná, s označením „pevná IP“.
+- Stránka Nastavení: přehled zdrojů jmen. Nová závislost `websockets`.
+
 ## 0.9.2
 - Map: the "Wired" group under APs and the router's "Wired / other" node are now called "LAN" and "LAN / other".
 - Last known place of wired devices: when a device disappears from the switch MAC table (e.g. TV switched off), it stays at its AP and port, greyed out with "last seen …", while it has a DHCP lease (otherwise 24 h). Stored in `/data/wired_seen.json`.

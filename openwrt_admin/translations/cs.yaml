@@ -1,31 +1,37 @@
 configuration:
   ssh_user:
     name: SSH uživatel
-    description: Uživatel, kterým se add-on přihlašuje na AP a router (obvykle root).
+    description: "Uživatel, kterým se add-on přihlašuje na AP a router (obvykle root)."
   poll_interval:
     name: Interval sběru dat (s)
-    description: Jak často se načítají data z AP, 10–600 sekund.
+    description: "Jak často se načítají data z AP, 10–600 sekund."
   refresh_interval:
     name: Obnovování stránky (s)
-    description: Jak často se otevřené stránky samy načtou znovu, v sekundách. 0 = vypnuto. Každý prohlížeč si to může změnit na stránce Nastavení.
+    description: "Jak často se otevřené stránky samy načtou znovu, v sekundách. 0 = vypnuto. Každý prohlížeč si to může změnit na stránce Nastavení."
   language:
     name: Jazyk
-    description: Jazyk webového rozhraní. auto = podle jazyka uživatele Home Assistantu (nebo prohlížeče). Každý prohlížeč si ho může změnit na stránce Nastavení.
+    description: "Jazyk webového rozhraní. auto = podle jazyka uživatele Home Assistantu (nebo prohlížeče). Každý prohlížeč si ho může změnit na stránce Nastavení."
   dhcp_router:
     name: Router (zastaralé)
-    description: Starý způsob nastavení routeru. Místo toho dej routeru v seznamu zařízení type router. Když je vyplněné, router se stane zařízení se stejnou IP.
+    description: "Starý způsob nastavení routeru. Místo toho dej routeru v seznamu zařízení type router. Když je vyplněné, router se stane zařízení se stejnou IP."
   router_name:
     name: Název routeru (zastaralé)
-    description: Jen se zastaralým dhcp_router, když router není v seznamu zařízení.
+    description: "Jen se zastaralým dhcp_router, když router není v seznamu zařízení."
   demo:
     name: Demo režim
-    description: Zobrazí vymyšlená data, bez SSH.
+    description: "Zobrazí vymyšlená data, bez SSH."
   full_access:
     name: Plný přístup
-    description: Uživatelská jména HA, která smí restartovat, aktualizovat balíčky a měnit SSID. Když jsou oba seznamy prázdné, má plný přístup každý.
+    description: "Uživatelská jména HA, která smí restartovat, aktualizovat balíčky a měnit SSID. Když jsou oba seznamy prázdné, má plný přístup každý."
   read_access:
     name: Jen čtení
-    description: Uživatelská jména HA, která smí jen prohlížet. Kdo není v žádném seznamu, nemá přístup.
+    description: "Uživatelská jména HA, která smí jen prohlížet. Kdo není v žádném seznamu, nemá přístup."
+  ha_names:
+    name: Jména z Home Assistantu
+    description: "Brát jména zařízení z registru zařízení Home Assistantu (podle MAC), např. ESPHome s pevnou IP."
+  names:
+    name: Ruční jména
+    description: "Vlastní jména zařízení podle MAC (mac: aa:bb:cc:dd:ee:ff, name: …). Mají přednost před všemi ostatními zdroji."
   aps:
     name: Zařízení
-    description: Všechna spravovaná OpenWrt zařízení – add-on používá jen tato. Každé má název, adresu, volitelně SSH port a type ap (výchozí) nebo router. Router (jeden) se zobrazí s rozhraními a DHCP klienty a dává jména a IP klientů.
+    description: "Všechna spravovaná OpenWrt zařízení – add-on používá jen tato. Každé má název, adresu, volitelně SSH port a type ap (výchozí) nebo router. Router (jeden) se zobrazí s rozhraními a DHCP klienty a dává jména a IP klientů."

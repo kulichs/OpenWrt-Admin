@@ -134,3 +134,7 @@ svg.netmap.dragging { cursor: grabbing; }
 /* 0.9.2 – naposledy videna kabelova zarizeni */
 .netmap .node-stale { opacity: .5; }
 .netmap .node-stale > rect:first-of-type { stroke-dasharray: 3 3; }
+
+/* 0.10.0 – zdroj jmena */
+.tag.src-ha { color: var(--accent); border-color: var(--accent); }
+.tag.src-manual { color: var(--good); border-color: var(--good); }

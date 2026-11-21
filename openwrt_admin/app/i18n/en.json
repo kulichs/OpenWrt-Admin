@@ -170,7 +170,7 @@
   "router.device": "Device",
   "router.gateway": "Gateway",
   "router.up_for": "Up for",
-  "router.leases": "DHCP leases ({n})",
+  "router.leases": "Devices on the network ({n})",
   "router.connection": "Connection",
   "router.not_wifi": "LAN at the router or not connected",
   "router.no_leases": "No DHCP leases",
@@ -217,5 +217,22 @@
   "router.is_ap": "access point",
   "fmt.ago_h": "{h} h ago",
   "fmt.ago_d": "{d} d ago",
-  "map.last_seen": "last seen {ago}"
+  "map.last_seen": "last seen {ago}",
+  "src.ha": "HA",
+  "src.ha_title": "name from Home Assistant",
+  "src.manual": "manual",
+  "src.manual_title": "name from the add-on configuration (names)",
+  "src.static": "reservation",
+  "src.static_title": "name from a static DHCP reservation on the router",
+  "router.static_ip": "static IP",
+  "setup.names_title": "Device names",
+  "setup.names_text": "Names are taken in this order: the names list in the add-on configuration → Home Assistant (device registry by MAC, e.g. ESPHome) → DHCP on the router → static reservation on the router. IPs also for devices with a static address from the ARP tables of the router and APs.",
+  "setup.ha_ok": [
+    "{n} device with a MAC",
+    "{n} devices with a MAC"
+  ],
+  "setup.ha_off": "off (ha_names: false) or the add-on does not run in Home Assistant",
+  "setup.names_manual": "Manual (names)",
+  "setup.names_static": "Reservations on the router",
+  "setup.names_hint": "Names from Home Assistant are reloaded every 10 minutes and on add-on restart. Manual name: names → mac + name in the add-on configuration."
 }

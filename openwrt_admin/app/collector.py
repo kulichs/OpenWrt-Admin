@@ -55,6 +55,8 @@ class APState:
     arl: dict[str, list[str]] = field(default_factory=dict)   # "switch0:2" -> [mac, ...]
     arp: dict[str, str] = field(default_factory=dict)          # ip -> mac (jedna MAC muze mit vic IP, napr. router ve VLAN)
     switch_vlans: list[str] = field(default_factory=list)      # ["0t 2 3 4 5", "0t 2t", ...]
+    # router: staticke DHCP rezervace z `uci show dhcp` (host sekce) -> {mac: {name, ip}}
+    static_hosts: dict[str, dict] = field(default_factory=dict)
 
     @property
     def client_count(self) -> int:
@@ -365,6 +367,21 @@ def parse_arp(text: str) -> dict[str, str]:
     return out
 
 
+def parse_static_hosts(text: str) -> dict[str, dict]:
+    """`uci show dhcp` -> {mac: {name, ip}} ze sekci host (mac muze byt seznam / mezerami oddeleny)."""
+    out = {}
+    for sec in parse_uci_show(text or "").values():
+        if sec.get(".type") != "host":
+            continue
+        macs = []
+        for m in _as_list(sec.get("mac")):
+            macs += str(m).split()
+        for m in macs:
+            if len(m) == 17:
+                out[m.lower()] = {"name": str(sec.get("name") or ""), "ip": str(sec.get("ip") or "")}
+    return out
+
+
 def switch_vlan_ports(text: str) -> list[str]:
     return [str(sec.get("ports", "")) for sec in parse_uci_show(text or "").values()
             if sec.get(".type") == "switch_vlan" and sec.get("ports")]
@@ -448,13 +465,16 @@ async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 1
     try:
         async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=timeout) as conn:
-            _, dump, devstatus, ucinet, leases = await asyncio.gather(
+            _, dump, devstatus, ucinet, leases, ucidhcp, arp = await asyncio.gather(
                 _read_system(conn, st, timeout),
                 _ubus(conn, "network.interface", "dump", timeout),
                 _ubus(conn, "network.device", "status", timeout),
                 _run(conn, "uci -q show network", timeout),
                 _read_leases(conn, timeout),
+                _run(conn, "uci -q show dhcp", timeout),
+                _run(conn, "cat /proc/net/arp", timeout),
             )
+            st.static_hosts, st.arp = parse_static_hosts(ucidhcp), parse_arp(arp)
             st.interfaces = parse_interfaces(dump, devstatus, uci_vlans(ucinet))
             st.online = True
     except (OSError, asyncssh.Error, asyncio.TimeoutError) as e:

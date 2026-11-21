@@ -26,6 +26,17 @@ chmod 600 /etc/dropbear/authorized_keys</pre>
   </table>
 </div>
 <div class="panel">
+  <h2>{{ t("setup.names_title") }}</h2>
+  <p>{{ t("setup.names_text") }}</p>
+  <dl>
+    <dt>Home Assistant</dt>
+    <dd>{% if store.ha_status == 'ok' %}<span class="sig good">OK</span> · {{ t("setup.ha_ok", n=(store.ha_names | length)) }}{% elif store.ha_status == 'off' %}<span class="muted">{{ t("setup.ha_off") }}</span>{% else %}<span class="err">{{ store.ha_status }}</span>{% endif %}</dd>
+    <dt>{{ t("setup.names_manual") }}</dt><dd>{{ (store.opts.names or []) | length }}</dd>
+    {% if store.router %}<dt>{{ t("setup.names_static") }}</dt><dd>{{ store.router.static_hosts | length }}</dd>{% endif %}
+  </dl>
+  <p class="muted small">{{ t("setup.names_hint") }}</p>
+</div>
+<div class="panel">
   <h2>3. {{ t("setup.users_title") }}</h2>
   <p>{{ t("setup.users_text") }}</p>
   <dl>

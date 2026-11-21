@@ -1,31 +1,37 @@
 configuration:
   ssh_user:
     name: SSH user
-    description: User the add-on logs in as on the access points and the router (usually root).
+    description: "User the add-on logs in as on the access points and the router (usually root)."
   poll_interval:
     name: Poll interval (s)
-    description: How often data is collected from the access points, 10–600 seconds.
+    description: "How often data is collected from the access points, 10–600 seconds."
   refresh_interval:
     name: Page refresh (s)
-    description: How often open pages reload, in seconds. 0 = off. Each browser can override it on the Settings page.
+    description: "How often open pages reload, in seconds. 0 = off. Each browser can override it on the Settings page."
   language:
     name: Language
-    description: Web UI language. auto = language of the Home Assistant user (or the browser). Each browser can override it on the Settings page.
+    description: "Web UI language. auto = language of the Home Assistant user (or the browser). Each browser can override it on the Settings page."
   dhcp_router:
     name: Router (deprecated)
-    description: Old way to set the router. Use type router in the device list instead. If set, the device with the same IP becomes the router.
+    description: "Old way to set the router. Use type router in the device list instead. If set, the device with the same IP becomes the router."
   router_name:
     name: Router name (deprecated)
-    description: Only used together with the deprecated dhcp_router when the router is not in the device list.
+    description: "Only used together with the deprecated dhcp_router when the router is not in the device list."
   demo:
     name: Demo mode
-    description: Show made-up data, no SSH connections.
+    description: "Show made-up data, no SSH connections."
   full_access:
     name: Full access
-    description: Home Assistant usernames allowed to reboot, update packages and change SSIDs. If both lists are empty, everyone has full access.
+    description: "Home Assistant usernames allowed to reboot, update packages and change SSIDs. If both lists are empty, everyone has full access."
   read_access:
     name: Read-only access
-    description: Home Assistant usernames that may only view. Anyone not in either list is denied.
+    description: "Home Assistant usernames that may only view. Anyone not in either list is denied."
+  ha_names:
+    name: Names from Home Assistant
+    description: "Use device names from the Home Assistant device registry (matched by MAC), e.g. ESPHome devices with a static IP."
+  names:
+    name: Manual names
+    description: "Own names for devices by MAC (mac: aa:bb:cc:dd:ee:ff, name: …). They take precedence over all other sources."
   aps:
     name: Devices
-    description: All managed OpenWrt devices – only these are used. Each has name, host, optional SSH port and type ap (default) or router. The router (one) is shown with interfaces and DHCP leases and provides client names and IPs.
+    description: "All managed OpenWrt devices – only these are used. Each has name, host, optional SSH port and type ap (default) or router. The router (one) is shown with interfaces and DHCP leases and provides client names and IPs."
