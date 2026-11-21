@@ -2,34 +2,34 @@
 {% block content %}
 <h1>SSID</h1>
 {% if can_edit %}
-<p class="muted">Změna se zapíše přes <code>uci</code> na všechny zaškrtnuté AP. Prázdné pole = beze změny. Před zápisem se zobrazí náhled.</p>
+<p class="muted">{{ t("ssid.intro") }}</p>
 {% else %}
-<p class="muted">Máš přístup jen pro čtení, SSID nelze měnit.</p>
+<p class="muted">{{ t("ssid.readonly") }}</p>
 {% endif %}
-{% if not groups %}<p class="empty">Žádná SSID (AP nejsou online, nebo se ještě nenačetla).</p>{% endif %}
+{% if not groups %}<p class="empty">{{ t("ssid.none") }}</p>{% endif %}
 {% for g in groups %}
 <div class="panel">
-  <h2>{{ g.ssid or "(bez názvu)" }}</h2>
+  <h2>{{ g.ssid or t("ssid.unnamed") }}</h2>
   <form hx-post="{{ base }}/ssids/preview" hx-target="next .ssid-out" hx-disabled-elt="find button[type=submit]">
     <input type="hidden" name="ssid" value="{{ g.ssid }}">
     <table class="list">
-      <thead><tr><th></th><th>AP</th><th>Rádio</th><th>Pásmo</th><th>Síť</th><th>Šifrování</th><th>Skryté</th><th>Stav</th><th class="mono">uci sekce</th></tr></thead>
+      <thead><tr><th></th><th>AP</th><th>{{ t("col.radio") }}</th><th>{{ t("col.band") }}</th><th>{{ t("col.network") }}</th><th>{{ t("col.encryption") }}</th><th>{{ t("col.hidden") }}</th><th>{{ t("col.state") }}</th><th class="mono">{{ t("col.uci_section") }}</th></tr></thead>
       {% for i in g["items"] %}
       <tr class="{{ 'row-off' if i.disabled }}">
         <td>{% if can_edit %}<input type="checkbox" name="target" value="{{ i.ap }}|{{ i.section }}" checked>{% endif %}</td>
-        <td>{{ i.ap }}</td><td>{{ i.device }}</td><td>{{ i.band or "–" }}</td><td>{{ i.network }}</td>
-        <td>{{ i.encryption or "none" }}</td><td>{{ 'ano' if i.hidden else 'ne' }}</td>
-        <td>{{ 'vypnuto' if i.disabled else 'zapnuto' }}</td><td class="mono small">{{ i.section }}</td>
+        <td>{{ i.ap }}</td><td>{{ i.device }}</td><td>{{ (i.band | band) or "–" }}</td><td>{{ i.network }}</td>
+        <td>{{ i.encryption or "none" }}</td><td>{{ t("yes") if i.hidden else t("no") }}</td>
+        <td>{{ t("state.off") if i.disabled else t("state.on") }}</td><td class="mono small">{{ i.section }}</td>
       </tr>
       {% endfor %}
     </table>
     {% if can_edit %}
     <div class="filters edit">
-      <label>Nový název <input name="new_ssid" maxlength="32" placeholder="{{ g.ssid }}"></label>
-      <label>Nové heslo <input name="new_key" type="password" minlength="8" maxlength="63" autocomplete="new-password" placeholder="beze změny"></label>
-      <label>Skryté <select name="hidden"><option value="">beze změny</option><option value="1">ano</option><option value="0">ne</option></select></label>
-      <label>Stav <select name="disabled"><option value="">beze změny</option><option value="0">zapnout</option><option value="1">vypnout</option></select></label>
-      <button type="submit">Náhled změn</button>
+      <label>{{ t("ssid.new_name") }} <input name="new_ssid" maxlength="32" placeholder="{{ g.ssid }}"></label>
+      <label>{{ t("ssid.new_key") }} <input name="new_key" type="password" minlength="8" maxlength="63" autocomplete="new-password" placeholder="{{ t('ssid.unchanged') }}"></label>
+      <label>{{ t("col.hidden") }} <select name="hidden"><option value="">{{ t("ssid.unchanged") }}</option><option value="1">{{ t("yes") }}</option><option value="0">{{ t("no") }}</option></select></label>
+      <label>{{ t("col.state") }} <select name="disabled"><option value="">{{ t("ssid.unchanged") }}</option><option value="0">{{ t("ssid.enable") }}</option><option value="1">{{ t("ssid.disable") }}</option></select></label>
+      <button type="submit">{{ t("ssid.preview") }}</button>
     </div>
     {% endif %}
   </form>

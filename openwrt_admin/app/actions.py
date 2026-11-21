@@ -22,51 +22,51 @@ class Result:
     output: str
 
 
-async def run(cfg: APConfig, key: asyncssh.SSHKey, cmd: str, timeout: float = 60.0) -> Result:
+async def run(cfg: APConfig, key: asyncssh.SSHKey, cmd: str, timeout: float = 60.0, t=None) -> Result:
     try:
         async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=10) as conn:
             res = await asyncio.wait_for(conn.run(cmd, check=False, stderr=asyncssh.STDOUT), timeout)
             out = res.stdout if isinstance(res.stdout, str) else (res.stdout or b"").decode(errors="replace")
-            return Result(res.exit_status == 0, out.strip() or "(bez výstupu)")
+            return Result(res.exit_status == 0, out.strip() or (t("msg.no_output") if t else "(no output)"))
     except asyncio.TimeoutError:
-        return Result(False, f"Vypršel časový limit {int(timeout)} s. Příkaz může na AP dál běžet.")
+        return Result(False, t("msg.timeout", s=int(timeout)) if t else f"Timeout after {int(timeout)} s.")
     except (OSError, asyncssh.Error) as e:
         return Result(False, f"{type(e).__name__}: {e}")
 
 
 # ---------------------------------------------------------------- restart
 
-async def reboot(cfg: APConfig, key) -> Result:
+async def reboot(cfg: APConfig, key, t) -> Result:
     # odpojit se driv, nez AP spadne
-    r = await run(cfg, key, "(sleep 2; reboot) >/dev/null 2>&1 </dev/null &", timeout=15)
+    r = await run(cfg, key, "(sleep 2; reboot) >/dev/null 2>&1 </dev/null &", timeout=15, t=t)
     if r.ok:
-        r.output = "Restart odeslán. AP bude asi 1–2 minuty nedostupný."
+        r.output = t("msg.reboot_sent")
     return r
 
 
 # ---------------------------------------------------------------- balicky
 
-def update_cmd(pkg: str) -> str:
+def update_cmd(pkg: str, header: str = "== Upgradable ==") -> str:
     if pkg == "opkg":
         return "opkg update >/tmp/owadmin-update.log 2>&1 || { tail -n 20 /tmp/owadmin-update.log; exit 1; }; " \
-               "echo '== Dostupné aktualizace =='; opkg list-upgradable"
-    return "apk update 2>&1 || exit 1; echo; echo '== Dostupné aktualizace =='; apk list --upgradable 2>&1"
+               f"echo {shlex.quote(header)}; opkg list-upgradable"
+    return f"apk update 2>&1 || exit 1; echo; echo {shlex.quote(header)}; apk list --upgradable 2>&1"
 
 
-def upgrade_cmd(pkg: str) -> str:
+def upgrade_cmd(pkg: str, uptodate: str = "Everything is up to date.") -> str:
     if pkg == "opkg":
         return ("opkg update >/dev/null 2>&1; P=$(opkg list-upgradable | cut -d' ' -f1); "
-                "[ -z \"$P\" ] && { echo 'Vše je aktuální.'; exit 0; }; opkg upgrade $P 2>&1")
+                f"[ -z \"$P\" ] && {{ echo {shlex.quote(uptodate)}; exit 0; }}; opkg upgrade $P 2>&1")
     return "apk update >/dev/null 2>&1; apk upgrade 2>&1"
 
 
-async def pkg_update(cfg: APConfig, key, pkg: str) -> Result:
-    return await run(cfg, key, update_cmd(pkg), timeout=120)
+async def pkg_update(cfg: APConfig, key, pkg: str, t) -> Result:
+    return await run(cfg, key, update_cmd(pkg, t("msg.upgradable_header")), timeout=120, t=t)
 
 
-async def pkg_upgrade(cfg: APConfig, key, pkg: str) -> Result:
-    return await run(cfg, key, upgrade_cmd(pkg), timeout=900)
+async def pkg_upgrade(cfg: APConfig, key, pkg: str, t) -> Result:
+    return await run(cfg, key, upgrade_cmd(pkg, t("msg.up_to_date")), timeout=900, t=t)
 
 
 # ---------------------------------------------------------------- SSID
@@ -80,13 +80,13 @@ class SsidChange:
     disabled: bool | None = None
 
 
-def validate(ch: SsidChange) -> str | None:
+def validate(ch: SsidChange, t) -> str | None:
     if not SECTION_RE.match(ch.section):
-        return f"Neplatná uci sekce: {ch.section!r}"
+        return t("msg.bad_section", section=ch.section)
     if ch.ssid is not None and not (1 <= len(ch.ssid.encode()) <= 32):
-        return "SSID musí mít 1–32 bajtů."
+        return t("msg.bad_ssid")
     if ch.key is not None and not (8 <= len(ch.key) <= 63 and ch.key.isascii() and ch.key.isprintable()):
-        return "Heslo musí mít 8–63 tisknutelných ASCII znaků."
+        return t("msg.bad_key")
     return None
 
 
@@ -109,12 +109,12 @@ def mask(cmd: str) -> str:
     return re.sub(r"(\.key=).*$", r"\1********", cmd)
 
 
-async def apply_ssid(cfg: APConfig, key, changes: list[SsidChange]) -> Result:
+async def apply_ssid(cfg: APConfig, key, changes: list[SsidChange], t) -> Result:
     cmds = [c for ch in changes for c in uci_commands(ch)]
     if not cmds:
-        return Result(True, "Beze změny.")
+        return Result(True, t("msg.unchanged"))
     script = " && ".join(cmds) + " && uci commit wireless && wifi reload && echo OK"
     log.info("%s: %s", cfg.name, " ; ".join(mask(c) for c in cmds))
-    r = await run(cfg, key, f"{script} || {{ uci revert wireless; echo 'Chyba. Necommitnuté změny vráceny (uci revert), zkontroluj stav AP.'; exit 1; }}",
-                  timeout=60)
+    r = await run(cfg, key, f"{script} || {{ uci revert wireless; echo {shlex.quote(t('msg.reverted'))}; exit 1; }}",
+                  timeout=60, t=t)
     return r

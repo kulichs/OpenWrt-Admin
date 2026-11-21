@@ -1,64 +1,77 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Nastavení</h1>
+<h1>{{ t("nav.settings") }}</h1>
 <div class="panel">
-  <h2>1. SSH klíč add-onu</h2>
-  <p>Add-on se na AP i router přihlašuje tímto klíčem (čtení přes <code>ubus</code>, změny přes <code>uci</code>). Přidej ho na každé zařízení:</p>
+  <h2>1. {{ t("setup.key_title") }}</h2>
+  <p>{{ t("setup.key_text") }}</p>
   <pre id="pub">{{ store.pubkey }}</pre>
-  <p>Na AP/routeru:</p>
+  <p>{{ t("setup.key_on_device") }}</p>
   <pre>echo '{{ store.pubkey }}' &gt;&gt; /etc/dropbear/authorized_keys
 chmod 600 /etc/dropbear/authorized_keys</pre>
-  <p class="muted small">Soubor <code>/etc/dropbear/authorized_keys</code> přežije sysupgrade. Po <code>sysupgrade -n</code> ho přidej znovu (nebo ho dej do first-boot skriptu).</p>
+  <p class="muted small">{{ t("setup.key_note") }}</p>
 </div>
 <div class="panel">
-  <h2>2. Seznam AP</h2>
-  <p>AP, uživatel, interval a router s DHCP se nastavují v Home Assistantu: <em>Nastavení → Doplňky → OpenWrt-Admin → Konfigurace</em>.</p>
+  <h2>2. {{ t("setup.devices_title") }}</h2>
+  <p>{{ t("setup.devices_text") }}</p>
   <table class="list">
-    <thead><tr><th>Název</th><th>Adresa</th><th>Stav</th></tr></thead>
+    <thead><tr><th>{{ t("col.name") }}</th><th>{{ t("col.address") }}</th><th>{{ t("col.state") }}</th></tr></thead>
     {% for a in store.aps %}
     <tr><td>{{ a.name }}</td><td class="mono">{{ a.host }}</td>
-        <td>{% if a.online %}<span class="sig good">OK</span>{% else %}<span class="err">{{ a.error or "zatím nenačteno" }}</span>{% endif %}</td></tr>
+        <td>{% if a.online %}<span class="sig good">OK</span>{% else %}<span class="err">{{ a.error or t("ap.not_loaded") }}</span>{% endif %}</td></tr>
     {% endfor %}
-    <tr><td>DHCP router</td><td class="mono">{{ store.opts.dhcp_router or "–" }}</td>
-        <td>{{ store.leases | length }} záznamů</td></tr>
+    <tr><td>{{ t("setup.dhcp_router") }}</td><td class="mono">{{ store.opts.dhcp_router or "–" }}</td>
+        <td>{% if not store.opts.dhcp_router %}–{% elif store.router_ok %}<span class="sig good">OK</span> · {{ t("setup.leases", n=(store.leases | length)) }}{% else %}<span class="err">{{ store.router_error or t("ap.not_loaded") }}</span>{% endif %}</td></tr>
   </table>
 </div>
 <div class="panel">
-  <h2>3. Uživatelé a oprávnění</h2>
-  <p>Přihlášení řeší Home Assistant, add-on podle jména uživatele HA rozhoduje, co smí.</p>
+  <h2>3. {{ t("setup.users_title") }}</h2>
+  <p>{{ t("setup.users_text") }}</p>
   <dl>
-    <dt>Přihlášen jako</dt><dd>{{ user.name or "–" }}{% if user.display %} ({{ user.display }}){% endif %}{% if user.id %} <span class="muted small mono">{{ user.id }}</span>{% endif %}</dd>
-    <dt>Role</dt><dd><span class="user-badge role-{{ user.role }}">{{ user.label }}</span> <span class="muted small">{{ user.why }}</span></dd>
+    <dt>{{ t("setup.logged_in_as") }}</dt><dd>{{ user.name or "–" }}{% if user.display %} ({{ user.display }}){% endif %}{% if user.id %} <span class="muted small mono">{{ user.id }}</span>{% endif %}</dd>
+    <dt>{{ t("setup.role") }}</dt><dd><span class="user-badge role-{{ user.role }}">{{ user.label }}</span> <span class="muted small">{{ user.why }}</span></dd>
     <dt>full_access</dt><dd class="mono">{{ (store.opts.full_access or []) | join(", ") or "–" }}</dd>
     <dt>read_access</dt><dd class="mono">{{ (store.opts.read_access or []) | join(", ") or "–" }}</dd>
   </dl>
   {% if not store.opts.full_access and not store.opts.read_access %}
-  <p class="warn small">Role nejsou nastavené, každý uživatel HA, který otevře panel, má plný přístup (restart, apk, SSID). Doplň v konfiguraci add-onu <code>full_access</code> a <code>read_access</code>.</p>
+  <p class="warn small">{{ t("setup.no_roles_warning") }}</p>
   {% endif %}
-  <p class="muted small">Do seznamů se píše uživatelské jméno HA (Nastavení → Lidé → Uživatelé), případně zobrazované jméno; velikost písmen nehraje roli.</p>
+  <p class="muted small">{{ t("setup.users_hint") }}</p>
 </div>
 <div class="panel">
-  <h2>4. Obnovování stránky</h2>
-  <p>Stránky se samy načítají znovu po
-    {% if refresh %}<b>{{ refresh }} s</b>{% else %}<b>nikdy</b> (vypnuto){% endif %}
-    {% if refresh_own %}<span class="muted small">(vlastní nastavení tohoto prohlížeče)</span>{% else %}<span class="muted small">(výchozí z konfigurace add-onu, <code>refresh_interval</code>)</span>{% endif %}.</p>
-  <label class="inline">Pro tento prohlížeč:
-    <select id="refresh-select">
-      <option value="">výchozí z konfigurace ({{ store.opts.refresh_interval or 0 }} s)</option>
-      {% for v in refresh_choices %}<option value="{{ v }}" {{ 'selected' if refresh_own and v == refresh }}>{{ 'vypnuto' if v == 0 else (v ~ ' s' if v < 60 else (v // 60) ~ ' min') }}</option>{% endfor %}
-    </select>
-  </label>
-  <p class="muted small">Výchozí hodnotu pro všechny nastavíš v Home Assistantu v konfiguraci add-onu (<code>refresh_interval</code>, 0 = vypnuto). Volba tady platí jen v tomto prohlížeči.</p>
+  <h2>4. {{ t("setup.display_title") }}</h2>
+  <dl>
+    <dt>{{ t("setup.refresh") }}</dt>
+    <dd>{% if refresh %}<b>{{ refresh | interval }}</b>{% else %}<b>{{ t("setup.refresh_off") }}</b>{% endif %}
+      <span class="muted small">({{ t("setup.from_browser") if refresh_own else t("setup.from_config", option="refresh_interval") }})</span></dd>
+    <dt>{{ t("setup.language") }}</dt>
+    <dd><b>{{ languages[lang] }}</b> <span class="muted small">({{ t("setup.lang_source." ~ lang_source) }})</span></dd>
+  </dl>
+  <div class="filters">
+    <label class="inline">{{ t("setup.refresh_browser") }}
+      <select id="refresh-select">
+        <option value="">{{ t("setup.default_config", value=((store.opts.refresh_interval or 0) | interval)) }}</option>
+        {% for v in refresh_choices %}<option value="{{ v }}" {{ 'selected' if refresh_own and v == refresh }}>{{ v | interval }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="inline">{{ t("setup.language_browser") }}
+      <select id="lang-select">
+        <option value="">{{ t("setup.lang_auto") }}</option>
+        {% for code, name in languages.items() %}<option value="{{ code }}" {{ 'selected' if lang_source == 'browser' and code == lang }}>{{ name }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+  <p class="muted small">{{ t("setup.display_hint") }}</p>
   <script>
-  document.getElementById("refresh-select").addEventListener("change", function (e) {
-    var v = e.target.value;
-    document.cookie = "{{ refresh_cookie }}=" + (v || "") + "; path=/; SameSite=Lax" + (v ? "; max-age=31536000" : "; max-age=0");
+  function owSet(name, v) {
+    document.cookie = name + "=" + (v || "") + "; path=/; SameSite=Lax" + (v ? "; max-age=31536000" : "; max-age=0");
     location.reload();
-  });
+  }
+  document.getElementById("refresh-select").addEventListener("change", function (e) { owSet("{{ refresh_cookie }}", e.target.value); });
+  document.getElementById("lang-select").addEventListener("change", function (e) { owSet("{{ lang_cookie }}", e.target.value); });
   </script>
 </div>
 <div class="panel">
   <h2>5. JSON API</h2>
-  <p>Aktuální stav je i ve strojově čitelné podobě: <a href="{{ base }}/api/state"><code>api/state</code></a>.</p>
+  <p>{{ t("setup.api_text") }} <a href="{{ base }}/api/state"><code>api/state</code></a></p>
 </div>
 {% endblock %}

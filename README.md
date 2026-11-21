@@ -6,7 +6,7 @@
 
 | Add-on | Description |
 |---|---|
-| [OpenWrt-Admin](openwrt_admin/) | Manage OpenWrt access points and Wi-Fi clients over SSH (`ubus`/`uci`): overview, clients, SSIDs, reboot, package updates, permissions per Home Assistant user |
+| [OpenWrt-Admin](openwrt_admin/) | Manage OpenWrt access points and Wi-Fi clients over SSH (`ubus`/`uci`): overview, clients, SSIDs, reboot, package updates, permissions per Home Assistant user. UI in English and Czech. |
 
 **Install:** Home Assistant → **Settings → Apps (Add-ons) → store → ⋮ → Repositories** → add the URL of this repository (or `ha store add <URL>` in the HA terminal). Not via *Marketplace → Add from link*, that one is GitHub/HACS only.
 

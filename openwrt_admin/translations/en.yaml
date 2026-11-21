@@ -8,6 +8,9 @@ configuration:
   refresh_interval:
     name: Page refresh (s)
     description: How often open pages reload, in seconds. 0 = off. Each browser can override it on the Settings page.
+  language:
+    name: Language
+    description: Web UI language. auto = language of the Home Assistant user (or the browser). Each browser can override it on the Settings page.
   dhcp_router:
     name: DHCP router
     description: Router with DHCP leases (client names and IPs), e.g. 192.168.1.1 or host:port. Empty = off.

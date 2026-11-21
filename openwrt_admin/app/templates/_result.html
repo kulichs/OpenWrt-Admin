@@ -1,4 +1,4 @@
 <div class="result {{ 'ok' if ok else 'fail' }}">
-  <strong>{{ title }}: {{ 'hotovo' if ok else 'chyba' }}</strong>
+  <strong>{{ title }}: {{ t("result.done") if ok else t("result.error") }}</strong>
   <pre>{{ output }}</pre>
 </div>

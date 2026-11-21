@@ -16,8 +16,9 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jinja2 import pass_context
 
-from . import actions
+from . import actions, i18n
 from .collector import APConfig, APState, band_of, collect_ap, collect_leases, norm_band
 from .demo import demo_states
 
@@ -40,7 +41,7 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 def load_options() -> dict:
     opts = {"aps": [], "ssh_user": "root", "poll_interval": 30, "dhcp_router": "", "demo": False,
-            "full_access": [], "read_access": [], "refresh_interval": 30}
+            "full_access": [], "read_access": [], "refresh_interval": 30, "language": "auto"}
     if OPTIONS.exists():
         opts.update(json.loads(OPTIONS.read_text()))
     return opts
@@ -66,6 +67,8 @@ class Store:
         self.pubkey = self.key.export_public_key().decode().strip()
         self.aps: list[APState] = [APState(name=a["name"], host=a["host"]) for a in self.opts["aps"]]
         self.leases: dict[str, dict] = {}
+        self.router_ok = False
+        self.router_error: str | None = None
         self.last_poll = 0.0
         self.lock = asyncio.Lock()
         self.ap_locks: dict[str, asyncio.Lock] = {}
@@ -105,6 +108,7 @@ class Store:
         async with self.lock:
             if self.opts.get("demo"):
                 self.aps, self.leases = demo_states()
+                self.router_ok, self.router_error = bool(self.opts.get("dhcp_router")), None
                 self.last_poll = time.time()
                 return
             user = self.opts.get("ssh_user", "root")
@@ -116,9 +120,18 @@ class Store:
                 tasks.append(collect_leases(router, user, self.key))
             res = await asyncio.gather(*tasks)
             if router:
-                self.leases = res.pop() or self.leases
+                leases, err = res.pop()
+                self.router_ok, self.router_error = err is None, err
+                self.leases = leases or self.leases
             self.aps = list(res)
             self.last_poll = time.time()
+
+    def devices(self) -> list[dict]:
+        """Vsechna spravovana zarizeni (AP + router) pro souhrn na prehledu."""
+        out = [{"name": a.name, "online": a.online} for a in self.aps]
+        if self.opts.get("dhcp_router"):
+            out.append({"name": "router " + str(self.opts["dhcp_router"]), "online": self.router_ok})
+        return out
 
     def all_clients(self) -> list[dict]:
         out = []
@@ -161,10 +174,10 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 # Ingress (Supervisor) posila identitu prihlaseneho uzivatele HA v hlavickach.
 # Add-on je dostupny jen z Ingress IP, takze hlavicky nastavuje HA, ne prohlizec.
 H_USER_ID, H_USER_NAME, H_USER_DISPLAY = "X-Remote-User-Id", "X-Remote-User-Name", "X-Remote-User-Display-Name"
-ROLE_LABEL = {"full": "plný přístup", "read": "jen čtení", "none": "bez přístupu"}
+ROLE_KEYS = {"full": "role.full", "read": "role.read", "none": "role.none"}
 
 
-def identify(request: Request) -> dict:
+def identify(request: Request, t) -> dict:
     h = request.headers
     user = {"id": h.get(H_USER_ID, ""), "name": h.get(H_USER_NAME, "") or os.environ.get("OWADMIN_DEV_USER", ""),
             "display": h.get(H_USER_DISPLAY, "")}
@@ -172,16 +185,35 @@ def identify(request: Request) -> dict:
     read = {u.strip().lower() for u in store.opts.get("read_access") or [] if u.strip()}
     names = {user["name"].lower(), user["display"].lower()} - {""}
     if not full and not read:
-        role, why = "full", "role nejsou nastavené (full_access / read_access prázdné)"
+        role, why = "full", t("why.no_roles")
     elif not names:
-        role, why = "read", "Ingress neposlal jméno uživatele, bezpečný režim jen pro čtení"
+        role, why = "read", t("why.no_user")
     elif names & full:
-        role, why = "full", "uživatel je ve full_access"
+        role, why = "full", t("why.in_full")
     elif names & read:
-        role, why = "read", "uživatel je v read_access"
+        role, why = "read", t("why.in_read")
     else:
-        role, why = "none", "uživatel není ve full_access ani read_access"
-    return {**user, "role": role, "why": why, "label": ROLE_LABEL[role]}
+        role, why = "none", t("why.not_listed")
+    return {**user, "role": role, "why": why, "label": t(ROLE_KEYS[role])}
+
+
+# ---------------------------------------------------------------- jazyk
+LANG_COOKIE = "owadmin_lang"        # rucni volba v tomto prohlizeci (stranka Nastaveni)
+LANG_HA_COOKIE = "owadmin_lang_ha"  # jazyk uzivatele HA, nastavuje skript v base.html z localStorage
+
+
+def pick_language(request: Request) -> tuple[str, str]:
+    """(kod jazyka, zdroj): browser > config > auto (jazyk HA) > Accept-Language > en."""
+    lang = i18n.normalize(request.cookies.get(LANG_COOKIE))
+    if lang:
+        return lang, "browser"
+    cfg = i18n.normalize(str(store.opts.get("language") or "auto")) if store else ""
+    if cfg:
+        return cfg, "config"
+    lang = i18n.normalize(request.cookies.get(LANG_HA_COOKIE))
+    if lang:
+        return lang, "auto"
+    return (i18n.from_accept_language(request.headers.get("Accept-Language")) or i18n.DEFAULT), "auto"
 
 
 @app.middleware("http")
@@ -190,18 +222,22 @@ async def ingress_only(request: Request, call_next):
         return JSONResponse({"detail": "Pouze pres Home Assistant Ingress"}, status_code=403)
     if request.url.path.startswith("/static/") or store is None:
         return await call_next(request)
-    user = identify(request)
+    lang, source = pick_language(request)
+    t = i18n.translator(lang)
+    request.state.lang, request.state.lang_source, request.state.t = lang, source, t
+    user = identify(request, t)
     request.state.user = user
     if user["role"] == "none":
         log.warning("Odepreno: %s (%s) %s %s", user["name"] or "?", user["display"], request.method, request.url.path)
         base = request.headers.get("X-Ingress-Path", "").rstrip("/")
-        return templates.TemplateResponse(request, "denied.html", {"base": base, "user": user}, status_code=403)
+        return templates.TemplateResponse(request, "denied.html", {"base": base, "user": user, "t": t, "lang": lang},
+                                          status_code=403)
     return await call_next(request)
 
 
 def require_full(request: Request):
     if request.state.user["role"] != "full":
-        raise HTTPException(403, "Na tuto akci nemáš oprávnění (jen čtení).")
+        raise HTTPException(403, request.state.t("msg.no_permission"))
 
 
 def who(request: Request) -> str:
@@ -221,18 +257,29 @@ def fmt_bytes(n) -> str:
         n /= 1024
 
 
-def fmt_duration(s) -> str:
+@pass_context
+def fmt_duration(ctx, s) -> str:
     if s is None:
         return "–"
+    t = ctx.get("t") or i18n.translator(i18n.DEFAULT)
     s = int(s)
     d, s = divmod(s, 86400)
     h, s = divmod(s, 3600)
     m, _ = divmod(s, 60)
     if d:
-        return f"{d} d {h} h"
+        return t("fmt.d_h", d=d, h=h)
     if h:
-        return f"{h} h {m} min"
-    return f"{m} min"
+        return t("fmt.h_m", h=h, m=m)
+    return t("fmt.m", m=m)
+
+
+@pass_context
+def fmt_interval(ctx, v) -> str:
+    t = ctx.get("t") or i18n.translator(i18n.DEFAULT)
+    v = int(v or 0)
+    if v <= 0:
+        return t("setup.refresh_off")
+    return t("fmt.sec", s=v) if v < 60 else t("fmt.min", m=v // 60)
 
 
 def fmt_rate(kbit) -> str:
@@ -247,14 +294,23 @@ def signal_class(sig) -> str:
     return "good" if sig >= -60 else "ok" if sig >= -72 else "bad"
 
 
-def ago(ts) -> str:
+@pass_context
+def ago(ctx, ts) -> str:
+    t = ctx.get("t") or i18n.translator(i18n.DEFAULT)
     if not ts:
-        return "nikdy"
+        return t("fmt.never")
     s = int(time.time() - ts)
-    return f"před {s} s" if s < 120 else f"před {s // 60} min"
+    return t("fmt.ago_s", s=s) if s < 120 else t("fmt.ago_m", m=s // 60)
 
 
-templates.env.filters.update(bytes=fmt_bytes, duration=fmt_duration, rate=fmt_rate,
+@pass_context
+def fmt_band(ctx, b) -> str:
+    """Pasmo se interne drzi jako '2,4 GHz'; v jazycich s desetinnou teckou '2.4 GHz'."""
+    b = b or ""
+    return b if ctx.get("lang", "cs") == "cs" else b.replace(",", ".")
+
+
+templates.env.filters.update(band=fmt_band, bytes=fmt_bytes, duration=fmt_duration, rate=fmt_rate, interval=fmt_interval,
                              sigclass=signal_class, ago=ago)
 
 
@@ -280,6 +336,8 @@ def render(request: Request, name: str, **ctx):
     return templates.TemplateResponse(request, name, {
         "base": base, "store": store, "now": time.time(), "autorefresh": True,
         "refresh": refresh, "refresh_own": refresh_own, "refresh_choices": REFRESH_CHOICES, "refresh_cookie": REFRESH_COOKIE,
+        "t": request.state.t, "lang": request.state.lang, "lang_source": request.state.lang_source,
+        "languages": i18n.NAMES, "lang_cookie": LANG_COOKIE, "lang_ha_cookie": LANG_HA_COOKIE,
         "user": request.state.user, "can_edit": request.state.user["role"] == "full", **ctx})
 
 
@@ -288,7 +346,7 @@ def render(request: Request, name: str, **ctx):
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     clients = store.all_clients()
-    return render(request, "dashboard.html", page="dashboard", clients=clients)
+    return render(request, "dashboard.html", page="dashboard", clients=clients, devices=store.devices())
 
 
 @app.get("/clients", response_class=HTMLResponse)
@@ -346,7 +404,7 @@ async def api_state():
 def require_htmx(request: Request):
     """Akce jen z UI (htmx posila hlavicku, cizi formular ji nastavit nemuze -> CSRF)."""
     if request.headers.get("HX-Request") != "true":
-        raise HTTPException(400, "Akce jen z rozhraní add-onu")
+        raise HTTPException(400, request.state.t("msg.ui_only"))
 
 
 def result(request: Request, title: str, r: actions.Result):
@@ -355,48 +413,55 @@ def result(request: Request, title: str, r: actions.Result):
 
 async def ap_action(request: Request, name: str, title: str, fn, demo_text: str):
     require_htmx(request)
+    t = request.state.t
     if request.state.user["role"] != "full":
-        return result(request, title, actions.Result(False, "Na tuto akci nemáš oprávnění (jen čtení)."))
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
     ap = store.ap(name)
     lock = store.ap_lock(name)
     if lock.locked():
-        return result(request, title, actions.Result(False, "Na tomto AP už běží jiná akce, počkej na dokončení."))
+        return result(request, title, actions.Result(False, t("msg.busy")))
     async with lock:
         log.info("%s: %s %s", who(request), title, name)
         if store.opts.get("demo"):
             await asyncio.sleep(1)
             return result(request, title, actions.Result(True, demo_text))
-        r = await fn(store.cfg(name), store.key, ap)
-    log.info("%s: %s %s -> %s", who(request), title, name, "OK" if r.ok else "chyba")
+        r = await fn(store.cfg(name), store.key, ap, t)
+    log.info("%s: %s %s -> %s", who(request), title, name, "OK" if r.ok else "error")
     return result(request, title, r)
 
 
 @app.post("/ap/{name}/reboot", response_class=HTMLResponse)
 async def ap_reboot(request: Request, name: str):
-    async def fn(cfg, key, ap):
-        r = await actions.reboot(cfg, key)
+    t = request.state.t
+
+    async def fn(cfg, key, ap, t):
+        r = await actions.reboot(cfg, key, t)
         if r.ok:
-            ap.online, ap.error = False, "restartuje se"
+            ap.online, ap.error = False, t("ap.rebooting")
         return r
-    return await ap_action(request, name, "Restart", fn, "Restart odeslán (demo).")
+    return await ap_action(request, name, t("ap.reboot"), fn, t("msg.reboot_sent") + " (demo)")
 
 
 @app.post("/ap/{name}/pkg-update", response_class=HTMLResponse)
 async def ap_pkg_update(request: Request, name: str):
-    async def fn(cfg, key, ap):
-        return await actions.pkg_update(cfg, key, ap.pkg or "apk")
-    return await ap_action(request, name, "Kontrola aktualizací", fn,
-                           "== Dostupné aktualizace ==\nhostapd-utils-2025.08.26~1 < 2025.08.26~2\n"
+    t = request.state.t
+
+    async def fn(cfg, key, ap, t):
+        return await actions.pkg_update(cfg, key, ap.pkg or "apk", t)
+    return await ap_action(request, name, t("ap.check_updates"), fn,
+                           t("msg.upgradable_header") + "\nhostapd-utils-2025.08.26~1 < 2025.08.26~2\n"
                            "libubox20251010-2025.10.10~1 < 2025.10.10~2")
 
 
 @app.post("/ap/{name}/pkg-upgrade", response_class=HTMLResponse)
 async def ap_pkg_upgrade(request: Request, name: str):
-    async def fn(cfg, key, ap):
-        r = await actions.pkg_upgrade(cfg, key, ap.pkg or "apk")
+    t = request.state.t
+
+    async def fn(cfg, key, ap, t):
+        r = await actions.pkg_upgrade(cfg, key, ap.pkg or "apk", t)
         asyncio.create_task(store.poll())  # overlay se zmenil
         return r
-    return await ap_action(request, name, "Upgrade balíčků", fn,
+    return await ap_action(request, name, t("ap.upgrade"), fn,
                            "(1/2) Upgrading hostapd-utils\n(2/2) Upgrading libubox20251010\nOK: 2 packages (demo)")
 
 
@@ -415,18 +480,20 @@ def _tri(v: str) -> bool | None:
 async def ssids_preview(request: Request, ssid: str = Form(...), new_ssid: str = Form(""),
                         new_key: str = Form(""), hidden: str = Form(""), disabled: str = Form("")):
     require_htmx(request)
+    t = request.state.t
+    title = t("preview.title")
     if request.state.user["role"] != "full":
-        return result(request, "Náhled", actions.Result(False, "Na změny SSID nemáš oprávnění (jen čtení)."))
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
     form = await request.form()
     targets = form.getlist("target")  # "ap|section"
     group = next((g for g in store.ssid_groups() if g["ssid"] == ssid), None)
     if not group:
-        return result(request, "Náhled", actions.Result(False, "SSID nenalezeno, obnov stránku."))
+        return result(request, title, actions.Result(False, t("msg.ssid_not_found")))
     known = {(i["ap"], i["section"]): i for i in group["items"]}
     plan: dict[str, list[actions.SsidChange]] = {}
     rows = []
-    for t in targets:
-        ap_name, _, section = t.partition("|")
+    for target in targets:
+        ap_name, _, section = target.partition("|")
         item = known.get((ap_name, section))
         if not item:
             continue
@@ -437,15 +504,15 @@ async def ssids_preview(request: Request, ssid: str = Form(...), new_ssid: str =
             hidden=_tri(hidden) if _tri(hidden) is not None and _tri(hidden) != item["hidden"] else None,
             disabled=_tri(disabled) if _tri(disabled) is not None and _tri(disabled) != item["disabled"] else None,
         )
-        err = actions.validate(ch)
+        err = actions.validate(ch, t)
         if err:
-            return result(request, "Náhled", actions.Result(False, err))
+            return result(request, title, actions.Result(False, err))
         cmds = actions.uci_commands(ch)
         if cmds:
             plan.setdefault(ap_name, []).append(ch)
             rows.append({"ap": ap_name, "item": item, "ch": ch, "cmds": [actions.mask(c) for c in cmds]})
     if not rows:
-        return result(request, "Náhled", actions.Result(False, "Žádná změna (nic nevybráno nebo hodnoty stejné)."))
+        return result(request, title, actions.Result(False, t("msg.no_change")))
     # cekajici zmena na serveru, heslo se do stranky nevraci
     now = time.time()
     store.pending = {k: v for k, v in store.pending.items() if now - v[0] < 600}
@@ -457,20 +524,22 @@ async def ssids_preview(request: Request, ssid: str = Form(...), new_ssid: str =
 @app.post("/ssids/apply", response_class=HTMLResponse)
 async def ssids_apply(request: Request, token: str = Form(...)):
     require_htmx(request)
+    t = request.state.t
+    title = t("preview.apply_title")
     if request.state.user["role"] != "full":
-        return result(request, "Použít", actions.Result(False, "Na změny SSID nemáš oprávnění (jen čtení)."))
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
     entry = store.pending.pop(token, None)
     if not entry or time.time() - entry[0] > 600:
-        return result(request, "Použít", actions.Result(False, "Náhled vypršel, vytvoř ho znovu."))
+        return result(request, title, actions.Result(False, t("msg.preview_expired")))
     plan = entry[1]
-    log.info("%s: změna SSID na %s", who(request), ", ".join(plan))
+    log.info("%s: SSID change on %s", who(request), ", ".join(plan))
     if store.opts.get("demo"):
         await asyncio.sleep(1)
-        return result(request, "Použít", actions.Result(True, "\n".join(f"{ap}: OK (demo)" for ap in plan)))
+        return result(request, title, actions.Result(True, "\n".join(f"{ap}: OK (demo)" for ap in plan)))
 
     async def one(ap_name, changes):
         async with store.ap_lock(ap_name):
-            r = await actions.apply_ssid(store.cfg(ap_name), store.key, changes)
+            r = await actions.apply_ssid(store.cfg(ap_name), store.key, changes, t)
         return f"== {ap_name} ==\n{r.output}", r.ok
 
     res = await asyncio.gather(*(one(a, c) for a, c in plan.items()))
@@ -479,4 +548,4 @@ async def ssids_apply(request: Request, token: str = Form(...)):
         await asyncio.sleep(8)  # wifi reload chvili trva
         await store.poll()
     asyncio.create_task(repoll())
-    return result(request, "Použít", actions.Result(all(ok for _, ok in res), "\n\n".join(t for t, _ in res)))
+    return result(request, title, actions.Result(all(ok for _, ok in res), "\n\n".join(o for o, _ in res)))

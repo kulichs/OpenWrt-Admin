@@ -2,6 +2,16 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.5.0
+- Web UI translated: English and Czech, texts in dictionaries `app/i18n/<lang>.json` (a new language = a new file). Language: per-browser choice on the Settings page → `language` option → Home Assistant user's language → browser → English.
+- Overview: "AP online" became "devices online" and includes the DHCP router; router status on the Settings page.
+- Add-on icon and logo (`icon.png`, `logo.png`).
+- Band shown as "2.4 GHz" in English.
+---
+- Webové rozhraní přeložené: angličtina a čeština, texty ve slovnících `app/i18n/<jazyk>.json` (nový jazyk = nový soubor). Jazyk: volba v prohlížeči na stránce Nastavení → volba `language` → jazyk uživatele Home Assistantu → prohlížeč → angličtina.
+- Přehled: z „AP online“ je „zařízení online“ a počítá se i DHCP router; stav routeru na stránce Nastavení.
+- Ikona a logo add-onu (`icon.png`, `logo.png`).
+
 ## 0.4.0
 - Page refresh interval is configurable: `refresh_interval` in the add-on configuration (0 = off) and per browser on the Settings page.
 - Default configuration and demo data use example devices (AP-Living, AP-Office, 192.168.1.x) instead of real ones.

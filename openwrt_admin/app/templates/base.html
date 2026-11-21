@@ -1,15 +1,26 @@
 <!doctype html>
-<html lang="cs">
+<html lang="{{ lang }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenWrt-Admin</title>
 <script>
-/* Tema podle Home Assistantu (Ingress bezi na stejne domene, localStorage je sdileny).
-   selectedTheme.dark: true/false = vynucene, chybi = podle systemu. */
+/* Tema a jazyk podle Home Assistantu (Ingress bezi na stejne domene, localStorage je sdileny).
+   selectedTheme.dark: true/false = vynucene, chybi = podle systemu.
+   selectedLanguage: jazyk uzivatele HA -> cookie, server podle ni vybere slovnik (pri zmene jednou reload). */
 try {
   var t = JSON.parse(localStorage.getItem("selectedTheme") || "null");
   if (t && typeof t.dark === "boolean") document.documentElement.dataset.theme = t.dark ? "dark" : "light";
+} catch (e) {}
+try {
+  var hl = JSON.parse(localStorage.getItem("selectedLanguage") || "null");
+  if (typeof hl === "string" && hl) {
+    var m = document.cookie.match(/(?:^|; ){{ lang_ha_cookie }}=([^;]*)/);
+    if (!m || decodeURIComponent(m[1]) !== hl) {
+      document.cookie = "{{ lang_ha_cookie }}=" + encodeURIComponent(hl) + "; path=/; SameSite=Lax; max-age=31536000";
+      if ({{ 'true' if lang_source == 'auto' else 'false' }} && hl.split("-")[0].toLowerCase() !== "{{ lang }}") location.reload();
+    }
+  }
 } catch (e) {}
 </script>
 <link rel="stylesheet" href="{{ base }}/static/style.css">
@@ -18,26 +29,26 @@ try {
 <body>
 <header>
   <nav>
-    <a href="{{ base }}/" class="{{ 'active' if page == 'dashboard' }}">Přehled</a>
-    <a href="{{ base }}/clients" class="{{ 'active' if page == 'clients' }}">Klienti</a>
-    <a href="{{ base }}/ssids" class="{{ 'active' if page == 'ssids' }}">SSID</a>
+    <a href="{{ base }}/" class="{{ 'active' if page == 'dashboard' }}">{{ t("nav.overview") }}</a>
+    <a href="{{ base }}/clients" class="{{ 'active' if page == 'clients' }}">{{ t("nav.clients") }}</a>
+    <a href="{{ base }}/ssids" class="{{ 'active' if page == 'ssids' }}">{{ t("nav.ssid") }}</a>
     <span class="nav-sep"></span>
     {% for a in store.aps %}
     <a href="{{ base }}/ap/{{ a.name | urlencode }}" class="ap-tab {{ 'active' if page == 'ap:' ~ a.name }}"><span class="dot {{ 'on' if a.online else 'off' }}"></span>{{ a.name | replace('OpenWrt_', '') }}<span class="cnt">{{ a.client_count }}</span></a>
     {% endfor %}
     <span class="nav-sep"></span>
-    <a href="{{ base }}/setup" class="{{ 'active' if page == 'setup' }}">Nastavení</a>
+    <a href="{{ base }}/setup" class="{{ 'active' if page == 'setup' }}">{{ t("nav.settings") }}</a>
   </nav>
   <form method="post" action="{{ base }}/refresh?back={{ request.url.path | urlencode }}{{ ('%3F' ~ request.url.query | urlencode) if request.url.query }}">
     <span class="user-badge role-{{ user.role }}" title="{{ user.why }}">{{ user.display or user.name or "?" }} · {{ user.label }}</span>
-    <span class="muted">Aktualizováno {{ store.last_poll | ago }}</span>
-    <button type="submit">Obnovit</button>
+    <span class="muted">{{ t("header.updated", ago=(store.last_poll | ago)) }}</span>
+    <button type="submit">{{ t("header.refresh") }}</button>
   </form>
 </header>
 <main id="content"
       {% if autorefresh and refresh %}hx-get="{{ base }}{{ request.url.path }}{{ ('?' ~ request.url.query) if request.url.query }}"
       hx-trigger="every {{ refresh }}s" hx-select="#content" hx-target="#content" hx-swap="outerHTML" hx-disinherit="*"{% endif %}>
-{% if store.opts.demo %}<div class="banner">Demo režim – zobrazená data jsou vymyšlená.</div>{% endif %}
+{% if store.opts.demo %}<div class="banner">{{ t("banner.demo") }}</div>{% endif %}
 {% block content %}{% endblock %}
 </main>
 </body>

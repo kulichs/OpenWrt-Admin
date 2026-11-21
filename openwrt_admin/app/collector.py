@@ -286,7 +286,7 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
 
 # ---------------------------------------------------------------- DHCP leases z routeru
 
-async def collect_leases(host: str, user: str, key: asyncssh.SSHKey, timeout: float = 10.0) -> dict[str, dict]:
+async def collect_leases(host: str, user: str, key: asyncssh.SSHKey, timeout: float = 10.0) -> tuple[dict[str, dict], str | None]:
     """MAC -> {ip, hostname}. Zkusi luci-rpc (dnsmasq i odhcpd), pak /tmp/dhcp.leases."""
     leases: dict[str, dict] = {}
     port = 22
@@ -310,4 +310,5 @@ async def collect_leases(host: str, user: str, key: asyncssh.SSHKey, timeout: fl
                         leases[p[1].lower()] = {"ip": p[2], "hostname": "" if p[3] == "*" else p[3]}
     except (OSError, asyncssh.Error, asyncio.TimeoutError) as e:
         log.warning("DHCP leases z %s: %s", host, e)
-    return leases
+        return leases, (f"{type(e).__name__}: {e}" if str(e) else type(e).__name__)
+    return leases, None

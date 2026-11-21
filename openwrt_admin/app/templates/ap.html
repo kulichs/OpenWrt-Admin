@@ -4,60 +4,60 @@
 {% set act = base ~ "/ap/" ~ (ap.name | urlencode) %}
 {% if can_edit %}
 <div class="panel actions">
-  <h2>Akce</h2>
+  <h2>{{ t("ap.actions") }}</h2>
   <div class="btns">
     <button class="secondary" hx-post="{{ act }}/pkg-update" hx-target="#action-out" hx-disabled-elt=".btns button"
-            {{ 'disabled' if not ap.online }}>Zkontrolovat aktualizace</button>
+            {{ 'disabled' if not ap.online }}>{{ t("ap.check_updates") }}</button>
     <button class="warnbtn" hx-post="{{ act }}/pkg-upgrade" hx-target="#action-out" hx-disabled-elt=".btns button"
-            hx-confirm="Spustit {{ ap.pkg or 'apk' }} upgrade na {{ ap.name }}? Může to trvat několik minut a zabrat místo na overlay."
-            {{ 'disabled' if not ap.online }}>Upgrade balíčků</button>
+            hx-confirm="{{ t('ap.confirm_upgrade', pkg=(ap.pkg or 'apk'), ap=ap.name) }}"
+            {{ 'disabled' if not ap.online }}>{{ t("ap.upgrade") }}</button>
     <button class="danger" hx-post="{{ act }}/reboot" hx-target="#action-out" hx-disabled-elt=".btns button"
-            hx-confirm="Restartovat {{ ap.name }}? Klienti se na 1–2 minuty odpojí."
-            {{ 'disabled' if not ap.online }}>Restart</button>
-    <span class="htmx-indicator muted">běží…</span>
+            hx-confirm="{{ t('ap.confirm_reboot', ap=ap.name) }}"
+            {{ 'disabled' if not ap.online }}>{{ t("ap.reboot") }}</button>
+    <span class="htmx-indicator muted">{{ t("ap.running") }}</span>
   </div>
   {% if ap.online and ap.overlay_size and ap.overlay_avail < 1024*1024 %}
-  <p class="warn small">Na overlay zbývá jen {{ ap.overlay_avail | bytes }}. Upgrade víc balíčků se nemusí vejít, raději aktualizuj celý image (sysupgrade).</p>
+  <p class="warn small">{{ t("ap.overlay_low", size=(ap.overlay_avail | bytes)) }}</p>
   {% endif %}
   <div id="action-out" hx-preserve="true"></div>
 </div>
 {% endif %}
 {% if not ap.online %}
-<p class="err">Nedostupný: {{ ap.error or "zatím nenačteno" }}</p>
+<p class="err">{{ t("ap.unreachable", error=(ap.error or t("ap.not_loaded"))) }}</p>
 {% else %}
 <section class="grid2">
   <div class="panel">
-    <h2>Systém</h2>
+    <h2>{{ t("ap.system") }}</h2>
     <dl>
-      <dt>Hostname</dt><dd>{{ ap.hostname }}</dd>
-      <dt>Model</dt><dd>{{ ap.model }}</dd>
-      <dt>Firmware</dt><dd>{{ ap.release }}</dd>
-      <dt>Jádro</dt><dd>{{ ap.kernel }}</dd>
-      <dt>Uptime</dt><dd>{{ ap.uptime | duration }}</dd>
-      <dt>Load</dt><dd>{{ ap.load }}</dd>
-      <dt>RAM</dt><dd>{{ ap.mem_avail | bytes }} volno z {{ ap.mem_total | bytes }}</dd>
-      {% if ap.overlay_size %}<dt>Overlay</dt><dd>{{ ap.overlay_used | bytes }} použito, {{ ap.overlay_avail | bytes }} volno</dd>{% endif %}
+      <dt>{{ t("sys.hostname") }}</dt><dd>{{ ap.hostname }}</dd>
+      <dt>{{ t("sys.model") }}</dt><dd>{{ ap.model }}</dd>
+      <dt>{{ t("sys.firmware") }}</dt><dd>{{ ap.release }}</dd>
+      <dt>{{ t("sys.kernel") }}</dt><dd>{{ ap.kernel }}</dd>
+      <dt>{{ t("sys.uptime") }}</dt><dd>{{ ap.uptime | duration }}</dd>
+      <dt>{{ t("sys.load") }}</dt><dd>{{ ap.load }}</dd>
+      <dt>RAM</dt><dd>{{ t("sys.ram", free=(ap.mem_avail | bytes), total=(ap.mem_total | bytes)) }}</dd>
+      {% if ap.overlay_size %}<dt>{{ t("sys.overlay") }}</dt><dd>{{ t("sys.overlay_val", used=(ap.overlay_used | bytes), free=(ap.overlay_avail | bytes)) }}</dd>{% endif %}
     </dl>
   </div>
   <div class="panel">
-    <h2>Rádia</h2>
+    <h2>{{ t("ap.radios") }}</h2>
     <table class="list">
-      <thead><tr><th>Rádio</th><th>Pásmo</th><th>Kanál</th><th>Šířka</th><th>Výkon</th><th>Země</th><th>Stav</th></tr></thead>
+      <thead><tr><th>{{ t("col.radio") }}</th><th>{{ t("col.band") }}</th><th>{{ t("col.channel") }}</th><th>{{ t("col.width") }}</th><th>{{ t("col.txpower") }}</th><th>{{ t("col.country") }}</th><th>{{ t("col.state") }}</th></tr></thead>
       {% for r in ap.radios %}
-      <tr><td>{{ r.name }}</td><td>{{ r.band }}</td><td>{{ r.channel }}</td><td>{{ r.htmode }}</td>
-          <td>{{ r.txpower }}</td><td>{{ r.country }}</td><td>{{ 'zapnuto' if r.up else ('vypnuto' if r.disabled else 'dole') }}</td></tr>
+      <tr><td>{{ r.name }}</td><td>{{ r.band | band }}</td><td>{{ r.channel }}</td><td>{{ r.htmode }}</td>
+          <td>{{ r.txpower }}</td><td>{{ r.country }}</td><td>{{ t("state.on") if r.up else (t("state.off") if r.disabled else t("state.down")) }}</td></tr>
       {% endfor %}
     </table>
-    <h2>SSID {% if can_edit %}<a class="small" href="{{ base }}/ssids">upravit</a>{% endif %}</h2>
+    <h2>SSID {% if can_edit %}<a class="small" href="{{ base }}/ssids">{{ t("ap.edit") }}</a>{% endif %}</h2>
     <table class="list">
-      <thead><tr><th>SSID</th><th>Síť</th><th>Pásmo</th><th>Rozhraní</th><th>Šifrování</th><th class="num">Klienti</th></tr></thead>
+      <thead><tr><th>SSID</th><th>{{ t("col.network") }}</th><th>{{ t("col.band") }}</th><th>{{ t("col.interface") }}</th><th>{{ t("col.encryption") }}</th><th class="num">{{ t("col.clients") }}</th></tr></thead>
       {% for s in ap.ssids %}
-      <tr><td>{{ s.ssid }}</td><td>{{ s.network }}</td><td>{{ s.band }}</td><td class="mono">{{ s.ifname }}</td><td>{{ s.encryption }}</td><td class="num">{{ s.clients }}</td></tr>
+      <tr><td>{{ s.ssid }}</td><td>{{ s.network }}</td><td>{{ s.band | band }}</td><td class="mono">{{ s.ifname }}</td><td>{{ s.encryption }}</td><td class="num">{{ s.clients }}</td></tr>
       {% endfor %}
     </table>
   </div>
 </section>
-<h2>Klienti ({{ clients | length }})</h2>
+<h2>{{ t("ap.clients", n=(clients | length)) }}</h2>
 {% set show_ap = false %}
 {% include "_clients_table.html" %}
 {% endif %}

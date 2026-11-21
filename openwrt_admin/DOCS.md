@@ -8,7 +8,7 @@
 
 Manage OpenWrt access points from Home Assistant: AP status (uptime, load, RAM, free overlay space), radios, SSIDs and all connected Wi-Fi clients with names and IPs from the router's DHCP. Reboot APs, update packages and change SSIDs on several APs at once. Nothing is installed on the APs, everything goes over SSH (`ubus`, `uci`).
 
-> The user interface is currently in Czech only (see [Languages](#languages)).
+The web UI is available in English and Czech (see [Languages](#languages)).
 
 ### Installation
 
@@ -29,6 +29,7 @@ Manage OpenWrt access points from Home Assistant: AP status (uptime, load, RAM, 
 ssh_user: root
 poll_interval: 30            # s, 10–600: how often data is collected from the APs
 refresh_interval: 30         # s, 0 = off: how often open pages reload (each browser can override it)
+language: auto               # auto | en | cs – web UI language (auto = HA user's language)
 dhcp_router: 192.168.1.1     # router with DHCP leases (client names/IPs); empty = off; "host:port" works too
 demo: false                  # true = made-up data, no SSH
 full_access:                 # HA usernames with full access (reboot, packages, SSIDs)
@@ -85,6 +86,10 @@ Login is handled by Home Assistant (Ingress); the add-on has no passwords of its
 - Permissions are enforced on the server, not only hidden in the UI. Actions are logged with the user name.
 - The panel is visible to all HA users (`panel_admin: false`). Hiding the panel alone would not be enough: HA does not block the ingress URL for regular users.
 
+### Overview tiles
+
+The first tile shows **devices online**: all configured APs plus the DHCP router (if `dhcp_router` is set; the router counts as online when its DHCP leases could be read). Hover over it to see the list.
+
 ### Page refresh
 
 Open pages reload every `refresh_interval` seconds (0 = off). Each browser can choose its own value on the add-on's **Settings** page (stored in a cookie). The SSID page never reloads by itself, so a half-filled form is not lost.
@@ -109,9 +114,15 @@ Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every Op
 
 ### Languages
 
-- The **configuration** in Home Assistant (option names and descriptions) is translated to English and Czech (`translations/en.yaml`, `cs.yaml`); HA picks the language of the user's profile.
-- This **documentation** is bilingual (HA shows one `DOCS.md` for all languages).
-- The **web UI** of the add-on is Czech only for now.
+- **Web UI:** English and Czech. The language is chosen in this order: the choice on the add-on's **Settings** page (per browser) → `language` in the configuration (if not `auto`) → the language of the Home Assistant user → the browser's language → English.
+- **Configuration** in Home Assistant (option names and descriptions): `translations/en.yaml`, `cs.yaml`; HA picks the language of the user's profile.
+- **Documentation:** this file is bilingual (HA shows one `DOCS.md` for all languages).
+
+**Adding a language** (e.g. German):
+1. Copy `app/i18n/en.json` to `app/i18n/de.json`, translate the values (keep the keys and `{placeholders}`), set `_language_name` to `Deutsch`. Values that are lists are plural forms.
+2. If the plural rule differs from English, add it to `PLURALS` in `app/i18n.py`.
+3. Add `de` to `language: list(auto|cs|en|de)?` in `config.yaml` and optionally `translations/de.yaml`.
+Missing keys fall back to English.
 
 ### Troubleshooting
 
@@ -153,6 +164,7 @@ Správa OpenWrt access pointů z Home Assistantu: stav AP (uptime, load, RAM, vo
 ssh_user: root
 poll_interval: 30            # s, 10–600: jak často se sbírají data z AP
 refresh_interval: 30         # s, 0 = vypnuto: jak často se otevřené stránky obnovují (prohlížeč si může změnit)
+language: auto               # auto | en | cs – jazyk webového rozhraní (auto = podle uživatele HA)
 dhcp_router: 192.168.1.1     # router s DHCP (jména/IP klientů); prázdné = vypnuto; lze i "host:port"
 demo: false                  # true = vymyšlená data, bez SSH
 full_access:                 # uživatelská jména HA s plným přístupem (restart, balíčky, SSID)
@@ -209,6 +221,10 @@ Přihlášení řeší Home Assistant (Ingress), add-on vlastní hesla nemá. Po
 - Kontroluje se na serveru, ne jen v zobrazení. Akce se logují se jménem uživatele.
 - Panel vidí všichni uživatelé HA (`panel_admin: false`). Samotné schování panelu by nestačilo, HA ingress adresu u běžného uživatele neblokuje.
 
+### Dlaždice na přehledu
+
+První dlaždice ukazuje **zařízení online**: všechny nastavené AP a k tomu DHCP router (když je vyplněný `dhcp_router`; router je online, když se z něj podařilo načíst DHCP leases). Po najetí myší se ukáže seznam.
+
 ### Obnovování stránky
 
 Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto). Každý prohlížeč si může nastavit vlastní hodnotu na stránce **Nastavení** add-onu (uloží se do cookie). Stránka SSID se sama neobnovuje, aby se neztratil rozepsaný formulář.
@@ -233,9 +249,15 @@ Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každ
 
 ### Jazyky
 
-- **Konfigurace** v Home Assistantu (názvy a popisy voleb) je přeložená do angličtiny a češtiny (`translations/en.yaml`, `cs.yaml`), HA vybere jazyk podle profilu uživatele.
-- Tato **dokumentace** je dvojjazyčná (HA zobrazuje jeden `DOCS.md` pro všechny jazyky).
-- **Webové rozhraní** add-onu je zatím jen česky.
+- **Webové rozhraní:** angličtina a čeština. Jazyk se vybírá v tomto pořadí: volba na stránce **Nastavení** add-onu (pro daný prohlížeč) → `language` v konfiguraci (pokud není `auto`) → jazyk uživatele Home Assistantu → jazyk prohlížeče → angličtina.
+- **Konfigurace** v Home Assistantu (názvy a popisy voleb): `translations/en.yaml`, `cs.yaml`, HA vybere jazyk podle profilu uživatele.
+- **Dokumentace:** tento soubor je dvojjazyčný (HA zobrazuje jeden `DOCS.md` pro všechny jazyky).
+
+**Přidání jazyka** (např. němčiny):
+1. Zkopírovat `app/i18n/en.json` na `app/i18n/de.json`, přeložit hodnoty (klíče a `{proměnné}` nechat), `_language_name` nastavit na `Deutsch`. Hodnoty, které jsou seznamem, jsou tvary množného čísla.
+2. Pokud se pravidlo množného čísla liší od angličtiny, doplnit ho do `PLURALS` v `app/i18n.py`.
+3. Do `config.yaml` doplnit `de` do `language: list(auto|cs|en|de)?`, volitelně `translations/de.yaml`.
+Chybějící klíče se vezmou z angličtiny.
 
 ### Řešení problémů
 

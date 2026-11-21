@@ -8,6 +8,9 @@ configuration:
   refresh_interval:
     name: Obnovování stránky (s)
     description: Jak často se otevřené stránky samy načtou znovu, v sekundách. 0 = vypnuto. Každý prohlížeč si to může změnit na stránce Nastavení.
+  language:
+    name: Jazyk
+    description: Jazyk webového rozhraní. auto = podle jazyka uživatele Home Assistantu (nebo prohlížeče). Každý prohlížeč si ho může změnit na stránce Nastavení.
   dhcp_router:
     name: DHCP router
     description: Router s DHCP (jména a IP klientů), např. 192.168.1.1 nebo host:port. Prázdné = vypnuto.

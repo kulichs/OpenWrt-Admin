@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="cs">
+<html lang="{{ lang }}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenWrt-Admin</title><link rel="stylesheet" href="{{ base }}/static/style.css"></head>
 <body><main>
 <div class="panel">
-  <h1>Přístup odepřen</h1>
-  <p>Uživatel <b>{{ user.name or user.display or "?" }}</b> nemá v OpenWrt-Admin přístup.</p>
-  <p class="muted small">Správce ho může přidat v konfiguraci add-onu do <code>read_access</code> (jen čtení) nebo <code>full_access</code>.</p>
+  <h1>{{ t("denied.title") }}</h1>
+  <p>{{ t("denied.text", user=(user.name or user.display or "?")) }}</p>
+  <p class="muted small">{{ t("denied.hint") }}</p>
 </div>
 </main></body></html>
