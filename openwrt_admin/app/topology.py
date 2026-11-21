@@ -110,7 +110,7 @@ def _client_node(c: dict, x: float, y: float, color: str, wired: bool, t) -> dic
             "href": ""}
 
 
-INDENT = 36
+INDENT = 58
 
 
 def _tree_order(aps: list[APState], parent: dict[str, str]) -> list[tuple[APState, int]]:
@@ -241,7 +241,7 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
                 lanc = nets["lan"]["color"]
                 ports = sorted({d["port"] for d in cab}, key=int)
                 gn = {"id": f"cable:{ap.name}", "kind": "cable", "x": COL_X["ssid"], "y": top + (h - ROW) / 2 + (ROW - NODE_H) / 2,
-                      "w": NODE_W["ssid"], "title": t("ports.title") if ap.kind == "switch" else t("map.cable"),
+                      "w": NODE_W["ssid"], "title": t("map.cable"),
                       "sub": t("map.ports", ports=", ".join(ports)),
                       "extra": t("map.clients", n=len(cab)), "online": True, "color": lanc, "href": ""}
                 nodes.append(gn)
@@ -344,11 +344,24 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
     for wn in wired_nodes:
         edges.append({"from": rn, "to": wn, "kind": "lan", "color": wn["color"], "chips": [], "up": True})
 
+    # ---- kazde zarizeni zapojene pres jine ma vlastni svislou caru: nizsi potomek vlevo (cary se nekrizi)
+    via_x: dict[int, float] = {}
+    by_parent: dict[str, list[dict]] = {}
+    for e in edges:
+        if e.get("via"):
+            by_parent.setdefault(e["from"]["id"], []).append(e)
+    for lst in by_parent.values():
+        lst.sort(key=lambda e: e["to"]["y"])
+        n = len(lst)
+        gap = min(14.0, (INDENT - 24) / max(1, n - 1))
+        for k, e in enumerate(lst):
+            via_x[id(e)] = 10 + (n - 1 - k) * gap
+
     # ---- geometrie spojnic (bezier z praveho okraje rodice do leveho okraje potomka)
     for e in edges:
         a, b = e["from"], e["to"]
-        if e.get("via"):  # AP zapojeny pres jiny AP: lomena cara z dolni hrany nadrazeneho do leveho boku
-            x1, y1 = a["x"] + 18, a["y"] + a.get("h", NODE_H)
+        if e.get("via"):  # AP/switch zapojeny pres jine zarizeni: vlastni lomena cara z dolni hrany nadrazeneho
+            x1, y1 = a["x"] + via_x.get(id(e), 18), a["y"] + a.get("h", NODE_H)
             x2, y2 = b["x"], b["y"] + b.get("h", NODE_H) / 2
             r = min(12, (y2 - y1) / 2, (x2 - x1) / 2) if y2 > y1 and x2 > x1 else 0
             e["d"] = f"M{x1:.0f},{y1:.0f} V{y2 - r:.0f} Q{x1:.0f},{y2:.0f} {x1 + r:.0f},{y2:.0f} H{x2:.0f}"

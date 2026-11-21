@@ -102,7 +102,7 @@ Managed switches (Netgear GS7xxT, TP-Link, Cisco SG, Zyxel, HP…) can be added 
 | MAC addresses on ports (per VLAN) | Q-BRIDGE-MIB `dot1qTpFdbPort` (fallback BRIDGE-MIB `dot1dTpFdbPort`) |
 | VLANs on ports (untagged / tagged) | Q-BRIDGE-MIB `dot1qVlanStaticEgressPorts`, `…UntaggedPorts` |
 
-- **Map:** the switch is a node of its own. Its uplink is the port where the router's MAC is seen; APs plugged into it are drawn under it (with the port speed), wired devices on its ports are shown in a **Ports** group, coloured by their network (LAN, IoT, DMZ…). Devices behind an AP stay under that AP (the deepest device that sees a MAC locally wins).
+- **Map:** the switch is a node of its own. Its uplink is the port where the router's MAC is seen; APs plugged into it are drawn under it, each with its own line (with the port speed), wired devices on its ports are shown in a **LAN** group, coloured by their network (LAN, IoT, DMZ…). Devices behind an AP stay under that AP (the deepest device that sees a MAC locally wins).
 - **Switch page:** system info, the **Ports** panel (all ports as boxes; the table lists connected ports with speed, VLANs `U:`/`T:` and devices) and the switch diagnostics (MAC table by port).
 - **Setting up SNMP on the switch** (Netgear GS724Tv4: System → SNMP → SNMP V1/V2 → Community Configuration): Management Station IP = Home Assistant address (or the LAN, e.g. `192.168.1.0` / `255.255.255.0`), Community String = your community, Access Mode **Read Only**, Status **Enable**, then **Add** (not Apply).
 - Test from any Linux machine: `snmpwalk -v2c -c <community> <switch> 1.3.6.1.2.1.17.7.1.2.2.1.2`.
@@ -373,7 +373,7 @@ Do `switches` lze přidat spravované switche (Netgear GS7xxT, TP-Link, Cisco SG
 | MAC adresy na portech (po VLAN) | Q-BRIDGE-MIB `dot1qTpFdbPort` (záložně BRIDGE-MIB `dot1dTpFdbPort`) |
 | VLANy na portech (netagované / tagované) | Q-BRIDGE-MIB `dot1qVlanStaticEgressPorts`, `…UntaggedPorts` |
 
-- **Mapa:** switch je samostatný uzel. Jeho uplink je port, na kterém je MAC routeru; AP zapojená do switche se kreslí pod ním (s rychlostí portu), kabelová zařízení na jeho portech jsou ve skupině **Porty**, obarvená podle sítě (LAN, IoT, DMZ…). Zařízení za AP zůstávají u toho AP (MAC patří nejhlubšímu zařízení, které ji vidí lokálně).
+- **Mapa:** switch je samostatný uzel. Jeho uplink je port, na kterém je MAC routeru; AP zapojená do switche se kreslí pod ním, každé s vlastní čárou (s rychlostí portu), kabelová zařízení na jeho portech jsou ve skupině **LAN**, obarvená podle sítě (LAN, IoT, DMZ…). Zařízení za AP zůstávají u toho AP (MAC patří nejhlubšímu zařízení, které ji vidí lokálně).
 - **Stránka switche:** systém, panel **Porty** (všechny porty jako políčka; tabulka připojených portů s rychlostí, VLANy `U:`/`T:` a zařízeními) a diagnostika switche (tabulka MAC podle portů).
 - **Nastavení SNMP na switchi** (Netgear GS724Tv4: System → SNMP → SNMP V1/V2 → Community Configuration): Management Station IP = adresa Home Assistantu (nebo LAN, např. `192.168.1.0` / `255.255.255.0`), Community String = vlastní community, Access Mode **Read Only**, Status **Enable**, pak **Add** (ne Apply).
 - Test z libovolného Linuxu: `snmpwalk -v2c -c <community> <switch> 1.3.6.1.2.1.17.7.1.2.2.1.2`.

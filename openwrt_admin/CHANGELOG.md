@@ -2,6 +2,18 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.14.2
+- Map: every AP or switch plugged into another device (e.g. into the switch) has its own line from it instead of one shared vertical line; lower devices are further left so the lines do not cross.
+- Demo: both APs are plugged directly into the switch.
+---
+- Mapa: každé AP nebo switch zapojené do jiného zařízení (např. do switche) má z něj vlastní čáru místo jedné společné svislé; níže položená zařízení jsou víc vlevo, takže se čáry nekříží.
+- Demo: obě AP jsou zapojená přímo do switche.
+
+## 0.14.1
+- Map: the group of wired devices under a switch is called "LAN" like under APs (was "Ports").
+---
+- Mapa: skupina kabelových zařízení pod switchem se jmenuje „LAN“ jako u AP (místo „Porty“).
+
 ## 0.14.0
 - Managed switches over SNMP (optional `switches`: name, host, community, port): read-only SNMP v2c with standard MIBs (IF-MIB, BRIDGE-MIB, Q-BRIDGE-MIB) – works with Netgear, TP-Link, Cisco SG, Zyxel, HP… No extra library, the SNMP client is built in.
 - The switch appears on the map between the router and the APs: uplink by the router's MAC, APs and wired devices placed on its ports with port speed, devices coloured by network. Own page with ports (speed, VLANs untagged/tagged, devices) and MAC table diagnostics; card on the overview and a tab.

@@ -183,7 +183,7 @@ class Store:
                 if self.router:
                     self.router = demo_router(self.router.name, self.router.host)
                 # ukazka "naposledy videno": vypnuta TV na portu 4 AP-Office
-                self.seen = {"02:00:00:00:10:04": {"ap": "AP-Office", "port": "4", "ts": time.time() - 3 * 3600,
+                self.seen = {"02:00:00:00:10:04": {"ap": "AP-Office", "port": "5", "ts": time.time() - 3 * 3600,
                                                    "hostname": "tv-office", "ip": "192.168.1.13"}}
                 # ukazka jmen z HA: Wi-Fi klienti bez jmena (ESPHome s pevnou IP)
                 nameless = [c["mac"] for a in self.aps for c in a.clients if c["mac"] not in self.leases]
