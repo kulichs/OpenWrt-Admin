@@ -2,6 +2,11 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.9.1
+- Fix: wired devices on AP ports were not found when the router had the same MAC on several IPs (LAN + VLAN interfaces) – the ARP table is now keyed by IP.
+---
+- Oprava: kabelová zařízení na portech AP se nenašla, když měl router stejnou MAC na více IP (LAN + VLAN rozhraní) – ARP tabulka se teď ukládá podle IP.
+
 ## 0.9.0
 - Map: wired devices on AP ports (APs that also work as switches) are shown under that AP in a "Wired" group with the port number; an AP connected through another AP is drawn under it. Source: switch MAC table (`swconfig … get arl_table`), uplink = port with the router's MAC, CPU port = tagged in all `switch_vlan`s.
 - Router page: for each DHCP lease shows the AP and port it is wired to.

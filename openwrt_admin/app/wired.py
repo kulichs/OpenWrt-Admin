@@ -41,7 +41,7 @@ def local_ports(ap: APState, router: APState | None) -> dict[str, str]:
     if not ap.arl:
         return {}
     gw_ip = _gateway_ip(ap, router)
-    gw_macs = {mac for mac, ip in ap.arp.items() if ip == gw_ip}
+    gw_macs = {mac for ip, mac in ap.arp.items() if ip == gw_ip}
     uplink = {port for port, macs in ap.arl.items() if gw_macs & set(macs)}
     if not uplink:
         return {}  # bez uplinku nejde poznat, co je lokalni
@@ -74,10 +74,10 @@ def locate(aps: list[APState], router: APState | None, leases: dict[str, dict]) 
     gw = set()
     for ap in aps:
         gw_ip = _gateway_ip(ap, router)
-        gw |= {mac for mac, ip in ap.arp.items() if ip == gw_ip}
+        gw |= {mac for ip, mac in ap.arp.items() if ip == gw_ip}
     arp_ip = {}
     for ap in aps:
-        for mac, ip in ap.arp.items():
+        for ip, mac in ap.arp.items():
             arp_ip.setdefault(mac, ip)
 
     # hloubka AP = kolik jinych AP ho vidi lokalne (cim hloubeji v retezu, tim vic)

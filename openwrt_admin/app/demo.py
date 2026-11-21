@@ -88,13 +88,13 @@ def demo_states() -> tuple[list[APState], dict]:
     router_mac, living_mac = "02:00:00:00:00:01", "02:00:00:00:00:12"
     a.mac, b.mac = living_mac, "02:00:00:00:00:13"
     for ap in (a, b, c):
-        ap.arp = {router_mac: "192.168.1.1"}
+        ap.arp = {"192.168.1.1": router_mac, "192.168.30.1": router_mac}
     b.switch_vlans = ["0t 2 3 4", "0t 2t", "0t 2t"]
     b.arl = {"switch0:0": [b.mac] + [x["mac"] for x in b.clients],
              "switch0:2": [router_mac, "02:00:00:00:10:02"],
              "switch0:3": ["02:00:00:00:10:01", "02:00:00:00:10:03", "02:00:00:00:10:05"],
              "switch0:4": [living_mac] + [x["mac"] for x in a.clients]}
-    b.arp["02:00:00:00:10:05"] = "192.168.1.50"
+    b.arp["192.168.1.50"] = "02:00:00:00:10:05"
 
     # zarizeni na kabelu (jen v DHCP routeru)
     for i, (mac, name) in enumerate([("02:00:00:00:10:01", "nas"), ("02:00:00:00:10:02", "homeassistant"),

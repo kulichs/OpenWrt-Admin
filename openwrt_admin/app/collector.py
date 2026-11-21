@@ -53,7 +53,7 @@ class APState:
     # switch (swconfig): MAC adresy podle portu, ARP tabulka, vlastni MAC, porty switch_vlan z uci
     mac: str = ""
     arl: dict[str, list[str]] = field(default_factory=dict)   # "switch0:2" -> [mac, ...]
-    arp: dict[str, str] = field(default_factory=dict)          # mac -> ip
+    arp: dict[str, str] = field(default_factory=dict)          # ip -> mac (jedna MAC muze mit vic IP, napr. router ve VLAN)
     switch_vlans: list[str] = field(default_factory=list)      # ["0t 2 3 4 5", "0t 2t", ...]
 
     @property
@@ -356,11 +356,12 @@ def parse_arl(text: str) -> dict[str, list[str]]:
 
 
 def parse_arp(text: str) -> dict[str, str]:
+    """/proc/net/arp -> {ip: mac} (ne podle MAC: router ma stejnou MAC v LAN i ve VLAN)."""
     out = {}
     for line in (text or "").splitlines()[1:]:
         p = line.split()
         if len(p) >= 4 and p[3] != "00:00:00:00:00:00" and p[2] != "0x0":
-            out[p[3].lower()] = p[0]
+            out[p[0]] = p[3].lower()
     return out
 
 
