@@ -178,3 +178,23 @@ def demo_switch(name: str, host: str, aps: list[APState], router_mac: str) -> AP
                  "name": f"g{n}", "ifindex": n, "alias": {24: "router", 2: "AP-Office", 3: "AP-Living", 8: "dmz"}.get(n, ""),
                  "vlans_u": [100] if n == 8 else [1], "vlans_t": [10, 30] if n in (2, 3, 24) else []} for n in range(1, 25)]
     return sw
+
+
+DEMO_NEIGHBORS = [  # (essid, kanal, sirka, posun, signal)
+    ("Neighbor-5G", 36, 40, "above", -52), ("FamilyNet", 40, 80, "below", -81), ("Office-Guest", 60, 40, "below", -83),
+    ("", 112, 40, "above", -74), ("Neighbor", 11, 40, "below", -58), ("PrinterDirect", 6, 20, "", -66),
+    ("CafeWiFi", 4, 40, "above", -78), ("", 3, 40, "above", -77), ("IoT-Hub", 11, 20, "", -85), ("Garden", 1, 20, "", -88),
+]
+
+
+def demo_scan(radio: dict) -> list[dict]:
+    """Vymysleny sken okoli pro demo (stejny tvar jako radios.parse_scan)."""
+    b24 = str(radio.get("band", "")).startswith("2")
+    out = []
+    for i, (essid, ch, w, off, sig) in enumerate(DEMO_NEIGHBORS):
+        if (ch <= 14) != b24:
+            continue
+        out.append({"bssid": f"02:aa:00:00:{i:02x}:01", "essid": essid, "channel": ch,
+                    "freq": (2407 + 5 * ch) if ch <= 14 else 5000 + 5 * ch, "band": "2,4 GHz" if ch <= 14 else "5 GHz",
+                    "signal": sig + random.randint(-3, 3), "enc": "WPA2 PSK (CCMP)", "width": w, "offset": off})
+    return sorted(out, key=lambda c: -c["signal"])

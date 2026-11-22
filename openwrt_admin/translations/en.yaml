@@ -44,6 +44,9 @@ configuration:
   new_device_hours:
     name: "\"New\" tag (h)"
     description: "How long after it was first seen a device has the new tag in the tables, in hours (0–720). 0 = no tag."
+  radio_scan:
+    name: Scan neighbouring networks
+    description: "Enables the Scan button on the Radios page (iwinfo scan): neighbouring networks, channel occupancy and a less busy channel suggestion. During a scan the radio hops between channels for a few seconds and clients may notice a short drop. Full access only."
   update_check_hours:
     name: Update check (h)
     description: "How often the packages to update (apk/opkg update) and a new OpenWrt release are checked on each device. 0 = off."

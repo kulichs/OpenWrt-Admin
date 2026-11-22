@@ -121,6 +121,8 @@ Proč je co tak, jak je – čti, než něco „zjednodušíš“:
   chtějí jméno rozhraní), vytížení kanálu z rozdílu čítačů `iw survey` (od startu) mezi dvěma načteními AP.
   Survey jen jednou za phy (první rozhraní s blokem `[in use]`). Bez `iw` se vytížení jen nezobrazí.
   V šablonách nepoužívat proměnnou `r` z kontextu – `base.html` si ji přepisuje (`set r = store.router`).
+  Sken okolí (`iwinfo <if> scan`) jen na tlačítko, jen s `radio_scan` a plným přístupem – rádio při skenu
+  odskakuje z kanálu. Na jednom AP rádia postupně (`ap_lock`), AP navzájem paralelně. 149–165 nenavrhovat (EU SRD).
 
 ## Struktura
 

@@ -234,7 +234,8 @@ def attach_radio_info(radios: list[dict], iface_meta: dict[str, dict], radio_out
         if not info:
             continue
         r.update(phy=info["phy"], act_channel=info["channel"], freq=info["freq"], act_htmode=info["htmode"],
-                 act_txpower=info["txpower"], noise=info["noise"], hw=info["hw"])
+                 act_txpower=info["txpower"], noise=info["noise"], hw=info["hw"],
+                 bssids=[iw[i]["bssid"] for i in ifs if i in iw and iw[i].get("bssid")])
         sv = survey.get(info["phy"])
         if sv:
             r["survey"] = {k: sv.get(k) for k in ("active", "busy", "rx", "tx")}

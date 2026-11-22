@@ -2,6 +2,15 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.17.1
+- Optional **neighbour scan** on the Radios page (option `radio_scan`, off by default, full access): **Scan** per radio or for all radios (`iwinfo <if> scan`). Shows neighbouring networks (SSID, BSSID, channel, width, signal, encryption; own APs marked by BSSID/SSID), channel occupancy bars in the channel map, warnings about strong foreign networks on your channel and a less busy channel suggestion (2.4 GHz 1/6/11, 5 GHz 36–48 without DFS).
+- Radios read also their BSSIDs from `iwinfo` (recognising own APs in scans).
+- Verified: parser on a real scan from an AP (2.4 + 5 GHz, HT40 above/below, VHT80), demo cs + en. Not yet on the real network.
+---
+- Volitelný **sken okolí** na stránce Rádia (volba `radio_scan`, výchozí vypnuto, plný přístup): **Skenovat** u každého rádia nebo pro všechna (`iwinfo <if> scan`). Ukáže okolní sítě (SSID, BSSID, kanál, šířka, signál, šifrování; vlastní AP označené podle BSSID/SSID), sloupce obsazenosti kanálů v mapě kanálů, upozornění na silné cizí sítě na tvém kanálu a návrh méně obsazeného kanálu (2,4 GHz 1/6/11, 5 GHz 36–48 bez DFS).
+- Rádia čtou z `iwinfo` i svoje BSSID (poznání vlastních AP ve skenu).
+- Ověřeno: parser na skutečném skenu z AP (2,4 + 5 GHz, HT40 above/below, VHT80), demo cs + en. Na skutečné síti zatím ne.
+
 ## 0.17.0
 - New **Radios** page: all radios of all APs in one table with the real channel (also with `auto`), width, transmit power, noise and chip from `iwinfo`, and **channel utilisation** (now, average, chart of the last hour) from `iw survey`.
 - Warnings and tips: own APs on the same/overlapping channel, 2.4 GHz outside 1/6/11 or 40 MHz wide, 5 GHz only 20 MHz, channel `auto`, DFS, busy channel, high noise, 2.4 GHz stronger than 5 GHz, different/missing country.

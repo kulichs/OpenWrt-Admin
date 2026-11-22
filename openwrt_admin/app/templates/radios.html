@@ -6,10 +6,20 @@
 <p class="empty">{{ t("radio.none") }}</p>
 {% else %}
 <div class="panel">
+  {% if rv.scan_on and can_edit %}
+  <div class="btns" style="margin-bottom: .6rem">
+    <button class="secondary" hx-post="{{ base }}/radios/scan" hx-target="#scan-out" hx-disabled-elt=".scanbtn, .btns button"
+            hx-confirm="{{ t('radio.scan_confirm_all') }}">{{ t("radio.scan_all") }}</button>
+    <span class="htmx-indicator muted">{{ t("radio.scanning") }}</span>
+  </div>
+  {% elif not rv.scan_on %}
+  <p class="muted small">{{ t("radio.scan_off_hint") }}</p>
+  {% endif %}
+  <div id="scan-out" hx-preserve="true"></div>
   <table class="list">
     <thead><tr><th>AP</th><th>{{ t("col.radio") }}</th><th>{{ t("col.band") }}</th><th>{{ t("col.channel") }}</th><th>{{ t("col.width") }}</th>
       <th class="num">{{ t("col.txpower") }}</th><th>{{ t("col.country") }}</th><th class="num">{{ t("radio.noise") }}</th>
-      <th class="num">{{ t("col.clients") }}</th><th class="num">{{ t("radio.util") }}</th><th>{{ t("stats.col_history") }}</th><th>{{ t("radio.hw") }}</th></tr></thead>
+      <th class="num">{{ t("col.clients") }}</th><th class="num">{{ t("radio.util") }}</th><th>{{ t("stats.col_history") }}</th><th>{{ t("radio.hw") }}</th>{% if rv.scan_on and can_edit %}<th></th>{% endif %}</tr></thead>
     {% for x in rv.rows %}
     <tr class="{{ '' if x.up else 'row-off' }}">
       <td><a href="{{ base }}/ap/{{ x.ap | urlencode }}">{{ x.ap }}</a></td>
@@ -24,6 +34,8 @@
       <td class="num num-cell">{% if x.util is not none %}<span class="{{ 'err' if x.util >= 50 else ('warn' if x.util >= 30 else '') }}">{{ x.util | round | int }} %</span>{% if x.util_avg is not none %} <span class="muted small">⌀ {{ x.util_avg | round | int }} %</span>{% endif %}{% else %}–{% endif %}</td>
       <td class="spark-cell">{% if x.spark %}<svg class="spark" width="{{ x.spark.w }}" height="{{ x.spark.h }}" viewBox="0 0 {{ x.spark.w }} {{ x.spark.h }}" preserveAspectRatio="none"><path d="{{ x.spark.paths[0] }}" class="a" fill="#03a9f4" fill-opacity="0.18" stroke="#03a9f4" stroke-width="1.2"/><title>0–100 %</title></svg>{% endif %}</td>
       <td class="small muted">{{ x.hw or "–" }}</td>
+      {% if rv.scan_on and can_edit %}<td>{% if x.up %}<button class="secondary small scanbtn" hx-post="{{ base }}/radios/scan" hx-vals='{"ap": {{ x.ap | tojson }}, "radio": {{ x.radio | tojson }}}'
+          hx-target="#scan-out" hx-disabled-elt=".scanbtn, .btns button" hx-confirm="{{ t('radio.scan_confirm', ap=x.ap, band=(x.band | band)) }}">{{ t("radio.scan") }}</button>{% endif %}</td>{% endif %}
     </tr>
     {% endfor %}
   </table>
@@ -56,9 +68,36 @@
     <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="18" rx="4" fill="{{ b.color }}" fill-opacity="0.35" stroke="{{ b.color }}"><title>{{ b.ap }} · {{ b.radio }} · {{ t("col.channel") }} {{ b.channel }} · {{ b.htmode }}</title></rect>
     {% if b.cx %}<circle cx="{{ b.cx }}" cy="{{ b.y + 9 }}" r="3.5" fill="{{ b.color }}"/>{% endif %}
     {% endfor %}
+    {% if m.occ %}
+    <text x="{{ m.x0 - 8 }}" y="{{ m.occ[0].ty - 14 }}" text-anchor="end" class="chan-label">{{ t("radio.neighbors_short") }}</text>
+    {% for o in m.occ %}
+    {% if o.h %}<rect x="{{ o.x }}" y="{{ o.y }}" width="{{ o.w }}" height="{{ o.h }}" rx="2" class="occ occ-{{ o.cls }}" fill="{{ {'bad': '#d33f3f', 'mid': '#c98a00', 'low': '#8c96a1'}[o.cls] }}" fill-opacity="0.55"><title>{{ t("col.channel") }} {{ o.ch }}: {{ t("radio.occ_title", n=o.count, best=o.best) }}</title></rect>{% endif %}
+    {% if o.count %}<text x="{{ o.tx }}" y="{{ o.ty }}" text-anchor="middle" class="chan-tick">{{ o.count }}</text>{% endif %}
+    {% endfor %}
+    {% endif %}
   </svg>
-  <p class="muted small">{{ t("radio.map_hint_24") if m.band.startswith('2') else t("radio.map_hint_5") }}</p>
+  <p class="muted small">{{ t("radio.map_hint_24") if m.band.startswith('2') else t("radio.map_hint_5") }}{% if m.occ %} {{ t("radio.occ_hint") }}{% endif %}</p>
 </div>
+{% endfor %}
+
+{% for x in rv.rows if x.scan %}
+<details class="offline-list" {{ 'open' if loop.first }}>
+  <summary>{{ t("radio.neighbors", ap=x.ap, band=(x.band | band), n=(x.scan.cells | rejectattr("own") | list | length)) }} <span class="muted small">· {{ t("radio.scanned", ago=(x.scan.ts | ago)) }}</span></summary>
+  {% if x.scan.error %}<p class="err small">{{ x.scan.error }}</p>{% endif %}
+  <table class="list">
+    <thead><tr><th>SSID</th><th>BSSID</th><th>{{ t("col.channel") }}</th><th>{{ t("col.width") }}</th><th class="num">{{ t("col.signal") }}</th><th>{{ t("col.encryption") }}</th></tr></thead>
+    {% for c in x.scan.cells %}
+    <tr class="{{ 'row-off' if c.own }}">
+      <td>{{ c.essid or t("radio.hidden") }}{% if c.own %} <span class="tag">{{ t("radio.own") }}{% if c.own_ap %} · {{ c.own_ap }}{% endif %}</span>{% endif %}</td>
+      <td class="mono small">{{ c.bssid }}</td>
+      <td>{{ c.channel }}{% if c.channel in [x.channel] %} <span class="warn small">{{ t("radio.same_as_mine") }}</span>{% endif %}</td>
+      <td>{{ c.width }} MHz{% if c.offset %} <span class="muted small">({{ c.offset }})</span>{% endif %}</td>
+      <td class="num{{ " warn" if c.signal is not none and c.signal >= -65 and not c.own }}">{{ c.signal }} dBm</td>
+      <td class="small">{{ c.enc }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</details>
 {% endfor %}
 {% endif %}
 {% endblock %}

@@ -45,6 +45,7 @@ notify_new_devices: true     # notification in HA when a never-seen device joins
 notify_service: ""           # optional, e.g. notify.mobile_app_phone (also to your phone)
 notify_random_mac: true      # false = no notifications for random (private) MACs of phones
 new_device_hours: 24         # h, 0 = off: how long a device has the "new" tag
+radio_scan: false            # true = Scan button on the Radios page (neighbouring networks)
 update_check_hours: 12       # h, 0 = off: check packages to update and new OpenWrt releases
 backup_interval_days: 7      # days, 0 = off: automatic configuration backup of every device
 backup_keep: 10              # backups kept per device
@@ -146,7 +147,11 @@ The **Radios** page lists every radio of every AP in one table and checks the se
 - **Channel map** for each band: which channels every AP occupies with its width; channels 1/6/11 and DFS channels are highlighted.
 - The AP page shows the real channel, width, power and channel utilisation in its radio table.
 - With `ha_sensors` each radio also gets `sensor.openwrt_admin_<ap>_<radio>_channel_utilization` (%).
-- Read-only for now. Planned: an optional neighbour scan and changing channel/width/power with a preview and a proposed channel plan.
+- **Neighbour scan** (option `radio_scan`, off by default, full access only): **Scan** button for each radio or for all of them. It runs `iwinfo <if> scan`; the radio hops between channels for a few seconds, so connected clients may notice a short drop. Results stay in memory until the add-on restarts:
+  - a list of neighbouring networks per radio (SSID, BSSID, channel, width incl. secondary channel, signal, encryption); your own APs are recognised by BSSID (from `iwinfo`) or SSID and marked,
+  - channel occupancy bars under the channel map (number of foreign networks per channel, height by signal strength),
+  - warnings: strong foreign networks (≥ −70 dBm) on your channel and a less busy channel suggestion (2.4 GHz: 1/6/11; 5 GHz: blocks within 36–48 for your width – DFS and 149–165, which the EU allows only at low power, are not suggested).
+- Planned: changing channel/width/power/country with a preview, a proposed channel plan for all APs and **Apply**.
 
 ### Statistics
 
@@ -310,6 +315,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | statistics (router, every `stats_interval`) | `/proc/net/dev`, `/sys/class/thermal`, `/proc/loadavg`, `ping -c 1 -W 1`, `nlbw -c json -g mac,ip` or `/proc/net/nf_conntrack` |
 | switch port traffic | SNMP `ifHCInOctets`, `ifHCOutOctets` |
 | radios: real channel, width, power, noise; channel utilisation | `iwinfo`, `iw dev <if> survey dump` |
+| neighbouring networks (only on Scan, `radio_scan`) | `iwinfo <if> scan` |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
 
@@ -389,6 +395,7 @@ notify_new_devices: true     # upozornění v HA, když se v síti objeví zař�
 notify_service: ""           # volitelně, např. notify.mobile_app_telefon (i do mobilu)
 notify_random_mac: true      # false = neupozorňovat na náhodné (soukromé) MAC telefonů
 new_device_hours: 24         # h, 0 = vypnuto: jak dlouho má zařízení štítek „nové“
+radio_scan: false            # true = tlačítko Skenovat na stránce Rádia (okolní sítě)
 update_check_hours: 12       # h, 0 = vypnuto: kontrola balíčků k aktualizaci a nové verze OpenWrt
 backup_interval_days: 7      # dny, 0 = vypnuto: automatická záloha konfigurace každého zařízení
 backup_keep: 10              # kolik záloh se drží pro každé zařízení
@@ -490,7 +497,11 @@ Stránka **Rádia** ukazuje všechna rádia všech AP v jedné tabulce a kontrol
 - **Mapa kanálů** pro každé pásmo: které kanály každé AP zabírá i se šířkou; kanály 1/6/11 a DFS kanály jsou zvýrazněné.
 - Stránka AP ukazuje v tabulce rádií skutečný kanál, šířku, výkon a vytížení kanálu.
 - S `ha_sensors` má každé rádio i senzor `sensor.openwrt_admin_<ap>_<rádio>_channel_utilization` (%).
-- Zatím jen čtení. V plánu: volitelný sken okolních sítí a změna kanálu/šířky/výkonu s náhledem a návrhem rozdělení kanálů.
+- **Sken okolí** (volba `radio_scan`, výchozí vypnuto, jen plný přístup): tlačítko **Skenovat** u každého rádia nebo pro všechna. Spustí `iwinfo <if> scan`; rádio na pár sekund přeskakuje po kanálech, připojení klienti můžou zaznamenat krátký výpadek. Výsledky zůstávají v paměti do restartu add-onu:
+  - seznam okolních sítí pro každé rádio (SSID, BSSID, kanál, šířka i se sekundárním kanálem, signál, šifrování); vlastní AP se poznají podle BSSID (z `iwinfo`) nebo SSID a jsou označené,
+  - sloupce obsazenosti kanálů pod mapou kanálů (počet cizích sítí na kanálu, výška podle síly signálu),
+  - upozornění: silné cizí sítě (≥ −70 dBm) na tvém kanálu a návrh méně obsazeného kanálu (2,4 GHz: 1/6/11; 5 GHz: bloky v 36–48 pro tvou šířku – DFS a 149–165, které EU povoluje jen s nízkým výkonem, se nenavrhují).
+- V plánu: změna kanálu/šířky/výkonu/země s náhledem, návrh rozdělení kanálů pro všechna AP a **Použít**.
 
 ### Statistiky
 
@@ -654,6 +665,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | statistiky (router, každých `stats_interval`) | `/proc/net/dev`, `/sys/class/thermal`, `/proc/loadavg`, `ping -c 1 -W 1`, `nlbw -c json -g mac,ip` nebo `/proc/net/nf_conntrack` |
 | provoz na portech switche | SNMP `ifHCInOctets`, `ifHCOutOctets` |
 | rádia: skutečný kanál, šířka, výkon, šum; vytížení kanálu | `iwinfo`, `iw dev <if> survey dump` |
+| okolní sítě (jen po Skenovat, `radio_scan`) | `iwinfo <if> scan` |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).
 

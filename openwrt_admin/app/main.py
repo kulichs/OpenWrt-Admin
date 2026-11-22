@@ -22,7 +22,7 @@ from jinja2 import pass_context
 
 from . import actions, ha, i18n, maint, radios as radiomod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
-from .demo import demo_router, demo_states, demo_switch
+from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
 
 DATA = Path(os.environ.get("OWADMIN_DATA", "/data"))
@@ -56,7 +56,7 @@ def load_options() -> dict:
             "update_check_hours": 12, "backup_interval_days": 7, "backup_keep": 10, "switches": [],
             "stats": True, "stats_interval": 5, "ping_targets": list(DEFAULT_PING), "ping_devices": True,
             "traffic_source": "auto", "top_clients": 10, "ha_sensors": False, "ha_sensors_interval": 30,
-            "new_device_hours": 24}
+            "new_device_hours": 24, "radio_scan": False}
     if OPTIONS.exists():
         opts.update(json.loads(OPTIONS.read_text()))
     return opts
@@ -136,6 +136,7 @@ class Store:
         self.sensor_status = ""   # posledni vysledek odeslani senzoru do HA
         self.sensor_count = 0
         self._bad_hosts: set[str] = set()
+        self.scans: dict[tuple[str, str], dict] = {}   # (ap, radio) -> {ts, cells, error} – sken okoli
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -512,16 +513,61 @@ class Store:
             log.warning("Senzory do HA: %s", self.sensor_status)
 
     # ------------------------------------------------------------ radia
+    def own_ids(self) -> tuple[set[str], set[str]]:
+        """BSSID a SSID vlastnich AP (pro odliseni od sousedu ve skenu)."""
+        bss = {b for a in self.aps for r in a.radios for b in r.get("bssids") or []}
+        ssids = {x["ssid"] for a in self.aps for x in a.ssids if x.get("ssid")}
+        return bss, ssids
+
+    def mark_own(self, cells: list[dict]) -> list[dict]:
+        bss, ssids = self.own_ids()
+        names = {b: a.name for a in self.aps for r in a.radios for b in r.get("bssids") or []}
+        for c in cells:
+            c["own"] = c["bssid"] in bss or (bool(c["essid"]) and c["essid"] in ssids)
+            c["own_ap"] = names.get(c["bssid"], "")
+        return cells
+
+    async def scan_radio(self, ap: APState, radio: dict) -> dict:
+        ifn = next(iter(radio.get("ifnames") or []), "")
+        key = (ap.name, radio["name"])
+        if self.opts.get("demo"):
+            await asyncio.sleep(1)
+            res = {"ts": time.time(), "cells": self.mark_own(demo_scan(radio)), "error": ""}
+        else:
+            try:
+                cmd = radiomod.scan_cmd(ifn)
+            except ValueError:
+                res = {"ts": time.time(), "cells": [], "error": "no interface"}
+            else:
+                async with self.ap_lock(ap.name):
+                    r = await actions.run(self.cfg(ap.name), self.key, cmd, timeout=40)
+                cells = radiomod.parse_scan(r.output) if r.ok else []
+                res = {"ts": time.time(), "cells": self.mark_own(cells),
+                       "error": "" if cells else (r.output.strip().splitlines() or ["?"])[-1][:200]}
+        self.scans[key] = res
+        log.info("Sken %s %s: %d siti%s", ap.name, radio["name"], len(res["cells"]),
+                 f" ({res['error']})" if res["error"] else "")
+        return res
+
     def radios_view(self) -> dict:
         rows = radiomod.radio_rows(self.aps, self.stats.util())
         for r in rows:
             ser = self.stats.radio_util.get((r["ap"], r["radio"]))
             r["util_avg"] = ser.avg() if ser else None
             r["spark"] = statsmod.spark([ser.values()], 140, 26, vmax=100) if ser and len(ser.d) > 1 else None
+            r["scan"] = self.scans.get((r["ap"], r["radio"]))
         bands = sorted({r["band"] for r in rows if r["band"]}, key=lambda b: (b[:1] != "2", b))
-        return {"rows": rows, "warnings": radiomod.warnings(rows),
-                "maps": [radiomod.channel_map(rows, b) for b in bands],
-                "offline": [a.name for a in self.aps if not a.online]}
+        # vysledky vsech skenu dohromady (kazda cizi sit jednou, nejsilnejsi signal)
+        merged: dict[str, dict] = {}
+        for sc in self.scans.values():
+            for c in sc.get("cells") or []:
+                if c["bssid"] not in merged or (c["signal"] or -200) > (merged[c["bssid"]]["signal"] or -200):
+                    merged[c["bssid"]] = c
+        cells = list(merged.values())
+        return {"rows": rows, "warnings": radiomod.warnings(rows) + radiomod.scan_warnings(rows, self.scans),
+                "maps": [radiomod.channel_map(rows, b, cells) for b in bands],
+                "offline": [a.name for a in self.aps if not a.online],
+                "scan_on": bool(self.opts.get("radio_scan") or self.opts.get("demo")), "scanned": bool(self.scans)}
 
     # ------------------------------------------------------------ switche
     def l2(self) -> list[APState]:
@@ -1259,6 +1305,35 @@ async def map_page(request: Request, clients: str = "1", empty: str = "0"):
 @app.get("/radios", response_class=HTMLResponse)
 async def radios_page(request: Request):
     return render(request, "radios.html", page="radios", rv=store.radios_view())
+
+
+@app.post("/radios/scan", response_class=HTMLResponse)
+async def radios_scan(request: Request, ap: str = Form(""), radio: str = Form("")):
+    """Sken okolnich siti (iwinfo <if> scan) – jen s volbou radio_scan a plnym pristupem.
+    Radio na chvili odskoci z kanalu, klienti muzou zaznamenat kratky vypadek."""
+    require_htmx(request)
+    t = request.state.t
+    title = t("radio.scan")
+    if request.state.user["role"] != "full":
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
+    if not (store.opts.get("radio_scan") or store.opts.get("demo")):
+        return result(request, title, actions.Result(False, t("radio.scan_disabled")))
+    targets = [(a, r) for a in store.aps if a.online for r in a.radios
+               if r.get("up") and (not ap or a.name == ap) and (not radio or r["name"] == radio)]
+    if not targets:
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    log.info("%s: sken okoli %s", who(request), ", ".join(f"{a.name}/{r['name']}" for a, r in targets))
+    by_ap: dict[str, list] = {}
+    for a, r in targets:
+        by_ap.setdefault(a.name, []).append((a, r))
+
+    async def per_ap(lst):  # na jednom AP postupne, AP navzajem paralelne
+        return [await store.scan_radio(a, r) for a, r in lst]
+    res = [x for lst in await asyncio.gather(*(per_ap(v) for v in by_ap.values())) for x in lst]
+    resp = result(request, title, actions.Result(all(not x["error"] for x in res),
+                                                 t("radio.scan_done", n=sum(len(x["cells"]) for x in res))))
+    resp.headers["HX-Refresh"] = "true"
+    return resp
 
 
 @app.get("/stats", response_class=HTMLResponse)

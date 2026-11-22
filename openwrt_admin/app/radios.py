@@ -29,6 +29,7 @@ IW_TX = re.compile(r"Tx-Power:\s*(-?\d+)\s*dBm")
 IW_NOISE = re.compile(r"Noise:\s*(-?\d+)\s*dBm")
 IW_HW = re.compile(r"Hardware:\s*(.+)$", re.M)
 IW_PHY = re.compile(r"PHY name:\s*(\S+)")
+IW_BSSID = re.compile(r"Access Point:\s*([0-9A-Fa-f:]{17})")
 
 RADIO_CMD = ("iwinfo 2>/dev/null; echo '@@survey'; seen=''; for n in /sys/class/net/*; do f=$n/phy80211/name; "
              "[ -r $f ] || continue; ph=$(cat $f); case \" $seen \" in *\" $ph \"*) continue;; esac; "
@@ -54,7 +55,7 @@ def parse_iwinfo(text: str) -> dict[str, dict]:
             return
         b = "\n".join(buf)
         e = {"essid": cur[1], "channel": None, "freq": None, "htmode": "", "txpower": None, "noise": None,
-             "hw": "", "phy": ""}
+             "hw": "", "phy": "", "bssid": ""}
         m = IW_CHAN.search(b)
         if m:
             e["channel"], e["freq"] = int(m.group(1)), round(float(m.group(2)) * 1000)
@@ -72,6 +73,8 @@ def parse_iwinfo(text: str) -> dict[str, dict]:
             e["hw"] = br.group(1) if br else hw
         m = IW_PHY.search(b)
         e["phy"] = m.group(1) if m else ""
+        m = IW_BSSID.search(b)
+        e["bssid"] = m.group(1).lower() if m else ""
         out[cur[0]] = e
 
     for line in (text or "").splitlines():
@@ -229,15 +232,18 @@ def warnings(rows: list[dict]) -> list[dict]:
 PALETTE = ["#03a9f4", "#e67e22", "#8e44ad", "#16a085", "#c0392b", "#2c7be5", "#b7950b"]
 
 
-def channel_map(rows: list[dict], band: str) -> dict:
-    """Mapa kanalu pro SVG: osa kanalu a obdelniky radii (zabrane 20MHz kanaly), radky = AP."""
+def channel_map(rows: list[dict], band: str, cells: list[dict] | None = None) -> dict:
+    """Mapa kanalu pro SVG: osa kanalu, obdelniky radii (zabrane 20MHz kanaly), radky = AP;
+    s vysledky skenu (cells) i sloupce obsazenosti kanalu cizimi sitemi."""
     rr = [r for r in rows if r["band"] == band and r["channel"] and r["up"]]
+    cells = [c for c in (cells or []) if c["band"] == band]
     if band.startswith("2"):
         axis = list(range(1, 14))
     else:
         used = {c for r in rr for c in occupied(band, r["channel"], r["htmode"])}
+        used |= {x for c in cells for x in cell_occupied(c)}
         axis = [c for c in CH5 if c <= 64 or c in used or c >= 149] if not any(100 <= c <= 144 for c in used) else CH5
-    if not rr:
+    if not rr and not cells:
         return {"axis": axis, "bars": [], "band": band}
     col = 34 if band.startswith("2") else 26
     x0, row_h = 120, 22
@@ -253,5 +259,152 @@ def channel_map(rows: list[dict], band: str) -> dict:
                      "color": PALETTE[k % len(PALETTE)], "dfs": r["dfs"]})
     ticks = [{"ch": c, "x": x0 + i * col + col / 2, "dfs": band.startswith("5") and is_dfs(c),
               "best": band.startswith("2") and c in NON_OVERLAP_24} for i, c in enumerate(axis)]
-    return {"axis": axis, "ticks": ticks, "bars": bars, "band": band, "col": col, "x0": x0,
-            "width": x0 + len(axis) * col + 10, "height": 36 + len(bars) * row_h}
+    height = 36 + len(bars) * row_h
+    occ_bars = []
+    if cells:
+        occ = occupancy(cells, band, axis)
+        top = max((e["score"] for e in occ.values()), default=0) or 1
+        oh, y0 = 46, height + 6
+        for i, c in enumerate(axis):
+            e = occ[c]
+            h = round(oh * e["score"] / top) if e["score"] else 0
+            occ_bars.append({"ch": c, "x": x0 + i * col + 3, "w": col - 6, "y": y0 + oh - h, "h": h, "count": e["count"],
+                             "best": e["best"], "ty": y0 + oh + 12, "tx": x0 + i * col + col / 2,
+                             "cls": "bad" if (e["best"] or -100) >= -65 else ("mid" if (e["best"] or -100) >= -80 else "low")})
+        height = y0 + oh + 18
+    return {"axis": axis, "ticks": ticks, "bars": bars, "band": band, "col": col, "x0": x0, "occ": occ_bars,
+            "occ_y": height - 64 + 6 if cells else 0, "width": x0 + len(axis) * col + 10, "height": height}
+
+
+# ---------------------------------------------------------------- sken okoli (iwinfo <if> scan)
+
+IFNAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
+SC_CELL = re.compile(r"^Cell\s+\d+\s+-\s+Address:\s*([0-9A-Fa-f:]{17})", re.M)
+SC_ESSID = re.compile(r'ESSID:\s*(?:"(.*)"|(\S+))')
+SC_CHAN = re.compile(r"Channel:\s*(\d+)")
+SC_FREQ = re.compile(r"Frequency:\s*([\d.]+)\s*GHz")
+SC_SIG = re.compile(r"Signal:\s*(-?\d+)\s*dBm")
+SC_ENC = re.compile(r"Encryption:\s*(.+)")
+SC_OFF = re.compile(r"Secondary Channel Offset:\s*(above|below|no secondary)")
+SC_HTW = re.compile(r"HT Operation:.*?Channel Width:\s*([^\n]+)", re.S)
+SC_VHTW = re.compile(r"VHT Operation:.*?Channel Width:\s*([^\n]+)", re.S)
+
+
+def scan_cmd(ifname: str) -> str:
+    if not IFNAME_RE.match(ifname or ""):
+        raise ValueError("bad ifname")
+    return f"iwinfo {ifname} scan 2>&1"
+
+
+def _cell_width(block: str) -> tuple[int, str]:
+    """-> (sirka v MHz, posun sekundarniho kanalu above/below/'')."""
+    off = SC_OFF.search(block)
+    off = off.group(1) if off and off.group(1) != "no secondary" else ""
+    vht = block.split("VHT Operation:", 1)[1] if "VHT Operation:" in block else ""
+    m = re.search(r"Channel Width:\s*([^\n]+)", vht)
+    if m and "160" in m.group(1):
+        return 160, off
+    if m and "80" in m.group(1):
+        return 80, off
+    ht = block.split("HT Operation:", 1)[1].split("VHT Operation:", 1)[0] if "HT Operation:" in block else ""
+    m = re.search(r"Channel Width:\s*([^\n]+)", ht)
+    if m and "40" in m.group(1) and off:
+        return 40, off
+    return 20, ""
+
+
+def parse_scan(text: str) -> list[dict]:
+    """`iwinfo <if> scan` -> [{bssid, essid, channel, freq, band, signal, enc, width, offset}] serazeno podle signalu."""
+    out = []
+    starts = [m for m in SC_CELL.finditer(text or "")]
+    for k, m in enumerate(starts):
+        block = text[m.end(): starts[k + 1].start() if k + 1 < len(starts) else len(text)]
+        ch = SC_CHAN.search(block)
+        if not ch:
+            continue
+        ch = int(ch.group(1))
+        es = SC_ESSID.search(block)
+        essid = (es.group(1) if es and es.group(1) is not None else (es.group(2) if es else "")) or ""
+        if essid == "unknown" and not (es and es.group(1) is not None):
+            essid = ""
+        fq = SC_FREQ.search(block)
+        sig = SC_SIG.search(block)
+        enc = SC_ENC.search(block)
+        w, off = _cell_width(block)
+        out.append({"bssid": m.group(1).lower(), "essid": essid, "channel": ch,
+                    "freq": round(float(fq.group(1)) * 1000) if fq else None,
+                    "band": "2,4 GHz" if ch <= 14 else ("6 GHz" if fq and float(fq.group(1)) >= 5.925 else "5 GHz"),
+                    "signal": int(sig.group(1)) if sig else None, "enc": enc.group(1).strip() if enc else "",
+                    "width": w, "offset": off})
+    out.sort(key=lambda c: -(c["signal"] if c["signal"] is not None else -200))
+    return out
+
+
+def cell_occupied(c: dict) -> list[int]:
+    """20MHz kanaly, ktere cizi sit zabira (podle sirky a posunu sekundarniho kanalu)."""
+    ch, w = c["channel"], c["width"]
+    if c["band"].startswith("2"):
+        if w >= 40:
+            lo, hi = (ch - 2, ch + 6) if c["offset"] == "above" else (ch - 6, ch + 2)
+        else:
+            lo, hi = ch - 2, ch + 2
+        return list(range(max(1, lo), min(14, hi) + 1))
+    return occupied(c["band"], ch, f"HT{w}")
+
+
+def occupancy(cells: list[dict], band: str, axis: list[int]) -> dict[int, dict]:
+    """Obsazenost kanalu cizimi sitemi: {kanal: {count, best (nejsilnejsi dBm), score}}.
+    score = soucet (signal + 95) pres site, ktere kanal zabiraji – cim vic a silnejsich, tim hur."""
+    occ = {c: {"count": 0, "best": None, "score": 0.0} for c in axis}
+    for c in cells:
+        if c["band"] != band or c.get("own") or c["signal"] is None:
+            continue
+        for ch in cell_occupied(c):
+            if ch in occ:
+                e = occ[ch]
+                e["count"] += 1
+                e["best"] = c["signal"] if e["best"] is None else max(e["best"], c["signal"])
+                e["score"] += max(0, c["signal"] + 95)
+    return occ
+
+
+def best_channels(band: str, htmode: str, occ: dict[int, dict], dfs_ok: bool = False) -> list[tuple[int, float]]:
+    """Kandidati na kanal pro dane radio serazene podle obsazenosti: 2,4 GHz jen 1/6/11, 5 GHz podle sirky
+    (prvni kanal skupiny), bez DFS, kdyz dfs_ok neni."""
+    if band.startswith("2"):
+        cands = [1, 6, 11]
+    else:
+        w = width_of(htmode)
+        groups = GROUPS5.get(w) or [(c,) for c in CH5]
+        # bez DFS jen 36–48 (UNII-1); 149–165 je v EU jen pro SRD s nizkym vykonem (25 mW) – nedoporucovat
+        cands = [g[0] for g in groups if g[-1] <= 144 and (dfs_ok or not any(is_dfs(c) for c in g))]
+    out = []
+    for c in cands:
+        chans = occupied(band, c, htmode if not band.startswith("2") else "HT20")
+        out.append((c, sum(occ.get(x, {}).get("score", 0.0) for x in chans)))
+    return sorted(out, key=lambda x: (x[1], x[0]))
+
+
+def scan_warnings(rows: list[dict], scans: dict) -> list[dict]:
+    """Upozorneni ze skenu: silne cizi site na kanalu radia a lepsi volny kanal."""
+    out = []
+    for r in rows:
+        sc = scans.get((r["ap"], r["radio"]))
+        if not sc or not sc.get("cells") or not r["up"] or not r["channel"]:
+            continue
+        mine = set(occupied(r["band"], r["channel"], r["htmode"]))
+        near = [c for c in sc["cells"] if not c.get("own") and c["band"] == r["band"] and mine & set(cell_occupied(c))]
+        strong = [c for c in near if c["signal"] is not None and c["signal"] >= -70]
+        if strong:
+            c = strong[0]
+            out.append({"level": "warn", "key": "radio.w_neighbor", "ap": r["ap"], "radio": r["radio"],
+                        "args": {"ap": r["ap"], "band": r["band"], "ch": r["channel"], "n": len(near),
+                                 "name": c["essid"] or c["bssid"], "sig": c["signal"]}})
+        axis = list(range(1, 14)) if r["band"].startswith("2") else CH5
+        occ = occupancy(sc["cells"], r["band"], axis)
+        cand = best_channels(r["band"], r["htmode"], occ)
+        cur = sum(occ.get(x, {}).get("score", 0.0) for x in mine)
+        if cand and cand[0][0] != r["channel"] and cand[0][1] < cur * 0.5:
+            out.append({"level": "info", "key": "radio.w_better", "ap": r["ap"], "radio": r["radio"],
+                        "args": {"ap": r["ap"], "band": r["band"], "ch": r["channel"], "best": cand[0][0]}})
+    return out
