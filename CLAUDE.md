@@ -70,7 +70,8 @@ Home Assistant si add-on stahuje z repozitáře (`ha store reload` → Aktualizo
 - **Bez výslovného souhlasu uživatele nic neměň na skutečných zařízeních** (restart, `uci set`, `wifi`,
   `apk upgrade`, `sysupgrade`, blokace klientů). Čtecí příkazy (`ubus call … status`, `uci show`,
   `swconfig … get`, `snmpwalk`) jsou v pořádku. Pozor: zařízení může být zrovna vypnuté nebo v provozu.
-- **Neskenuj síť** (žádné sweepy ani port scany). Ping z routeru jen pro známé IP z ARP (`wake_cmd`).
+- **Neskenuj síť** (žádné sweepy ani port scany). Ping z routeru jen pro známé IP z ARP (`wake_cmd`)
+  a pro cíle statistik (`ping_targets`, brána WAN, AP a switche z konfigurace; adresy přes `stats.valid_host`).
 - **Vstupy do příkazů na zařízení** vždy validuj (regex pro MAC, ifname, IP) a escapuj (`shlex.quote`).
   Hodnoty od uživatele ani z HA nikdy neskládej do shellu bez kontroly.
 - **Akce jen pro plný přístup** – kontrola na serveru (`require_full`, role v `request.state.user`),
@@ -109,6 +110,13 @@ Proč je co tak, jak je – čti, než něco „zjednodušíš“:
 - **Jména zařízení:** ruční `names` > registr zařízení HA (podle MAC) > DHCP lease > rezervace na routeru.
 - **Přítomnost:** Wi-Fi klient, MAC na portu AP (ne stará), nebo ARP. Lease ani rezervace samy nestačí.
 - **Upozornění na nová zařízení:** první spuštění = výchozí stav bez upozornění (`known_devices.json`).
+- **Statistiky (`app/stats.py`):** router a čítače switchů každých `stats_interval` s ve `stats_loop`, AP dál
+  podle `poll_interval`. Na router **jedno trvalé SSH spojení** (`Store.stats_conn`, ne nové přihlášení každých
+  5 s – dropbear by to logoval) a jeden příkaz (`router_cmd`): pingy běží na pozadí do `/tmp/owadmin-stats/pN`,
+  aby se jejich výstup nemíchal se sekcemi `@@…`. Klíče pingů odpovídají pořadí v `ping_plan()` – indexy se
+  při vynechání neplatné adresy neposouvají. Provoz klientů: nlbwmon jen když už běží (nic se neinstaluje),
+  jinak conntrack (čítače spojení, rozdíly mezi čteními). Historie jen v paměti (1 h); dlouhodobě = senzory HA
+  přes REST `/api/states` (bez unique_id). Směry: u portu switche ↓ = out (k zařízení), u uplinku switche obráceně.
 
 ## Struktura
 
@@ -130,7 +138,8 @@ openwrt_admin/
     topology.py              # mapa site (server-side SVG), VLAN, site
     switch.py, snmp.py       # switche pres SNMP, vlastni SNMP v2c klient
     maint.py                 # aktualizace, zalohy, nova zarizeni
-    ha.py                    # websocket API Home Assistantu (jmena, notifikace)
+    ha.py                    # API Home Assistantu (jmena, notifikace, senzory pres REST)
+    stats.py                 # statistiky: parsery, historie, ping, top klienti, senzory, demo
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/

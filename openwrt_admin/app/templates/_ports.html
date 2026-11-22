@@ -10,15 +10,17 @@
     {% endfor %}
   </div>
   {% set has_vlan = ports | selectattr("vlans_u", "defined") | list | length > 0 %}
+  {% set has_load = ports | selectattr("load_down", "defined") | selectattr("load_down", "ne", none) | list | length > 0 %}
   {% set rows = ports if ports | length <= 12 else ports | selectattr("up") | list %}
   <table class="list">
-    <thead><tr><th>{{ t("diag.port") }}</th><th>{{ t("col.state") }}</th><th>{{ t("ports.speed") }}</th><th>{{ t("diag.role") }}</th>{% if has_vlan %}<th>VLAN</th>{% endif %}<th>{{ t("ports.devices") }}</th></tr></thead>
+    <thead><tr><th>{{ t("diag.port") }}</th><th>{{ t("col.state") }}</th><th>{{ t("ports.speed") }}</th><th>{{ t("diag.role") }}</th>{% if has_load %}<th class="num" title="{{ t('stats.map_load_title') }}">{{ t("ports.load") }}</th>{% endif %}{% if has_vlan %}<th>VLAN</th>{% endif %}<th>{{ t("ports.devices") }}</th></tr></thead>
     {% for p in rows %}
     <tr>
       <td><b>{{ p.num }}</b>{% if p.kind == 'switch' and p.id.startswith('switch') %} <span class="muted small">{{ p.id.split(':')[0] }}</span>{% endif %}{% if p.alias %} <span class="muted small">{{ p.alias }}</span>{% endif %}</td>
       <td><span class="dot {{ 'on' if p.up else 'off' }}"></span> {{ t("ports.up") if p.up else t("ports.down") }}</td>
       <td>{% if p.up %}<span class="tag {{ spc(p) }}">{{ p.speed | speed }}</span>{% if p.duplex == 'half' %} <span class="warn small">half-duplex</span>{% endif %}{% else %}–{% endif %}</td>
       <td>{{ t("ports.role_" ~ p.role) }}</td>
+      {% if has_load %}<td class="num num-cell small">{% if p.up and p.load_down is not none %}<span class="rx">↓{{ p.load_down | bps }}</span> <span class="tx">↑{{ p.load_up | bps }}</span>{% else %}–{% endif %}</td>{% endif %}
       {% if has_vlan %}<td class="small">{% if p.vlans_u %}<span title="{{ t('ports.untagged') }}">U: {{ p.vlans_u | join(", ") }}</span>{% endif %}{% if p.vlans_t %}{{ " · " if p.vlans_u }}<span title="{{ t('ports.tagged') }}">T: {{ p.vlans_t | join(", ") }}</span>{% endif %}</td>{% endif %}
       <td>{% for d in p.devices %}{{ d.hostname or d.mac }}{% if d.stale %} <span class="muted small">({{ t("map.last_seen", ago=(d.stale | ago)) }})</span>{% endif %}{{ ", " if not loop.last }}{% else %}<span class="muted">–</span>{% endfor %}</td>
     </tr>

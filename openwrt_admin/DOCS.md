@@ -61,6 +61,18 @@ switches:                    # optional: managed switches read over SNMP (read-o
   - name: Switch-Core
     host: 192.168.1.5
     community: public        # SNMP v2c read community (default public)
+stats: true                  # Statistics page (speeds, ping, top internet users, switch port traffic)
+stats_interval: 5            # s, 2–60: how often the router and switch counters are read
+ping_targets:                # internet addresses pinged by the router (IP or hostname)
+  - name: Cloudflare
+    host: 1.1.1.1
+  - name: NIC.CZ
+    host: nic.cz
+ping_devices: true           # also ping the ISP gateway, APs and switches
+traffic_source: auto         # auto | nlbwmon | conntrack | off – who uses the internet most
+top_clients: 10              # 3–50
+ha_sensors: false            # true = statistics as sensor.openwrt_admin_* entities in HA
+ha_sensors_interval: 30      # s, 10–600
 ```
 
 `dhcp_router` and `router_name` from versions up to 0.7.0 still work but are deprecated: if `dhcp_router` is set and no device has `type: router`, the device with the same IP becomes the router (so it is never shown twice); otherwise a router is created from `dhcp_router`. Recommended: remove `dhcp_router` and set `type: router` on the router.
@@ -118,6 +130,44 @@ AP and router pages have a **Ports** panel: every physical port with its state, 
 - **DSA** devices and devices without a switch (e.g. UniFi AP with one `eth0`, a router with two network cards): physical devices (`lan1`, `wan`, `eth0`…) from `ubus call network.device status` (`speed: "1000F"`). Only devices the network uses (bridge members, interface devices, `wan*`) are shown. Without a switch the only connected port counts as the uplink.
 - Colours: green 1 Gb/s and more, orange 100 Mb/s, red 10 Mb/s, dashed = disconnected; half-duplex is flagged. **100 Mb/s instead of 1 Gb/s** usually means a damaged or 4-wire cable, or a device that cannot do more.
 - On the **map** the line to each AP is labelled with the speed of its uplink port, and wired devices on AP ports show their port speed (green 1 Gb/s, orange below).
+
+### Statistics
+
+The **Statistics** page (option `stats`, on by default) shows what the network is doing right now and in the last hour:
+
+| Panel | Source |
+|---|---|
+| WAN download/upload, interfaces (WAN, LAN, every VLAN, tunnels): RX/TX, packets/s, peak, chart of the last hour | router `/proc/net/dev` |
+| router CPU temperature and load | `/sys/class/thermal/thermal_zone*/temp`, `/proc/loadavg` |
+| ping: internet targets (`ping_targets`), ISP gateway, APs and switches – last/average response, loss, history strip | `ping -c 1 -W 1` on the router; the router itself = SSH response time from the add-on |
+| who uses the internet most (top `top_clients`) | **nlbwmon** (`nlbw -c json -g mac,ip`) when it runs on the router, otherwise **conntrack** (`/proc/net/nf_conntrack`) |
+| current traffic of Wi-Fi clients | difference of hostapd `bytes` between two AP readings |
+| busiest switch ports – also traffic between devices inside the network (e.g. laptop ↔ server) that does not pass the router | SNMP IF-MIB `ifHCInOctets`/`ifHCOutOctets` (fallback 32-bit `ifInOctets`/`ifOutOctets`) |
+
+- The router and the switches are read every `stats_interval` seconds (default 5) over **one open SSH connection** (no new login every time, nothing in the router log). APs are still read every `poll_interval`.
+- Nothing is installed on the devices. `nlbwmon` is used only if it is already installed; `traffic_source` can force `nlbwmon`, `conntrack` or switch it `off`.
+  - **nlbwmon** refreshes its data every `refresh_interval` (default 30 s), so the speed is an average over ~90 s. It also gives the total for the current accounting period.
+  - **conntrack** needs `net.netfilter.nf_conntrack_acct=1` (OpenWrt default; check with `cat /proc/sys/net/netfilter/nf_conntrack_acct`). Only IPv4 traffic between LAN/VLANs and the internet is counted, including port forwards. With **flow offloading** packets bypass conntrack and part of the traffic is missing.
+- Ping targets must be an IP address or a hostname; nothing else is pinged (no scanning).
+- The history (1 hour) is kept only in memory and is lost when the add-on restarts. For long-term history turn on `ha_sensors`.
+- **Map:** lines to APs and switches show the current traffic on their link (`↓` towards the device / `↑` from it) from the switch port counters, the line from the internet shows WAN traffic, wired devices on switch ports show their port traffic. Over half of the port speed is red and thick.
+- The **switch page** has a *Traffic* column in the port table, the **router page** shows RX/TX now for every interface, the **Clients** tables have a *Now ↓/↑* column and the overview has *Internet* and *WAN* tiles.
+
+#### Sensors in Home Assistant
+
+With `ha_sensors: true` the add-on writes the statistics every `ha_sensors_interval` seconds to Home Assistant through its REST API (`homeassistant_api`, no MQTT needed):
+
+| Entity | State |
+|---|---|
+| `sensor.openwrt_admin_<router>_<interface>_rx` / `_tx` | Mbit/s (`device_class: data_rate`) |
+| `sensor.openwrt_admin_<router>_<interface>_packets` | packets/s |
+| `sensor.openwrt_admin_<router>_cpu_temperature`, `…_load` | °C, load |
+| `sensor.openwrt_admin_ping_<name>` / `binary_sensor.openwrt_admin_ping_<name>` | response in ms (attribute `loss_1h`) / connectivity on/off |
+| `binary_sensor.openwrt_admin_internet` | on when at least one internet target answers |
+| `sensor.openwrt_admin_top_clients` | number of active clients; attribute `clients` = list (name, IP, MAC, download, upload in Mbit/s) |
+| `sensor.openwrt_admin_<switch>_port<N>_down` / `_up` | Mbit/s, connected ports only |
+
+The entities are created on the first write. They have no `unique_id`, so they cannot be renamed in the UI, and after an HA restart they appear again with the next update. They have `state_class: measurement`, so HA keeps long-term statistics and they can go to InfluxDB and be shown in **Grafana**. The Settings page shows how many entities are sent and the last error.
 
 ### New devices on the network
 
@@ -239,12 +289,14 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | interfaces and VLANs (router, APs) | `ubus call network.interface dump`, `ubus call network.device status` |
 | client names and IPs (router) | `ubus call luci-rpc getDHCPLeases`, else `/tmp/dhcp.leases`; `uci show dhcp` (reservations), `/proc/net/arp` |
 | device names (Home Assistant) | websocket `config/device_registry/list` (MAC connections) |
+| statistics (router, every `stats_interval`) | `/proc/net/dev`, `/sys/class/thermal`, `/proc/loadavg`, `ping -c 1 -W 1`, `nlbw -c json -g mac,ip` or `/proc/net/nf_conntrack` |
+| switch port traffic | SNMP `ifHCInOctets`, `ifHCOutOctets` |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
 
 ### JSON API
 
-`…/api/state` returns the whole state (APs + clients) as JSON.
+`…/api/state` returns the whole state (APs + clients) as JSON, `…/api/stats` the current statistics (interfaces, ping, top clients, Wi-Fi traffic, switch ports).
 
 ### Languages
 
@@ -334,6 +386,18 @@ switches:                    # volitelně: spravované switche čtené přes SNM
   - name: Switch-Core
     host: 192.168.1.5
     community: public        # read community SNMP v2c (výchozí public)
+stats: true                  # stránka Statistiky (rychlosti, ping, kdo vytěžuje internet, porty switche)
+stats_interval: 5            # s, 2–60: jak často se čtou router a čítače switchů
+ping_targets:                # adresy v internetu, které router pinguje (IP nebo jméno)
+  - name: Cloudflare
+    host: 1.1.1.1
+  - name: NIC.CZ
+    host: nic.cz
+ping_devices: true           # pingat i bránu poskytovatele, AP a switche
+traffic_source: auto         # auto | nlbwmon | conntrack | off – kdo nejvíc vytěžuje internet
+top_clients: 10              # 3–50
+ha_sensors: false            # true = statistiky jako entity sensor.openwrt_admin_* v HA
+ha_sensors_interval: 30      # s, 10–600
 ```
 
 `dhcp_router` a `router_name` z verzí do 0.7.0 fungují dál, ale jsou zastaralé: když je `dhcp_router` vyplněný a žádné zařízení nemá `type: router`, router se stane zařízení se stejnou IP (nikdy se tedy nezobrazí dvakrát); jinak se router vytvoří z `dhcp_router`. Doporučeno: `dhcp_router` smazat a routeru dát `type: router`.
@@ -391,6 +455,44 @@ Stránka AP i routeru má panel **Porty**: každý fyzický port se stavem, vyje
 - Zařízení s **DSA** a bez switche (např. UniFi AP s jediným `eth0`, router se dvěma síťovkami): fyzická zařízení (`lan1`, `wan`, `eth0`…) z `ubus call network.device status` (`speed: "1000F"`). Ukážou se jen zařízení, která síť používá (členové bridge, zařízení rozhraní, `wan*`). Bez switche se za uplink bere jediný připojený port.
 - Barvy: zeleně 1 Gb/s a víc, oranžově 100 Mb/s, červeně 10 Mb/s, čárkovaně = odpojeno; half-duplex je označený. **100 Mb/s místo 1 Gb/s** bývá poškozený nebo 4žilový kabel, případně zařízení, které víc neumí.
 - Na **mapě** je u čáry ke každému AP rychlost jeho uplink portu a kabelová zařízení na portech AP mají rychlost svého portu (1 Gb/s zeleně, pod 1 Gb/s oranžově).
+
+### Statistiky
+
+Stránka **Statistiky** (volba `stats`, ve výchozím stavu zapnutá) ukazuje, co síť dělá teď a za poslední hodinu:
+
+| Panel | Zdroj |
+|---|---|
+| stahování/odesílání WAN, rozhraní (WAN, LAN, každá VLAN, tunely): RX/TX, pakety/s, špička, graf za poslední hodinu | router `/proc/net/dev` |
+| teplota CPU a zátěž routeru | `/sys/class/thermal/thermal_zone*/temp`, `/proc/loadavg` |
+| ping: cíle v internetu (`ping_targets`), brána poskytovatele, AP a switche – poslední/průměrná odezva, ztráta, pruh historie | `ping -c 1 -W 1` na routeru; router samotný = odezva SSH z add-onu |
+| kdo nejvíc vytěžuje internet (top `top_clients`) | **nlbwmon** (`nlbw -c json -g mac,ip`), když na routeru běží, jinak **conntrack** (`/proc/net/nf_conntrack`) |
+| aktuální provoz Wi-Fi klientů | rozdíl `bytes` z hostapd mezi dvěma načteními AP |
+| nejvytíženější porty switche – i provoz mezi zařízeními uvnitř sítě (např. notebook ↔ server), který neprochází routerem | SNMP IF-MIB `ifHCInOctets`/`ifHCOutOctets` (záložně 32bitové `ifInOctets`/`ifOutOctets`) |
+
+- Router a switche se čtou každých `stats_interval` sekund (výchozí 5) přes **jedno trvalé SSH spojení** (žádné nové přihlášení pokaždé, nic v logu routeru). AP se dál čtou podle `poll_interval`.
+- Na zařízeních se nic neinstaluje. `nlbwmon` se použije jen tehdy, když už na routeru je; `traffic_source` umí vynutit `nlbwmon`, `conntrack` nebo to vypnout (`off`).
+  - **nlbwmon** obnovuje data po svém `refresh_interval` (výchozí 30 s), rychlost je proto průměr za ~90 s. Navíc dává součet za aktuální účetní období.
+  - **conntrack** potřebuje `net.netfilter.nf_conntrack_acct=1` (výchozí v OpenWrt; ověření `cat /proc/sys/net/netfilter/nf_conntrack_acct`). Počítá se jen IPv4 provoz mezi LAN/VLAN a internetem, včetně přesměrovaných portů. Se zapnutým **flow offloadingem** jdou pakety mimo conntrack a část provozu chybí.
+- Cíle pingu musí být IP adresa nebo jméno; nic jiného se nepinguje (žádné skenování).
+- Historie (1 hodina) je jen v paměti a po restartu add-onu zmizí. Na dlouhodobou historii zapni `ha_sensors`.
+- **Mapa:** čáry k AP a switchům ukazují aktuální provoz na jejich přívodu (`↓` k zařízení / `↑` od něj) z čítačů portů switche, čára z internetu provoz WAN, kabelová zařízení na portech switche provoz svého portu. Nad polovinou rychlosti portu červeně a silně.
+- **Stránka switche** má v tabulce portů sloupec *Provoz*, **stránka routeru** ukazuje u každého rozhraní RX/TX teď, tabulky **Klienti** mají sloupec *Teď ↓/↑* a přehled dlaždice *Internet* a *WAN*.
+
+#### Senzory v Home Assistantu
+
+S `ha_sensors: true` add-on každých `ha_sensors_interval` sekund zapisuje statistiky do Home Assistantu přes jeho REST API (`homeassistant_api`, MQTT není potřeba):
+
+| Entita | Stav |
+|---|---|
+| `sensor.openwrt_admin_<router>_<rozhraní>_rx` / `_tx` | Mbit/s (`device_class: data_rate`) |
+| `sensor.openwrt_admin_<router>_<rozhraní>_packets` | pakety/s |
+| `sensor.openwrt_admin_<router>_cpu_temperature`, `…_load` | °C, zátěž |
+| `sensor.openwrt_admin_ping_<jméno>` / `binary_sensor.openwrt_admin_ping_<jméno>` | odezva v ms (atribut `loss_1h`) / dostupnost on/off |
+| `binary_sensor.openwrt_admin_internet` | on, když odpovídá aspoň jeden cíl v internetu |
+| `sensor.openwrt_admin_top_clients` | počet aktivních klientů; atribut `clients` = seznam (jméno, IP, MAC, download, upload v Mbit/s) |
+| `sensor.openwrt_admin_<switch>_port<N>_down` / `_up` | Mbit/s, jen připojené porty |
+
+Entity vzniknou při prvním zápisu. Nemají `unique_id`, takže je nejde přejmenovat v UI, a po restartu HA se objeví znovu s další aktualizací. Mají `state_class: measurement`, takže HA drží dlouhodobé statistiky a jdou do InfluxDB a do **Grafany**. Stránka Nastavení ukazuje, kolik entit se posílá, a poslední chybu.
 
 ### Nová zařízení v síti
 
@@ -512,12 +614,14 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | rozhraní a VLANy (router, AP) | `ubus call network.interface dump`, `ubus call network.device status` |
 | jména a IP klientů (router) | `ubus call luci-rpc getDHCPLeases`, jinak `/tmp/dhcp.leases`; `uci show dhcp` (rezervace), `/proc/net/arp` |
 | jména zařízení (Home Assistant) | websocket `config/device_registry/list` (MAC v connections) |
+| statistiky (router, každých `stats_interval`) | `/proc/net/dev`, `/sys/class/thermal`, `/proc/loadavg`, `ping -c 1 -W 1`, `nlbw -c json -g mac,ip` nebo `/proc/net/nf_conntrack` |
+| provoz na portech switche | SNMP `ifHCInOctets`, `ifHCOutOctets` |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).
 
 ### JSON API
 
-`…/api/state` vrací celý stav (AP + klienti) jako JSON.
+`…/api/state` vrací celý stav (AP + klienti) jako JSON, `…/api/stats` aktuální statistiky (rozhraní, ping, top klienti, provoz Wi-Fi, porty switche).
 
 ### Jazyky
 

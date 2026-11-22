@@ -126,7 +126,7 @@ def build_state(name: str, host: str, d: dict) -> APState:
         st.ports.append({
             "id": f"sw:{port}", "num": str(port), "up": up, "speed": int(speed) if up else 0,
             "duplex": {2: "half", 3: "full"}.get(duplex.get(ifi), "") if up else "",
-            "kind": "switch", "name": names.get(ifi, ""), "alias": alias.get(ifi, ""),
+            "kind": "switch", "name": names.get(ifi, ""), "alias": alias.get(ifi, ""), "ifindex": ifi,
             "vlans_u": sorted(v for v, ps in untagged.items() if port in ps),
             "vlans_t": sorted(v for v, ps in egress.items() if port in ps and port not in untagged.get(v, set())),
         })
@@ -165,3 +165,28 @@ async def collect_switch(name: str, host: str, community: str, port: int = 161, 
         st.error = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
         log.warning("%s (%s): %s", name, host, st.error)
         return st
+
+
+HC_IN = "1.3.6.1.2.1.31.1.1.1.6"    # ifHCInOctets (64 bit)
+HC_OUT = "1.3.6.1.2.1.31.1.1.1.10"  # ifHCOutOctets
+IN32 = "1.3.6.1.2.1.2.2.1.10"       # ifInOctets (32 bit, zalozne)
+OUT32 = "1.3.6.1.2.1.2.2.1.16"      # ifOutOctets
+
+
+def parse_counters(cin: dict, cout: dict, bits: int) -> dict[int, tuple[int, int, int]]:
+    """Walk citacu -> {ifIndex: (in, out, bitu citace)}."""
+    out = {}
+    for k, v in cin.items():
+        w = cout.get(k)
+        if k.isdigit() and isinstance(v, int) and isinstance(w, int):
+            out[int(k)] = (v, w, bits)
+    return out
+
+
+async def read_counters(host: str, community: str, port: int = 161, timeout: float = 2.0) -> dict[int, tuple[int, int, int]]:
+    """Citace bajtu vsech rozhrani switche (pro rychlost portu). Chyby vyhazuje dal (OSError, SnmpError)."""
+    async with Client(host, community, port=port, timeout=timeout) as c:
+        cin = await c.walk(HC_IN)
+        if cin:
+            return parse_counters(cin, await c.walk(HC_OUT), 64)
+        return parse_counters(await c.walk(IN32), await c.walk(OUT32), 32)

@@ -103,3 +103,34 @@ async def notify(title: str, message: str, notification_id: str = "", service: s
     if extra:
         reqs.append(extra)
     await _session(reqs)
+
+
+API_URL = os.environ.get("OWADMIN_HA_API", "http://supervisor/core/api")
+
+
+def set_states(entities: list[tuple[str, object, dict]], timeout: float = 10.0) -> int:
+    """Zapise stavy entit pres REST API HA (POST /api/states/<entity_id>), jedno spojeni pro vsechny.
+    Entity vznikaji samy pri prvnim zapisu (bez unique_id – nejdou upravovat v UI, ale maji historii
+    a jdou do statistik, InfluxDB/Grafany). Blokujici – volat pres asyncio.to_thread. Vrati pocet zapsanych."""
+    import http.client
+    from urllib.parse import quote, urlsplit
+    token = os.environ.get("SUPERVISOR_TOKEN")
+    if not token:
+        raise RuntimeError("no SUPERVISOR_TOKEN")
+    u = urlsplit(API_URL)
+    conn_cls = http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection
+    conn = conn_cls(u.hostname, u.port, timeout=timeout)
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    n = 0
+    try:
+        for entity_id, state, attrs in entities:
+            body = json.dumps({"state": "unknown" if state is None else state, "attributes": attrs})
+            conn.request("POST", f"{u.path.rstrip('/')}/states/{quote(entity_id)}", body=body, headers=headers)
+            r = conn.getresponse()
+            r.read()
+            if r.status not in (200, 201):
+                raise RuntimeError(f"HA {entity_id}: HTTP {r.status}")
+            n += 1
+    finally:
+        conn.close()
+    return n

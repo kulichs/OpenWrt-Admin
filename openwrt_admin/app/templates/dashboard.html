@@ -3,6 +3,13 @@
 <section class="summary">
   <div class="stat" title="{{ devices | map(attribute='name') | join(', ') }}"><span class="num">{{ devices | selectattr('online') | list | length }}/{{ devices | length }}</span><span class="lbl">{{ t("dash.devices_online") }}</span></div>
   <div class="stat"><span class="num">{{ clients | length }}</span><span class="lbl">{{ t("dash.clients") }}</span></div>
+  {% if store.stats_on %}{% set inet = store.stats.pings.values() | selectattr("kind", "equalto", "internet") | list %}{% set wl = store.wan_load() %}
+  {% if inet %}{% set ok = inet | selectattr("ok") | list %}
+  <a class="stat {{ 'stat-good' if ok else 'stat-bad' }}" href="{{ base }}/stats" title="{% for p in inet %}{{ p.name }}: {{ p.last | ms }}{{ ', ' if not loop.last }}{% endfor %}"><span class="num">{{ t("stats.inet_ok") if ok else t("stats.inet_down") }}</span><span class="lbl">{{ t("stats.internet") }}</span></a>
+  {% endif %}
+  {% if wl and wl[0] is not none %}
+  <a class="stat" href="{{ base }}/stats"><span class="num"><span class="rx">↓{{ wl[0] | bps }}</span> <small class="tx">↑{{ wl[1] | bps }}</small></span><span class="lbl">WAN</span></a>
+  {% endif %}{% endif %}
   {% set ut = store.updates_total() %}
   <div class="stat {{ 'stat-warn' if ut }}"><span class="num">{{ ut }}</span><span class="lbl">{{ t("dash.updates") }}</span></div>
   {% for ssid, group in clients | groupby("ssid") %}

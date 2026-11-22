@@ -2,6 +2,25 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.15.0
+- New **Statistics** page: router interface speeds (WAN, LAN, every VLAN) with packets/s, peak and a chart of the last hour, router CPU temperature and load, ping to internet targets (`ping_targets`), the ISP gateway, APs and switches with loss and history, top internet users (`top_clients`) and the busiest switch ports. History of the last hour in memory.
+- Top internet users from **nlbwmon** when it runs on the router (nothing is installed), otherwise from **conntrack** (`traffic_source`: auto / nlbwmon / conntrack / off).
+- Router and switch counters are read every `stats_interval` seconds (default 5) over one open SSH connection; switch port traffic over SNMP (`ifHCInOctets`/`ifHCOutOctets`) – also shows traffic inside the network, e.g. laptop ↔ server.
+- Map: current traffic (`↓`/`↑`) on the lines to APs, switches and the internet and on wired devices on switch ports; over half of the port speed red and thick. Switch page: *Traffic* column; router page: RX/TX now; client tables: *Now ↓/↑*; overview: *Internet* and *WAN* tiles.
+- Optional sensors in Home Assistant (`ha_sensors`, `ha_sensors_interval`): speeds, packets, ping, internet connectivity, CPU temperature, top clients and switch ports as `sensor.openwrt_admin_*` / `binary_sensor.openwrt_admin_*` (REST API, for history and InfluxDB/Grafana).
+- New `/api/stats` (JSON). Demo mode shows all of it with an hour of made-up history; demo Wi-Fi clients have stable MACs.
+- Map legend: the port speed sample (`1G 100M`) was stretched over the whole width.
+- Verified: unit tests of the parsers, the whole router command in a real shell over a fake SSH server, demo in cs + en. Not yet on the real network.
+---
+- Nová stránka **Statistiky**: rychlosti rozhraní routeru (WAN, LAN, každá VLAN) s pakety/s, špičkou a grafem za poslední hodinu, teplota CPU a zátěž routeru, ping na cíle v internetu (`ping_targets`), bránu poskytovatele, AP a switche se ztrátou a historií, kdo nejvíc vytěžuje internet (`top_clients`) a nejvytíženější porty switche. Historie poslední hodiny v paměti.
+- Kdo vytěžuje internet: z **nlbwmon**, když na routeru běží (nic se neinstaluje), jinak z **conntracku** (`traffic_source`: auto / nlbwmon / conntrack / off).
+- Router a čítače switchů se čtou každých `stats_interval` sekund (výchozí 5) přes jedno trvalé SSH spojení; provoz na portech switche přes SNMP (`ifHCInOctets`/`ifHCOutOctets`) – je vidět i provoz uvnitř sítě, např. notebook ↔ server.
+- Mapa: aktuální provoz (`↓`/`↑`) na čarách k AP, switchům a do internetu a u kabelových zařízení na portech switche; nad polovinou rychlosti portu červeně a silně. Stránka switche: sloupec *Provoz*; stránka routeru: RX/TX teď; tabulky klientů: *Teď ↓/↑*; přehled: dlaždice *Internet* a *WAN*.
+- Volitelné senzory v Home Assistantu (`ha_sensors`, `ha_sensors_interval`): rychlosti, pakety, ping, dostupnost internetu, teplota CPU, top klienti a porty switche jako `sensor.openwrt_admin_*` / `binary_sensor.openwrt_admin_*` (REST API, pro historii a InfluxDB/Grafanu).
+- Nové `/api/stats` (JSON). Demo ukazuje všechno s hodinou vymyšlené historie; Wi-Fi klienti v demu mají stálé MAC.
+- Legenda mapy: ukázka rychlosti portu (`1G 100M`) byla roztažená přes celou šířku.
+- Ověřeno: testy parserů, celý příkaz pro router ve skutečném shellu přes simulovaný SSH server, demo cs + en. Na skutečné síti zatím ne.
+
 ## 0.14.2
 - Map: every AP or switch plugged into another device (e.g. into the switch) has its own line from it instead of one shared vertical line; lower devices are further left so the lines do not cross.
 - Demo: both APs are plugged directly into the switch.

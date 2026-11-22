@@ -56,3 +56,27 @@ configuration:
   switches:
     name: Switche (SNMP)
     description: "Volitelně spravované switche (Netgear, TP-Link, Cisco SG…), které se čtou přes SNMP v2c jen pro čtení: porty, rychlosti, VLANy a MAC adresy na portech – na mapě se ukážou se vším, co je do nich zapojené. Každý má název, adresu, community (výchozí public) a volitelně port (výchozí 161)."
+  stats:
+    name: Statistiky
+    description: "Stránka Statistiky: rychlosti rozhraní routeru, teplota, ping, kdo nejvíc vytěžuje internet, provoz na portech switche a aktuální rychlost Wi-Fi klientů. Na zařízeních se nic neinstaluje."
+  stats_interval:
+    name: Interval statistik (s)
+    description: "Jak často se čtou statistiky z routeru a čítače portů switchů, 2–60 sekund. Router má trvalé SSH spojení, AP se čtou dál podle poll_interval."
+  ping_targets:
+    name: Ping do internetu
+    description: "Adresy v internetu, které router pinguje (name + host, IP nebo jméno). Podle nich se pozná, jestli internet funguje."
+  ping_devices:
+    name: Pingat zařízení v síti
+    description: "Router pinguje i bránu poskytovatele, AP a switche ze seznamu zařízení."
+  traffic_source:
+    name: Zdroj provozu klientů
+    description: "Odkud brát, kdo kolik stahuje z internetu. auto = nlbwmon, když na routeru běží, jinak conntrack. off = vypnuto."
+  top_clients:
+    name: Počet klientů v žebříčku
+    description: "Kolik klientů s největším provozem do internetu se zobrazí (3–50)."
+  ha_sensors:
+    name: Senzory do Home Assistantu
+    description: "Posílat statistiky do HA jako entity sensor.openwrt_admin_* a binary_sensor.openwrt_admin_* (rychlosti, ping, teplota, top klienti, porty switche) – mají historii a jdou do InfluxDB/Grafany."
+  ha_sensors_interval:
+    name: Interval senzorů (s)
+    description: "Jak často se senzory v HA aktualizují, 10–600 sekund."

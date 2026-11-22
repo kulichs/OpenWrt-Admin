@@ -55,6 +55,18 @@ chmod 600 /etc/dropbear/authorized_keys</pre>
   <p class="muted small">{{ t("setup.maint_hint") }}</p>
 </div>
 <div class="panel">
+  <h2>{{ t("setup.stats_title") }}</h2>
+  <dl>
+    <dt>{{ t("nav.stats") }}</dt>
+    <dd>{% if store.stats_on %}<span class="sig good">{{ t("state.on") }}</span> · {{ t("setup.stats_val", s=store.stats_interval, src=store.traffic_source) }}{% if store.stats.traffic.source %} → <b>{{ store.stats.traffic.source }}</b>{% endif %}{% else %}<span class="muted">{{ t("state.off") }}</span>{% endif %}</dd>
+    <dt>{{ t("setup.ping_targets") }}</dt>
+    <dd class="mono small">{% for k, name, host, kind in store.ping_plan() %}{{ name }} ({{ host }}){{ ", " if not loop.last }}{% else %}–{% endfor %}</dd>
+    <dt>{{ t("setup.sensors") }}</dt>
+    <dd>{% if not store.opts.ha_sensors %}<span class="muted">{{ t("setup.sensors_off") }}</span>{% elif store.sensor_status == 'ok' %}<span class="sig good">OK</span> · {{ t("setup.sensors_ok", n=store.sensor_count, s=store.opts.get('ha_sensors_interval', 30)) }}{% elif store.sensor_status == 'demo' %}<span class="muted">{{ t("setup.sensors_demo", n=store.sensor_count) }}</span>{% elif store.sensor_status %}<span class="err">{{ store.sensor_status }}</span>{% else %}<span class="muted">{{ t("setup.sensors_wait") }}</span>{% endif %}</dd>
+  </dl>
+  <p class="muted small">{{ t("setup.stats_hint") }}</p>
+</div>
+<div class="panel">
   <h2>3. {{ t("setup.users_title") }}</h2>
   <p>{{ t("setup.users_text") }}</p>
   <dl>

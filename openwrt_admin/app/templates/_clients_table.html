@@ -2,7 +2,7 @@
 <table class="list">
   <thead><tr>
     <th>{{ t("col.device") }}</th><th>IP</th><th>MAC</th>{% if show_ap %}<th>AP</th>{% endif %}<th>SSID</th><th>{{ t("col.band") }}</th><th>{{ t("col.standard") }}</th>
-    <th class="num">{{ t("col.signal") }}</th><th class="num">{{ t("col.rate") }}</th><th class="num">{{ t("col.traffic") }}</th><th class="num">{{ t("col.connected") }}</th>{% if can_edit %}<th></th>{% endif %}
+    <th class="num">{{ t("col.signal") }}</th><th class="num">{{ t("col.rate") }}</th><th class="num" title="{{ t('col.now_title') }}">{{ t("col.now") }}</th><th class="num">{{ t("col.traffic") }}</th><th class="num">{{ t("col.connected") }}</th>{% if can_edit %}<th></th>{% endif %}
   </tr></thead>
   <tbody>
   {% for c in clients %}
@@ -16,6 +16,7 @@
     <td>{{ c.standard or "–" }}</td>
     <td class="num"><span class="sig {{ c.signal | sigclass }}">{{ c.signal if c.signal is not none else "–" }}{% if c.signal is not none %} dBm{% endif %}</span></td>
     <td class="num">{{ c.tx_rate | rate }} / {{ c.rx_rate | rate }}</td>
+    <td class="num num-cell">{% if c.down_bps is not none %}{{ c.down_bps | bps }} / {{ c.up_bps | bps }}{% else %}–{% endif %}</td>
     <td class="num">{{ c.tx_bytes | bytes }} / {{ c.rx_bytes | bytes }}</td>
     <td class="num">{{ c.connected | duration }}</td>
     {% if can_edit %}<td class="kick">

@@ -18,9 +18,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_states, demo_switch
+from .snmp import SnmpError
 
 DATA = Path(os.environ.get("OWADMIN_DATA", "/data"))
 OPTIONS = DATA / "options.json"
@@ -43,11 +44,16 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 # ---------------------------------------------------------------- konfigurace a klic
 
+DEFAULT_PING = [{"name": "Cloudflare", "host": "1.1.1.1"}, {"name": "Google DNS", "host": "8.8.8.8"}]
+TRAFFIC_SOURCES = ("auto", "nlbwmon", "conntrack", "off")
+
 def load_options() -> dict:
     opts = {"aps": [], "ssh_user": "root", "poll_interval": 30, "dhcp_router": "", "router_name": "Router", "demo": False,
             "full_access": [], "read_access": [], "refresh_interval": 30, "language": "auto",
             "ha_names": True, "names": [], "notify_new_devices": True, "notify_service": "", "notify_random_mac": True,
-            "update_check_hours": 12, "backup_interval_days": 7, "backup_keep": 10, "switches": []}
+            "update_check_hours": 12, "backup_interval_days": 7, "backup_keep": 10, "switches": [],
+            "stats": True, "stats_interval": 5, "ping_targets": list(DEFAULT_PING), "ping_devices": True,
+            "traffic_source": "auto", "top_clients": 10, "ha_sensors": False, "ha_sensors_interval": 30}
     if OPTIONS.exists():
         opts.update(json.loads(OPTIONS.read_text()))
     return opts
@@ -119,6 +125,14 @@ class Store:
         self.notify_status = ""         # posledni chyba odeslani upozorneni
         self.backup_busy: set[str] = set()
         self.ban_meta: dict[str, dict] = {}  # mac -> {until, ssid} – blokace zadane z add-onu
+        # statistiky (rychlosti, ping, top klienti) – jen v pameti, posledni hodina
+        self.stats = statsmod.Stats(self.stats_interval)
+        self.stats_conn: asyncssh.SSHClientConnection | None = None   # trvale SSH spojeni k routeru
+        self.stats_last = 0.0
+        self.demo_feed = statsmod.DemoFeed() if self.opts.get("demo") else None
+        self.sensor_status = ""   # posledni vysledek odeslani senzoru do HA
+        self.sensor_count = 0
+        self._bad_hosts: set[str] = set()
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -203,6 +217,7 @@ class Store:
                 self.switches = [demo_switch(x["name"], x["host"], self.aps, "02:00:00:00:00:01") for x in sw_items[:1]]
                 self.attach_router_to_switches()
                 self.wired_state = wiredmod.locate(self.l2(), self.router, self.info, self.seen, known=self._known())
+                self.stats.update_wifi(time.time(), self.aps)
                 # ukazka: zablokovany klient na HomeWiFi (oba AP)
                 for ap in self.aps:
                     ap.bans_ok = ap.online
@@ -239,9 +254,242 @@ class Store:
             await self.refresh_ha()
             self.info = self.build_info()
             self.wired_state = wiredmod.locate(self.l2(), self.router, self.info, self.seen, known=self._known())
+            self.stats.update_wifi(time.time(), self.aps)
             self._save_seen()
             self.last_poll = time.time()
         await self.track_new()
+
+    # ------------------------------------------------------------ statistiky
+    @property
+    def stats_interval(self) -> int:
+        try:
+            return min(60, max(2, int(self.opts.get("stats_interval", 5) or 5)))
+        except (TypeError, ValueError):
+            return 5
+
+    @property
+    def stats_on(self) -> bool:
+        return bool(self.opts.get("stats", True))
+
+    @property
+    def traffic_source(self) -> str:
+        v = str(self.opts.get("traffic_source") or "auto")
+        return v if v in TRAFFIC_SOURCES else "auto"
+
+    def ping_plan(self) -> list[tuple[str, str, str, str]]:
+        """[(klic, jmeno, adresa, druh)] – co pinga router: cile z `ping_targets` (internet), a s `ping_devices`
+        i brana poskytovatele (WAN gateway), AP a switche. Jen zadane nebo zname adresy, zadne skenovani."""
+        out, keys = [], set()
+
+        def add(key, name, host, kind):
+            host = str(host or "").strip()
+            if not statsmod.valid_host(host):
+                if host and host not in self._bad_hosts:
+                    self._bad_hosts.add(host)
+                    log.warning("Ping: neplatna adresa %r (%s) se preskoci", host, name)
+                return
+            k, n = key, 2
+            while k in keys:
+                k, n = f"{key}_{n}", n + 1
+            keys.add(k)
+            out.append((k, str(name or host), host, kind))
+        for x in self.opts.get("ping_targets") or []:
+            if isinstance(x, dict):
+                add("net:" + statsmod.slug(str(x.get("name") or x.get("host") or "")), x.get("name"), x.get("host"), "internet")
+        if self.opts.get("ping_devices", True):
+            wan = next((i for i in (self.router.interfaces if self.router else []) if i.get("wan") and i.get("gateway")), None)
+            if wan:
+                add("gw", "WAN gateway", wan["gateway"], "gateway")
+            for d in [*self.switches, *self.aps]:
+                add("dev:" + statsmod.slug(d.name), d.name, d.host.split(":")[0], "device")
+        return out
+
+    def internet_keys(self) -> list[str]:
+        return [k for k, p in self.stats.pings.items() if p.kind == "internet"]
+
+    def is_local_fn(self):
+        resolve = topology.net_resolver(self.router)
+        return lambda ip: resolve(ip) is not None
+
+    def resolve_host(self, mac: str, ip: str) -> dict:
+        """Jmeno a IP klienta podle MAC (nlbwmon) nebo IP (conntrack)."""
+        if mac and mac in self.info:
+            e = self.info[mac]
+            return {"hostname": e.get("hostname", ""), "ip": e.get("ip", "") or ip, "mac": mac}
+        if ip:
+            for m, e in self.info.items():
+                if e.get("ip") == ip:
+                    return {"hostname": e.get("hostname", ""), "ip": ip, "mac": m}
+        return {"hostname": "", "ip": ip, "mac": mac}
+
+    async def _stats_conn(self, rc: APConfig) -> asyncssh.SSHClientConnection:
+        if self.stats_conn is None:
+            self.stats_conn = await asyncssh.connect(rc.host, port=rc.port, username=rc.user, client_keys=[self.key],
+                                                     known_hosts=None, connect_timeout=10, keepalive_interval=30)
+        return self.stats_conn
+
+    def _stats_close(self):
+        if self.stats_conn is not None:
+            try:
+                self.stats_conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+            self.stats_conn = None
+
+    async def _stats_router(self, now: float, plan: list[tuple]):
+        rc = self.router_cfg()
+        if not rc:
+            return
+        rp = self.stats.ping_target("router", rc.name, rc.host, "router")
+        cmd = statsmod.router_cmd([p[2] for p in plan], self.traffic_source)
+        try:
+            conn = await self._stats_conn(rc)
+            t0 = time.monotonic()
+            await asyncio.wait_for(conn.run("true", check=False), 5)
+            rp.add(now, round((time.monotonic() - t0) * 1000, 1))
+            res = await asyncio.wait_for(conn.run(cmd, check=False), 20)
+            out = res.stdout if isinstance(res.stdout, str) else (res.stdout or b"").decode(errors="replace")
+            self.stats.feed_router(now, out, [p[0] for p in plan], self.is_local_fn())
+        except (OSError, asyncssh.Error, asyncio.TimeoutError) as e:
+            rp.add(now, None)
+            self.stats.router_error = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+            log.debug("Statistiky z routeru: %s", self.stats.router_error)
+            self._stats_close()
+
+    async def _stats_switch(self, now: float, item: dict, sw: APState):
+        try:
+            c = await switchmod.read_counters(item["host"], str(item.get("community") or "public"), int(item.get("port") or 161))
+            self.stats.feed_switch(now, sw.name, c, sw.ports)
+        except (OSError, SnmpError) as e:
+            self.stats.switch_errors[sw.name] = f"{type(e).__name__}: {e}"
+
+    def _demo_clients(self) -> list[tuple[str, str]]:
+        ap_macs = {a.mac for a in self.l2() if a.mac}
+        return [(m, e["ip"]) for m, e in self.info.items() if e.get("ip") and m not in ap_macs][:30]
+
+    def _demo_tick(self, ts: float, dt: float, plan: list[tuple]):
+        text = self.demo_feed.router_text(ts, [p[2] for p in plan], dt, self._demo_clients())
+        self.stats.feed_router(ts, text, [p[0] for p in plan], self.is_local_fn())
+        if self.router:
+            self.stats.ping_target("router", self.router.name, self.router.host, "router").add(ts, round(1.5 + (ts % 7) / 10, 1))
+        for sw in self.switches:
+            self.stats.feed_switch(ts, sw.name, self.demo_feed.switch_counters(ts, sw.name, sw.ports, dt), sw.ports)
+
+    async def stats_tick(self):
+        if not self.stats_on:
+            return
+        now = time.time()
+        plan = self.ping_plan()
+        for k, name, host, kind in plan:
+            self.stats.ping_target(k, name, host, kind)
+        self.stats.prune_pings({p[0] for p in plan} | ({"router"} if self.router_item else set()))
+        if self.opts.get("demo"):
+            if not self.last_poll:
+                return
+            step = self.stats_interval
+            if not self.stats_last:  # demo: rovnou hodina historie (grafy, screenshoty)
+                for k in range(statsmod.HISTORY // step, 0, -1):
+                    self._demo_tick(now - k * step, step, plan)
+            else:
+                self._demo_tick(now, now - self.stats_last, plan)
+            self.stats_last = now
+            return
+        tasks = [self._stats_router(now, plan)]
+        for item in self.switch_items:
+            sw = next((x for x in self.switches if x.name == item["name"]), None)
+            if sw and sw.online and sw.ports:
+                tasks.append(self._stats_switch(now, item, sw))
+        await asyncio.gather(*tasks)
+        self.stats_last = now
+
+    def router_ifaces(self) -> list[dict]:
+        """Rozhrani routeru se statistikami: WAN, LAN, VLANy, pak ostatni (tunely); bez loopbacku."""
+        if not self.router:
+            return []
+        out = [i for i in self.router.interfaces if i.get("device") in self.stats.ifaces]
+        return sorted(out, key=lambda i: (not i.get("wan"), i["name"] != "lan", i.get("vlan") is None, i.get("vlan") or 0, i["name"]))
+
+    def wan_load(self) -> tuple | None:
+        wan = next((i for i in self.router_ifaces() if i.get("wan") and i.get("up")), None)
+        return self.stats.iface_rate(wan["device"]) if wan else None
+
+    def link_loads(self) -> dict[str, tuple]:
+        """Provoz na privodu kazdeho AP/switche (z citacu portu switche): {jmeno: (k zarizeni, od zarizeni)}."""
+        out: dict[str, tuple] = {}
+        if self.wan_load():
+            out["__wan__"] = self.wan_load()
+        w = self.wired_state or {}
+        parents = w.get("parent") or {}
+        by_name = {x.name: x for x in self.l2()}
+        for a in self.l2():
+            par = by_name.get(parents.get(a.name, ""))
+            if par is not None and par.kind == "switch" and a.mac:
+                port = wiredmod.analyze(par, self.router)["local"].get(a.mac)
+                if port:
+                    d, u = self.stats.port_rate(par.name, port.split(":")[1])
+                    if d is not None:
+                        out[a.name] = (d, u)
+            elif a.kind == "switch" and a.online:
+                up = wiredmod.uplink_port(a, self.router)
+                if up:
+                    d, u = self.stats.port_rate(a.name, up["num"])
+                    if d is not None:  # uplink: in do switche = smerem dolu od routeru
+                        out[a.name] = (u, d)
+        return out
+
+    def stats_view(self) -> dict:
+        st = self.stats
+        ifaces = []
+        for i in self.router_ifaces():
+            e = st.ifaces[i["device"]]
+            ifaces.append({**i, "rx": e["rx"].last, "tx": e["tx"].last, "pps": e["pps"].last,
+                           "peak_rx": e["rx"].peak(), "peak_tx": e["tx"].peak(),
+                           "spark": statsmod.spark([e["rx"].values(), e["tx"].values()], 220, 34)})
+        wan = next((x for x in ifaces if x.get("wan")), None)
+        groups = {"internet": [], "gateway": [], "router": [], "device": []}
+        for p in st.pings.values():
+            groups.setdefault(p.kind, []).append(p)
+        inet = groups["internet"]
+        top = st.top_clients(int(self.opts.get("top_clients", 10) or 10), self.resolve_host)
+        tmax = max((r["down"] for r in top), default=0) or 1
+        wifi = []
+        for c in self.all_clients():
+            r = st.wifi.get((c["ap"], c["mac"]))
+            if r and r[0] + r[1] > 0:
+                wifi.append({**c, "down": r[0], "up": r[1]})
+        wifi.sort(key=lambda c: -(c["down"] + c["up"]))
+        port_devs = {}
+        for sw in self.switches:
+            for p in self.port_table(sw):
+                port_devs[(sw.name, p["num"])] = {"alias": p.get("alias", ""), "speed": p.get("speed", 0),
+                                                  "devices": [d.get("hostname") or d.get("mac") for d in p["devices"]]}
+        ports = []
+        for r in st.busiest_ports(12):
+            e = r.pop("series")
+            ports.append({**r, **port_devs.get((r["switch"], r["num"]), {}),
+                          "spark": statsmod.spark([e["down"].values(), e["up"].values()], 160, 28)})
+        return {"ifaces": ifaces, "wan": wan, "temps": st.temps, "temp": st.temp.last,
+                "temp_spark": statsmod.spark([st.temp.values()], 120, 28, vmax=max(80.0, st.temp.peak()), area=False),
+                "load": st.load, "pings": groups, "inet_ok": any(p.ok for p in inet) if inet else None,
+                "inet_ms": min((p.last for p in inet if p.last is not None), default=None),
+                "top": top, "top_max": tmax, "source": st.traffic.source, "wifi": wifi[:10],
+                "ports": ports, "router_error": st.router_error, "switch_errors": st.switch_errors,
+                "updated": st.router_ts, "interval": self.stats_interval}
+
+    async def publish_sensors(self):
+        top = self.stats.top_clients(int(self.opts.get("top_clients", 10) or 10), self.resolve_host)
+        ents = statsmod.ha_entities(self.stats, self.router.name if self.router else "router", self.router_ifaces(), top,
+                                    self.switches, self.internet_keys())
+        self.sensor_count = len(ents)
+        if self.opts.get("demo") or not os.environ.get("SUPERVISOR_TOKEN"):
+            self.sensor_status = "demo"
+            return
+        try:
+            await asyncio.to_thread(ha.set_states, ents)
+            self.sensor_status = "ok"
+        except Exception as e:  # noqa: BLE001 - senzory jsou bonus
+            self.sensor_status = f"{type(e).__name__}: {e}"
+            log.warning("Senzory do HA: %s", self.sensor_status)
 
     # ------------------------------------------------------------ switche
     def l2(self) -> list[APState]:
@@ -455,7 +703,10 @@ class Store:
             devs = on_port.get(p["num"], []) if p["kind"] == "switch" else []
             if role == "uplink" and par:
                 devs = [{"mac": "", "hostname": par, "ap": True}] + devs
-            out.append({**p, "role": role, "label": wiredmod.speed_label(p["speed"]), "devices": devs})
+            row = {**p, "role": role, "label": wiredmod.speed_label(p["speed"]), "devices": devs}
+            if ap.kind == "switch":  # provoz z citacu SNMP (statistiky)
+                row["load_down"], row["load_up"] = self.stats.port_rate(ap.name, p["num"])
+            out.append(row)
         return out
 
     def switch_diag(self, ap) -> dict | None:
@@ -628,8 +879,10 @@ class Store:
         for ap in self.aps:
             for c in ap.clients:
                 e = self.info.get(c["mac"]) or self.leases.get(c["mac"], {})
+                r = self.stats.wifi.get((ap.name, c["mac"]))
                 out.append({**c, "ip": e.get("ip", ""), "hostname": e.get("hostname", ""), "src": e.get("src", ""),
-                            "first_seen": self.known.first_seen(c["mac"])})
+                            "first_seen": self.known.first_seen(c["mac"]),
+                            "down_bps": r[0] if r else None, "up_bps": r[1] if r else None})
         return sorted(out, key=lambda c: (c["hostname"] or "~" + c["mac"]).lower())
 
 
@@ -655,6 +908,32 @@ async def maintainer():
         await asyncio.sleep(600)
 
 
+async def stats_loop():
+    await asyncio.sleep(3)
+    while True:
+        t0 = time.monotonic()
+        try:
+            await store.stats_tick()
+        except Exception:  # noqa: BLE001
+            log.exception("Chyba pri sberu statistik")
+        await asyncio.sleep(max(1.0, store.stats_interval - (time.monotonic() - t0)))
+
+
+async def sensors_loop():
+    await asyncio.sleep(20)
+    while True:
+        if store.opts.get("ha_sensors") and store.stats_on:
+            try:
+                await store.publish_sensors()
+            except Exception:  # noqa: BLE001
+                log.exception("Chyba pri odesilani senzoru")
+        try:
+            iv = max(10, int(store.opts.get("ha_sensors_interval", 30) or 30))
+        except (TypeError, ValueError):
+            iv = 30
+        await asyncio.sleep(iv)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global store
@@ -663,10 +942,12 @@ async def lifespan(app: FastAPI):
              ", ".join(f"{a['name']}={a['host']}" for a in store.ap_items) or "-",
              (f"{store.router_item['name']}={store.router_item['host']}" if store.router_item else "-"),
              store.opts.get("demo"))
-    tasks = [asyncio.create_task(poller()), asyncio.create_task(maintainer())]
+    tasks = [asyncio.create_task(poller()), asyncio.create_task(maintainer()),
+             asyncio.create_task(stats_loop()), asyncio.create_task(sensors_loop())]
     yield
     for task in tasks:
         task.cancel()
+    store._stats_close()
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
@@ -823,6 +1104,8 @@ templates.env.filters.update(band=fmt_band, bytes=fmt_bytes, duration=fmt_durati
                              sigclass=signal_class, ago=ago)
 templates.env.filters["speed"] = lambda mbps: (f"{mbps / 1000:g} Gb/s" if mbps >= 1000 else f"{mbps} Mb/s") if mbps else "–"
 templates.env.filters["left"] = lambda ts: max(0, int(ts - time.time()))  # zbyva sekund
+templates.env.filters["bps"] = statsmod.fmt_bps
+templates.env.filters["ms"] = lambda v: "–" if v is None else (f"{v:.1f} ms" if v < 10 else f"{v:.0f} ms")
 templates.env.tests["recent"] = lambda ts, hours=24: bool(ts) and time.time() - ts < hours * 3600
 
 
@@ -918,14 +1201,38 @@ async def map_page(request: Request, clients: str = "1", empty: str = "0"):
         ap_wired[name] = []
         for d in devs:
             e = {**d, "speed": ((wiredmod.port_by_num(a, d["port"]) or {}).get("speed", 0) if a and not d.get("stale") else 0)}
+            if a is not None and a.kind == "switch" and not d.get("stale"):
+                e["load"] = store.stats.port_rate(a.name, d["port"])  # provoz na portu switche
             n = resolve(d["ip"]) if d.get("ip") else None
             if n:
                 e["vlan"] = n["vlan"]  # barva podle site (DMZ, IoT…)
             ap_wired[name].append(e)
     topo = topology.build(store.router, l2, router_wired, request.state.t, clients=store.all_clients(),
                           show_clients=show_clients, show_empty=show_empty,
-                          ap_wired=ap_wired, parent=w["parent"], speeds=speeds)
+                          ap_wired=ap_wired, parent=w["parent"], speeds=speeds,
+                          loads=store.link_loads() if store.stats_on else {})
     return render(request, "map.html", page="map", topo=topo, show_clients=show_clients, show_empty=show_empty)
+
+
+@app.get("/stats", response_class=HTMLResponse)
+async def stats_page(request: Request):
+    refresh, _ = refresh_interval(request)
+    return render(request, "stats.html", page="stats", s=store.stats_view(),
+                  refresh=max(5, store.stats_interval) if refresh else 0)
+
+
+@app.get("/api/stats")
+async def api_stats():
+    v = store.stats_view()
+    for i in v["ifaces"]:
+        i.pop("spark", None)
+    for p in v["ports"]:
+        p.pop("spark", None)
+    v.pop("temp_spark", None)
+    v["pings"] = {k: [{"name": p.name, "host": p.host, "ms": p.last, "ok": p.ok, "loss_1h": round(p.loss(), 2),
+                       "avg_1h": p.avg()} for p in lst] for k, lst in v["pings"].items()}
+    v["wifi"] = [{k: c.get(k) for k in ("mac", "hostname", "ip", "ap", "ssid", "down", "up")} for c in v["wifi"]]
+    return v
 
 
 @app.get("/setup", response_class=HTMLResponse)

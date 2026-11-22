@@ -40,17 +40,18 @@
   <div class="panel">
     <h2>{{ t("router.interfaces") }}</h2>
     <table class="list">
-      <thead><tr><th>{{ t("col.name") }}</th><th>{{ t("col.state") }}</th><th>{{ t("router.proto") }}</th><th>{{ t("router.device") }}</th><th>IPv4</th><th>{{ t("router.gateway") }}</th><th class="num">{{ t("router.iface_devices") }}</th><th class="num">{{ t("router.up_for") }}</th></tr></thead>
+      <thead><tr><th>{{ t("col.name") }}</th><th>{{ t("col.state") }}</th><th>{{ t("router.proto") }}</th><th>{{ t("router.device") }}</th><th>IPv4</th><th>{{ t("router.gateway") }}</th>{% if store.stats_on %}<th class="num">{{ t("stats.now_rxtx") }}</th>{% endif %}<th class="num">{{ t("router.iface_devices") }}</th><th class="num">{{ t("router.up_for") }}</th></tr></thead>
       {% for i in ap.interfaces %}
       <tr><td><b>{{ i.name }}</b>{% if i.wan %} <span class="tag">WAN</span>{% endif %}</td>
           <td><span class="dot {{ 'on' if i.up else 'off' }}"></span> {{ t("state.on") if i.up else t("state.down") }}</td>
           <td>{{ i.proto }}</td><td class="mono">{{ i.device }}</td>
           <td class="mono">{{ i.ipv4 or "–" }}{% if i.ipv6 %}<br><span class="muted small">{{ i.ipv6 }}</span>{% endif %}</td>
           <td class="mono">{{ i.gateway or "–" }}</td>
+          {% if store.stats_on %}{% set r = store.stats.iface_rate(i.device) %}<td class="num num-cell small">{% if r[0] is not none %}<span class="rx">{{ r[0] | bps }}</span> / <span class="tx">{{ r[1] | bps }}</span>{% else %}–{% endif %}</td>{% endif %}
           <td class="num">{{ iface_counts.get(i.name, "–") if not i.wan else "–" }}</td>
           <td class="num">{{ (i.uptime | duration) if i.up else "–" }}</td></tr>
       {% else %}
-      <tr><td colspan="8" class="empty">–</td></tr>
+      <tr><td colspan="9" class="empty">–</td></tr>
       {% endfor %}
     </table>
   </div>

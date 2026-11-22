@@ -18,11 +18,14 @@
      role="img" aria-label="{{ t('map.title') }}">
  <g id="vp">
   {% for e in topo.edges %}
-  <path d="{{ e.d }}" class="edge edge-{{ e.kind }} {{ 'edge-down' if e.up is defined and not e.up }}"
+  <path d="{{ e.d }}" class="edge edge-{{ e.kind }} {{ 'edge-down' if e.up is defined and not e.up }} {{ 'edge-busy' if e.loadcls == 'busy' }}"
         {% if e.color %}style="stroke: {{ e.color }}"{% endif %}/>
   {% endfor %}
   {% for e in topo.edges if e.speed %}
   <text x="{{ e.lx }}" y="{{ e.ly }}" text-anchor="end" class="edge-speed {{ e.speedcls }}"><title>{{ t("ports.uplink_speed", s=e.speed) }}</title>{{ e.speed }}</text>
+  {% endfor %}
+  {% for e in topo.edges if e.load %}
+  <text x="{{ e.lx }}" y="{{ e.ly + 18 }}" text-anchor="end" class="edge-load {{ e.loadcls }}"><title>{{ t("stats.map_load_title") }}</title>{{ e.load }}</text>
   {% endfor %}
   {% for n in topo.nodes %}
   {% if n.kind == 'client' %}
@@ -108,6 +111,7 @@
     <span><svg width="44" height="10"><path d="M2,5 H42" class="edge edge-cable" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_cable") }}</span>
     <span><svg width="44" height="14"><path d="M4,1 V9 Q4,13 8,13 H42" class="edge edge-lan" style="stroke: {{ topo.networks[0].color }}"/></svg> {{ t("map.legend_via") }}</span>
     <span><svg width="44" height="14" class="netmap"><text x="2" y="11" class="edge-speed fast">1G</text><text x="22" y="11" class="edge-speed slow">100M</text></svg> {{ t("map.legend_speed") }}</span>
+    {% if store.opts.get("stats", True) %}<span><svg width="70" height="14" class="netmap"><text x="2" y="11" class="edge-load active">↓12M ↑3M</text></svg> {{ t("map.legend_load") }}</span>{% endif %}
   </div>
   <table class="list">
     <thead><tr><th>{{ t("map.network") }}</th><th>VLAN</th><th>{{ t("map.names") }}</th></tr></thead>

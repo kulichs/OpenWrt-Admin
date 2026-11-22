@@ -51,7 +51,7 @@ Mimo Ingress add-on pouští jen požadavky z lokální adresy; uživatele nasim
 Automatická testovací sada v repozitáři **zatím není** (viz otevřené body níže). Před předáním změny:
 
 1. **Syntaxe:** `python -m py_compile app/*.py`, `config.yaml` a `translations/*.yaml` se načtou přes `yaml.safe_load`.
-2. **Demo, všechny stránky v cs i en:** `/`, `/clients`, `/ssids`, `/map`, `/setup`, `/ap/<každé zařízení>`
+2. **Demo, všechny stránky v cs i en:** `/`, `/clients`, `/ssids`, `/map`, `/stats`, `/setup`, `/ap/<každé zařízení>`, `/api/stats`
    vrací 200 a v HTML nezůstal žádný nepřeložený klíč (`upd.…`, `map.…` apod.).
 3. **Role:** uživatel jen pro čtení nevidí akční tlačítka a akce mu server odmítne (`msg.no_permission`).
 4. **Parsery na skutečných výstupech:** nový parser vyzkoušej na výstupu ze skutečného zařízení
@@ -77,6 +77,8 @@ V CHANGELOGu poctivě uveď, co běželo naostro a co jen v demu nebo simulaci.
 | Chybí `python-multipart` | add-on nenaběhne (`Form data requires python-multipart`) | testovat v čistém venv |
 | `: ` v popisu v `translations/*.yaml` | neplatný YAML, HA volby nezobrazí | popisy v uvozovkách |
 | `from __future__` až za jiným importem | `SyntaxError` | vždy první řádek |
+| Výstup pingů na pozadí v jednom příkazu | míchá se do jiných sekcí výstupu routeru | pingy do souborů v `/tmp`, vypsat po `wait` |
+| Nové SSH přihlášení pro každé čtení statistik | log dropbearu zaplavený každých 5 s | jedno trvalé spojení (`stats_conn`) |
 | Netgear GS724T: SNMP community přes Apply | „Failed to Set …“ u všech polí | nový záznam tlačítkem **Add** |
 | Blokace klienta jen na jednom AP | klient se připojí k jinému AP se stejným SSID | blokovat na všech AP s tím SSID |
 

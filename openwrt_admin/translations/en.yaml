@@ -56,3 +56,27 @@ configuration:
   switches:
     name: Switches (SNMP)
     description: "Optional managed switches (Netgear, TP-Link, Cisco SG…), read over SNMP v2c, read-only: ports, speeds, VLANs and MAC addresses on ports – shown on the map with everything plugged into them. Each has a name, address, community (default public) and optionally a port (default 161)."
+  stats:
+    name: Statistics
+    description: "Statistics page: router interface speeds, temperature, ping, top internet users, switch port traffic and current Wi-Fi client speeds. Nothing is installed on the devices."
+  stats_interval:
+    name: Statistics interval (s)
+    description: "How often statistics are read from the router and switch port counters, 2–60 seconds. The router keeps one SSH connection open; APs are still read every poll_interval."
+  ping_targets:
+    name: Internet ping targets
+    description: "Internet addresses pinged by the router (name + host, IP or hostname). They tell whether the internet works."
+  ping_devices:
+    name: Ping devices in the network
+    description: "The router also pings the ISP gateway, the APs and the switches from the device list."
+  traffic_source:
+    name: Client traffic source
+    description: "Where to get who uses the internet most. auto = nlbwmon when it runs on the router, otherwise conntrack. off = disabled."
+  top_clients:
+    name: Number of top clients
+    description: "How many clients with the most internet traffic are shown (3–50)."
+  ha_sensors:
+    name: Sensors in Home Assistant
+    description: "Send statistics to HA as sensor.openwrt_admin_* and binary_sensor.openwrt_admin_* entities (speeds, ping, temperature, top clients, switch ports) – with history, usable in InfluxDB/Grafana."
+  ha_sensors_interval:
+    name: Sensor interval (s)
+    description: "How often the sensors in HA are updated, 10–600 seconds."

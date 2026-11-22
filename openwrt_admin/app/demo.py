@@ -1,19 +1,28 @@
 """Made-up data for demo mode (UI development without real APs)."""
+import math
 import random
 import time
 
 from .collector import APState
 
+T0 = time.time()
+
 
 def _clients(ap, ssid, net, ifname, n, freq=2437):
     out = []
+    now = time.time()
     for i in range(n):
-        mac = "02:00:%02x:%02x:%02x:%02x" % tuple(random.randrange(256) for _ in range(4))
+        # stabilni MAC a rostouci citace bajtu (aktualni rychlost klientu se pocita z rozdilu mezi nactenimi)
+        r = random.Random(f"{ap}|{ifname}|{i}")
+        mac = "02:00:%02x:%02x:%02x:%02x" % tuple(r.randrange(256) for _ in range(4))
+        speed = r.choice([2e3, 2e4, 1e5, 6e5, 3e6])  # B/s
+        rx0, tx0 = r.randint(10**5, 10**9), r.randint(10**5, 10**9)
         out.append({
             "mac": mac, "ap": ap, "ssid": ssid, "network": net, "ifname": ifname,
             "signal": random.randint(-82, -38), "rx_rate": random.choice([65000, 72200, 144400, 866700]),
             "tx_rate": random.choice([58500, 72200, 130000, 780000]),
-            "rx_bytes": random.randint(10**5, 10**9), "tx_bytes": random.randint(10**5, 10**9),
+            "rx_bytes": int(rx0 + speed * 0.2 * (now - T0 + 80 * math.sin((now - T0) / 120))),
+            "tx_bytes": int(tx0 + speed * (now - T0 + 80 * math.sin((now - T0) / 120))),
             "connected": random.randint(30, 200000), "freq": freq,
             "band": "5 GHz" if freq >= 4900 else "2,4 GHz",
             "standard": random.choice(["Wi-Fi 5 (ac)", "Wi-Fi 6 (ax)", "Wi-Fi 4 (n)"]) if freq >= 4900
@@ -153,6 +162,6 @@ def demo_switch(name: str, host: str, aps: list[APState], router_mac: str) -> AP
     speeds = {2: 1000, 3: 100, 5: 1000, 6: 1000, 8: 100, 24: 1000}
     sw.ports = [{"id": f"sw:{n}", "num": str(n), "up": n in speeds, "speed": speeds.get(n, 0),
                  "duplex": "full" if n in speeds else "", "kind": "switch",
-                 "name": f"g{n}", "alias": {24: "router", 2: "AP-Office", 3: "AP-Living", 8: "dmz"}.get(n, ""),
+                 "name": f"g{n}", "ifindex": n, "alias": {24: "router", 2: "AP-Office", 3: "AP-Living", 8: "dmz"}.get(n, ""),
                  "vlans_u": [100] if n == 8 else [1], "vlans_t": [10, 30] if n in (2, 3, 24) else []} for n in range(1, 25)]
     return sw

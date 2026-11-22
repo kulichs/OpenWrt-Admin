@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% macro sparksvg(sp, unit='bps', cls=['a', 'b']) %}<svg class="spark" width="{{ sp.w }}" height="{{ sp.h }}" viewBox="0 0 {{ sp.w }} {{ sp.h }}" preserveAspectRatio="none">{% for d in sp.paths %}{% if d %}<path d="{{ d }}" class="{{ cls[loop.index0] }}"/>{% endif %}{% endfor %}<title>{{ t("stats.spark_max", v=((sp.max | bps) if unit == 'bps' else (sp.max | round(1)) ~ ' ' ~ unit)) }}</title></svg>{% endmacro %}
+{% macro pingstrip(p, n=72) %}{% set st = p.strip(n) %}<svg class="pingstrip" width="{{ n * 4 }}" height="16" role="img">{% for i in range(n - st | length) %}<rect x="{{ i * 4 }}" y="2" width="3" height="12" rx="1" class="none"/>{% endfor %}{% for c in st %}<rect x="{{ (n - st | length + loop.index0) * 4 }}" y="2" width="3" height="12" rx="1" class="{{ c }}"/>{% endfor %}</svg>{% endmacro %}
+{% block content %}
+<h1>{{ t("stats.title") }}</h1>
+{% if not store.stats_on %}
+<p class="empty">{{ t("stats.off") }}</p>
+{% else %}
+{% if not store.router %}<p class="muted">{{ t("stats.no_router") }}</p>{% endif %}
+{% if s.router_error %}<p class="err">{{ t("stats.router_error", error=s.router_error) }}</p>{% endif %}
+{% for name, err in s.switch_errors.items() %}<p class="err">{{ t("stats.switch_error", name=name, error=err) }}</p>{% endfor %}
+
+<section class="summary stats-tiles">
+  {% if s.inet_ok is not none %}
+  <div class="stat {{ 'stat-good' if s.inet_ok else 'stat-bad' }}">
+    <span class="num">{{ t("stats.inet_ok") if s.inet_ok else t("stats.inet_down") }}{% if s.inet_ok and s.inet_ms is not none %} <small>{{ s.inet_ms | ms }}</small>{% endif %}</span>
+    <span class="lbl">{{ t("stats.internet") }}</span>
+  </div>
+  {% endif %}
+  {% if s.wan %}
+  <div class="stat">
+    <span class="num"><span class="rx">↓ {{ s.wan.rx | bps }}</span></span>
+    <span class="lbl">{{ t("stats.download") }} · {{ t("stats.peak", v=(s.wan.peak_rx | bps)) }}</span>
+  </div>
+  <div class="stat">
+    <span class="num"><span class="tx">↑ {{ s.wan.tx | bps }}</span></span>
+    <span class="lbl">{{ t("stats.upload") }} · {{ t("stats.peak", v=(s.wan.peak_tx | bps)) }}</span>
+  </div>
+  <div class="stat">{{ sparksvg(s.wan.spark) }}<span class="lbl">{{ t("stats.wan_hour") }}</span></div>
+  {% endif %}
+  {% if s.temp is not none %}
+  <div class="stat" title="{% for n, v in s.temps %}{{ n }}: {{ v }} °C{{ '\n' if not loop.last }}{% endfor %}">
+    <span class="num">{{ s.temp }} <small>°C</small></span>
+    {{ sparksvg(s.temp_spark, '°C', ['c']) }}
+    <span class="lbl">{{ t("stats.cpu_temp") }}</span>
+  </div>
+  {% endif %}
+  {% if s.load is not none %}
+  <div class="stat"><span class="num">{{ s.load }}</span><span class="lbl">{{ t("stats.load") }}</span></div>
+  {% endif %}
+</section>
+
+{% if s.ifaces %}
+<div class="panel">
+  <h2>{{ t("stats.ifaces") }}</h2>
+  <table class="list">
+    <thead><tr><th>{{ t("col.interface") }}</th><th>{{ t("router.device") }}</th><th class="num">{{ t("stats.col_rx") }}</th><th class="num">{{ t("stats.col_tx") }}</th><th class="num">{{ t("stats.col_pps") }}</th><th class="num">{{ t("stats.col_peak") }}</th><th>{{ t("stats.col_history") }}</th></tr></thead>
+    {% for i in s.ifaces %}
+    <tr>
+      <td><b>{{ i.name }}</b>{% if i.wan %} <span class="tag">WAN</span>{% elif i.vlan is not none %} <span class="tag">VLAN {{ i.vlan }}</span>{% endif %}{% if not i.up %} <span class="err small">{{ t("state.down") }}</span>{% endif %}</td>
+      <td class="mono small">{{ i.device }}</td>
+      <td class="num num-cell rx">{{ i.rx | bps }}</td>
+      <td class="num num-cell tx">{{ i.tx | bps }}</td>
+      <td class="num">{{ (i.pps | round | int) if i.pps is not none else "–" }}</td>
+      <td class="num num-cell small"><span class="rx">{{ i.peak_rx | bps }}</span> / <span class="tx">{{ i.peak_tx | bps }}</span></td>
+      <td class="spark-cell">{{ sparksvg(i.spark) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted small"><span class="rx">■ RX</span> <span class="tx">■ TX</span> · {{ t("stats.ifaces_hint") }}</p>
+</div>
+{% endif %}
+
+{% set all_pings = s.pings.internet + s.pings.gateway + s.pings.router + s.pings.device %}
+{% if all_pings %}
+<div class="panel">
+  <h2>{{ t("stats.ping") }}</h2>
+  <table class="list">
+    <thead><tr><th>{{ t("stats.col_target") }}</th><th>{{ t("col.address") }}</th><th class="num">{{ t("stats.col_last") }}</th><th class="num">{{ t("stats.col_avg") }}</th><th class="num">{{ t("stats.col_loss") }}</th><th>{{ t("stats.col_history_ping") }}</th></tr></thead>
+    {% for kind in ['internet', 'gateway', 'router', 'device'] %}{% for p in s.pings[kind] %}
+    <tr>
+      <td><span class="dot {{ 'on' if p.ok else 'off' }}"></span> <b>{{ t("stats.gateway_name") if kind == 'gateway' else p.name }}</b> <span class="muted small">{{ t("stats.ping_" ~ kind) }}</span></td>
+      <td class="mono small">{{ p.host }}</td>
+      <td class="num num-cell">{% if p.ok %}{{ p.last | ms }}{% else %}<span class="err">{{ t("stats.lost") }}</span>{% endif %}</td>
+      <td class="num num-cell">{{ p.avg() | ms }}</td>
+      {% set loss = p.loss() %}
+      <td class="num"><span class="{{ 'err' if loss >= 5 else ('warn' if loss > 0 else '') }}">{{ loss | round(1) }} %</span></td>
+      <td>{{ pingstrip(p) }}</td>
+    </tr>
+    {% endfor %}{% endfor %}
+  </table>
+  <p class="muted small">{{ t("stats.ping_hint", s=s.interval) }}</p>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2>{{ t("stats.top", n=(store.opts.get('top_clients', 10))) }}</h2>
+  {% if s.top %}
+  <table class="list">
+    <thead><tr><th>#</th><th>{{ t("col.device") }}</th><th>IP</th><th>MAC</th><th class="num">{{ t("stats.col_down") }}</th><th></th><th class="num">{{ t("stats.col_up") }}</th>{% if s.source == 'nlbwmon' %}<th class="num">{{ t("stats.col_total") }}</th>{% endif %}</tr></thead>
+    {% for r in s.top %}
+    <tr>
+      <td class="muted">{{ loop.index }}</td>
+      <td>{{ r.hostname or "–" }}</td>
+      <td class="mono">{{ r.ip or "–" }}</td>
+      <td class="mono small">{{ r.mac or "–" }}</td>
+      <td class="num num-cell rx">{{ r.down | bps }}</td>
+      <td><span class="loadbar"><span style="width: {{ (100 * r.down / s.top_max) | round | int }}%"></span></span></td>
+      <td class="num num-cell tx">{{ r.up | bps }}</td>
+      {% if s.source == 'nlbwmon' %}<td class="num num-cell small">{{ r.total_down | bytes }} / {{ r.total_up | bytes }}</td>{% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty">{{ t("stats.top_none") }}</p>
+  {% endif %}
+  <p class="muted small">{{ t("stats.source_" ~ (s.source or 'none')) }}</p>
+</div>
+
+<div class="panel">
+  <h2>{{ t("stats.wifi") }}</h2>
+  {% if s.wifi %}
+  <table class="list">
+    <thead><tr><th>{{ t("col.device") }}</th><th>AP</th><th>SSID</th><th class="num">{{ t("stats.col_down") }}</th><th class="num">{{ t("stats.col_up") }}</th></tr></thead>
+    {% for c in s.wifi %}
+    <tr><td>{{ c.hostname or c.mac }}</td><td><a href="{{ base }}/ap/{{ c.ap | urlencode }}">{{ c.ap }}</a></td><td>{{ c.ssid }}</td>
+        <td class="num num-cell rx">{{ c.down | bps }}</td><td class="num num-cell tx">{{ c.up | bps }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty">{{ t("stats.no_data") }}</p>
+  {% endif %}
+  <p class="muted small">{{ t("stats.wifi_hint", s=store.opts.get('poll_interval', 30)) }}</p>
+</div>
+{% if store.switches %}
+<div class="panel">
+  <h2>{{ t("stats.ports") }}</h2>
+  {% if s.ports %}
+  <table class="list">
+    <thead><tr><th>{{ t("stats.col_port") }}</th><th>{{ t("ports.devices") }}</th><th class="num">↓</th><th class="num">↑</th><th>{{ t("stats.col_history") }}</th></tr></thead>
+    {% for p in s.ports %}
+    {% set util = ((100 * ([p.down, p.up] | max) / (p.speed * 1e6)) | round | int) if p.speed else none %}
+    <tr>
+      <td class="num-cell"><a href="{{ base }}/ap/{{ p.switch | urlencode }}">{{ p.switch }}</a> · <b>{{ p.num }}</b>{% if p.alias %} <span class="muted small">{{ p.alias }}</span>{% endif %}</td>
+      <td class="small">{{ (p.devices or []) | join(", ") or "–" }}</td>
+      <td class="num num-cell rx">{{ p.down | bps }}</td>
+      <td class="num num-cell tx">{{ p.up | bps }}{% if util is not none and util >= 1 %} <span class="{{ 'err' if util >= 50 else 'muted' }} small">{{ util }} %</span>{% endif %}</td>
+      <td class="spark-cell">{{ sparksvg(p.spark) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty">{{ t("stats.no_data") }}</p>
+  {% endif %}
+  <p class="muted small">{{ t("stats.ports_hint") }}</p>
+</div>
+{% endif %}
+<p class="muted small">{{ t("stats.updated", ago=(s.updated | ago), s=s.interval) }}</p>
+{% endif %}
+{% endblock %}

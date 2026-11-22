@@ -13,6 +13,23 @@ from urllib.parse import quote, urlencode
 from .collector import APState, is_l2_iface
 from .wired import speed_label
 
+
+def load_label(load) -> str:
+    """(down b/s, up b/s) -> '↓12M ↑3.1M'; bez dat ''."""
+    if not load or load[0] is None:
+        return ""
+    from .stats import short_bps
+    return f"↓{short_bps(load[0])} ↑{short_bps(load[1] or 0)}"
+
+
+def load_cls(load, speed_mbps: int = 0) -> str:
+    """Trida podle vytizeni: busy = nad polovinou rychlosti portu (nebo nad 100 Mb/s bez znalosti rychlosti)."""
+    if not load or load[0] is None:
+        return ""
+    peak = max(load[0] or 0, load[1] or 0)
+    limit = (speed_mbps * 1e6 / 2) if speed_mbps else 100e6
+    return "busy" if peak >= limit else ("active" if peak >= 1e6 else "idle")
+
 PALETTE = ["#03a9f4", "#8e44ad", "#e67e22", "#16a085", "#c0392b", "#2c7be5", "#b7950b", "#7f8c8d"]
 
 COL_X = {"internet": 20, "router": 225, "ap": 530, "ssid": 880, "client": 1190}
@@ -140,9 +157,11 @@ def _tree_order(aps: list[APState], parent: dict[str, str]) -> list[tuple[APStat
 def build(router: APState | None, aps: list[APState], wired: list[dict], t, clients: list[dict] | None = None,
           show_clients: bool = True, show_empty: bool = False,
           ap_wired: dict[str, list[dict]] | None = None, parent: dict[str, str] | None = None,
-          speeds: dict[str, int] | None = None) -> dict:
+          speeds: dict[str, int] | None = None, loads: dict[str, tuple] | None = None) -> dict:
     """wired: kabelova zarizeni u routeru (neumistena na zadny AP); clients: vsichni Wi-Fi klienti;
-    ap_wired: {ap: [kabelova zarizeni na portech AP]}; parent: {ap: AP, pres ktery je zapojeny}."""
+    ap_wired: {ap: [kabelova zarizeni na portech AP]}; parent: {ap: AP, pres ktery je zapojeny};
+    loads: {AP/switch: (down, up) b/s na jeho privodu, "__wan__": WAN} – aktualni provoz ze statistik."""
+    loads = loads or {}
     clients = clients or []
     ap_wired = ap_wired or {}
     parent = parent or {}
@@ -251,8 +270,10 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
                     cn = _client_node({**c, "port": c["port"]}, COL_X["client"],
                                       top + (ROW - CROW) / 2 + k * CROW + (CROW - CLIENT_H) / 2, cc, True, t)
                     sp = speed_label(c.get("speed", 0))
-                    cn["extra"] = f"port {c['port']}" + (f" · {sp}" if sp else "") + (f" · {c['ip']}" if c.get("ip") else "")
-                    cn["tip"] = " · ".join(v for v in [c.get("hostname") or c["mac"], c.get("ip", ""), c["mac"], f"port {c['port']}", sp] if v)
+                    ll = load_label(c.get("load"))
+                    cn["extra"] = f"port {c['port']}" + (f" · {sp}" if sp else "") + \
+                        (f" · {ll}" if ll and load_cls(c.get("load")) != "idle" else (f" · {c['ip']}" if c.get("ip") else ""))
+                    cn["tip"] = " · ".join(v for v in [c.get("hostname") or c["mac"], c.get("ip", ""), c["mac"], f"port {c['port']}", sp, ll] if v)
                     if c.get("speed"):
                         cn["speedcls"] = "fast" if c["speed"] >= 1000 else "slow"
                     if c.get("stale"):
@@ -323,7 +344,8 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
                 "title": t("map.internet"), "sub": (wan or {}).get("ipv4", "") or "", "online": bool(wan),
                 "href": "", "extra": ""}
         nodes.append(inet)
-        edges.append({"from": inet, "to": rn, "kind": "wan", "color": "", "up": bool(wan)})
+        edges.append({"from": inet, "to": rn, "kind": "wan", "color": "", "up": bool(wan),
+                      "load": load_label(loads.get("__wan__")), "loadcls": load_cls(loads.get("__wan__"))})
 
     lan_color = nets["lan"]["color"]
     ap_by_name = {a.name: n for a, n in ap_nodes}
@@ -337,7 +359,9 @@ def build(router: APState | None, aps: list[APState], wired: list[dict], t, clie
         src = ap_by_name.get(parent.get(ap.name)) or rn
         edges.append({"from": src, "to": apn, "kind": "trunk" if vl else "lan", "color": lan_color, "up": ap.online,
                       "via": src is not rn, "speed": speed_label(speeds.get(ap.name, 0)) if ap.online else "",
-                      "speedcls": ("fast" if speeds.get(ap.name, 0) >= 1000 else "slow") if speeds.get(ap.name) else ""})
+                      "speedcls": ("fast" if speeds.get(ap.name, 0) >= 1000 else "slow") if speeds.get(ap.name) else "",
+                      "load": load_label(loads.get(ap.name)) if ap.online else "",
+                      "loadcls": load_cls(loads.get(ap.name), speeds.get(ap.name, 0))})
     if router:
         rv = sorted({v for v in router_vl.values() if v is not None})
         rn["chips"] = _chips(rn, [{"label": nets[_net_key(v)]["label"], "color": nets[_net_key(v)]["color"]} for v in rv])

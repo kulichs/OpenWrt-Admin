@@ -1,7 +1,7 @@
 name: OpenWrt-Admin
-version: "0.14.2"
+version: "0.15.0"
 slug: openwrt_admin
-description: Manage OpenWrt access points and Wi-Fi clients over SSH (overview, SSIDs, network map, switches via SNMP, updates, backups)
+description: Manage OpenWrt access points and Wi-Fi clients over SSH (overview, SSIDs, network map, statistics, switches via SNMP, updates, backups)
 arch:
   - aarch64
   - amd64
@@ -41,6 +41,18 @@ options:
       host: 192.168.1.3
       type: ap
   switches: []
+  stats: true
+  stats_interval: 5
+  ping_targets:
+    - name: Cloudflare
+      host: 1.1.1.1
+    - name: Google DNS
+      host: 8.8.8.8
+  ping_devices: true
+  traffic_source: auto
+  top_clients: 10
+  ha_sensors: false
+  ha_sensors_interval: 30
 schema:
   ssh_user: str
   poll_interval: int(10,600)
@@ -73,3 +85,13 @@ schema:
       host: str
       community: str?
       port: port?
+  stats: bool?
+  stats_interval: int(2,60)?
+  ping_targets:
+    - name: str
+      host: str
+  ping_devices: bool?
+  traffic_source: list(auto|nlbwmon|conntrack|off)?
+  top_clients: int(3,50)?
+  ha_sensors: bool?
+  ha_sensors_interval: int(10,600)?
