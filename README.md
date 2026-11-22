@@ -12,6 +12,10 @@
 
 Full documentation: [openwrt_admin/DOCS.md](openwrt_admin/DOCS.md) (also shown in HA on the add-on's **Documentation** tab).
 
+About the project, with screenshots (blog, in Czech): [OpenWrt-Admin – správa domácí OpenWrt sítě z Home Assistantu](https://tadyk.info/openwrt-admin-sprava-domaci-openwrt-site-z-home-assistantu.html).
+
+Developers: [CONTRIBUTING.md](CONTRIBUTING.md) (Czech) and project rules in [CLAUDE.md](CLAUDE.md).
+
 **New release:** bump `version` in `openwrt_admin/config.yaml`, add a `CHANGELOG.md` entry, `git push`. Home Assistant offers the update by itself.
 
 ## Česky
@@ -23,5 +27,9 @@ Full documentation: [openwrt_admin/DOCS.md](openwrt_admin/DOCS.md) (also shown i
 **Instalace:** Home Assistant → **Nastavení → Aplikace (Doplňky) → obchod → ⋮ → Repozitáře** → přidat URL tohoto repozitáře (nebo `ha store add <URL>` v terminálu HA). Ne přes *Marketplace → Přidat z odkazu*, ten bere jen GitHub/HACS.
 
 Celá dokumentace: [openwrt_admin/DOCS.md](openwrt_admin/DOCS.md) (v HA i na kartě **Dokumentace** u add-onu).
+
+O projektu se screenshoty na blogu: [OpenWrt-Admin – správa domácí OpenWrt sítě z Home Assistantu](https://tadyk.info/openwrt-admin-sprava-domaci-openwrt-site-z-home-assistantu.html).
+
+Pro vývojáře: [CONTRIBUTING.md](CONTRIBUTING.md) a pravidla projektu v [CLAUDE.md](CLAUDE.md).
 
 **Nová verze:** zvednout `version` v `openwrt_admin/config.yaml`, doplnit `CHANGELOG.md`, `git push`. HA nabídne aktualizaci sám.

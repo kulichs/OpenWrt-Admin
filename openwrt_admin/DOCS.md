@@ -10,6 +10,8 @@ Manage OpenWrt access points from Home Assistant: AP status (uptime, load, RAM, 
 
 The web UI is available in English and Czech (see [Languages](#languages)).
 
+Blog post about the add-on with screenshots (in Czech): [OpenWrt-Admin – správa domácí OpenWrt sítě z Home Assistantu](https://tadyk.info/openwrt-admin-sprava-domaci-openwrt-site-z-home-assistantu.html).
+
 ### Installation
 
 **From a Git repository (recommended, Home Assistant offers updates by itself)**
@@ -280,6 +282,8 @@ Logs: the add-on's **Log** tab.
 ## Česky
 
 Správa OpenWrt access pointů z Home Assistantu: stav AP (uptime, load, RAM, volné místo na overlay), rádia, SSID a všichni připojení Wi-Fi klienti se jmény a IP z DHCP na routeru. Restart AP, aktualizace balíčků a změna SSID na více AP najednou. Na AP se nic neinstaluje, vše jde přes SSH (`ubus`, `uci`).
+
+Článek o add-onu se screenshoty na blogu: [OpenWrt-Admin – správa domácí OpenWrt sítě z Home Assistantu](https://tadyk.info/openwrt-admin-sprava-domaci-openwrt-site-z-home-assistantu.html).
 
 ### Instalace
 
