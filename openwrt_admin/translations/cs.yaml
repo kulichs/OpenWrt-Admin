@@ -41,6 +41,9 @@ configuration:
   notify_random_mac:
     name: Upozorňovat i na náhodné MAC
     description: "Telefony používají pro každou Wi-Fi soukromou (náhodnou) MAC. Vypnuto = na takové adresy neupozorňovat."
+  new_device_hours:
+    name: Štítek „nové“ (h)
+    description: "Jak dlouho od prvního výskytu má zařízení v tabulkách štítek nové, v hodinách (0–720). 0 = štítek se nezobrazuje."
   update_check_hours:
     name: Kontrola aktualizací (h)
     description: "Jak často se na každém zařízení zjišťují balíčky k aktualizaci (apk/opkg update) a nová verze OpenWrt. 0 = vypnuto."

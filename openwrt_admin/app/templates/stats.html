@@ -1,6 +1,8 @@
 {% extends "base.html" %}
-{% macro sparksvg(sp, unit='bps', cls=['a', 'b']) %}<svg class="spark" width="{{ sp.w }}" height="{{ sp.h }}" viewBox="0 0 {{ sp.w }} {{ sp.h }}" preserveAspectRatio="none">{% for d in sp.paths %}{% if d %}<path d="{{ d }}" class="{{ cls[loop.index0] }}"/>{% endif %}{% endfor %}<title>{{ t("stats.spark_max", v=((sp.max | bps) if unit == 'bps' else (sp.max | round(1)) ~ ' ' ~ unit)) }}</title></svg>{% endmacro %}
-{% macro pingstrip(p, n=72) %}{% set st = p.strip(n) %}<svg class="pingstrip" width="{{ n * 4 }}" height="16" role="img">{% for i in range(n - st | length) %}<rect x="{{ i * 4 }}" y="2" width="3" height="12" rx="1" class="none"/>{% endfor %}{% for c in st %}<rect x="{{ (n - st | length + loop.index0) * 4 }}" y="2" width="3" height="12" rx="1" class="{{ c }}"/>{% endfor %}</svg>{% endmacro %}
+{% set SPC = {'a': 'fill="#03a9f4" fill-opacity="0.18" stroke="#03a9f4" stroke-width="1.2"', 'b': 'fill="none" stroke="#c98a00" stroke-width="1.2"', 'c': 'fill="none" stroke="#d33f3f" stroke-width="1.2"'} %}
+{% macro sparksvg(sp, unit='bps', cls=['a', 'b']) %}<svg class="spark" width="{{ sp.w }}" height="{{ sp.h }}" viewBox="0 0 {{ sp.w }} {{ sp.h }}" preserveAspectRatio="none">{% for d in sp.paths %}{% if d %}<path d="{{ d }}" class="{{ cls[loop.index0] }}" {{ SPC[cls[loop.index0]] | safe }}/>{% endif %}{% endfor %}<title>{{ t("stats.spark_max", v=((sp.max | bps) if unit == 'bps' else (sp.max | round(1)) ~ ' ' ~ unit)) }}</title></svg>{% endmacro %}
+{% set PCOL = {'ok': '#2e9d4f', 'slow': '#c98a00', 'lost': '#d33f3f', 'none': '#8c96a1'} %}
+{% macro pingstrip(p, n=72) %}{% set st = p.strip(n) %}<svg class="pingstrip" width="{{ n * 4 }}" height="16" role="img">{% for i in range(n - st | length) %}<rect x="{{ i * 4 }}" y="2" width="3" height="12" rx="1" class="none" fill="{{ PCOL.none }}" fill-opacity="0.3"/>{% endfor %}{% for c in st %}<rect x="{{ (n - st | length + loop.index0) * 4 }}" y="2" width="3" height="12" rx="1" class="{{ c }}" fill="{{ PCOL[c] }}"/>{% endfor %}</svg>{% endmacro %}
 {% block content %}
 <h1>{{ t("stats.title") }}</h1>
 {% if not store.stats_on %}

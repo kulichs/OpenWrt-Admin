@@ -44,6 +44,7 @@ names:                       # own names by MAC, highest priority
 notify_new_devices: true     # notification in HA when a never-seen device joins the network
 notify_service: ""           # optional, e.g. notify.mobile_app_phone (also to your phone)
 notify_random_mac: true      # false = no notifications for random (private) MACs of phones
+new_device_hours: 24         # h, 0 = off: how long a device has the "new" tag
 update_check_hours: 12       # h, 0 = off: check packages to update and new OpenWrt releases
 backup_interval_days: 7      # days, 0 = off: automatic configuration backup of every device
 backup_keep: 10              # backups kept per device
@@ -174,7 +175,7 @@ The entities are created on the first write. They have no `unique_id`, so they c
 When a device (MAC address) the add-on has never seen appears on the network – on Wi-Fi, on an AP port or in the router's ARP table – a notification is sent to Home Assistant (the bell, `persistent_notification`). It shows the name (if known), MAC, IP, network/VLAN and where the device is (AP + SSID, AP port, router). With `notify_service` (e.g. `notify.mobile_app_phone`) it also goes to that service.
 
 - On the **first start** all devices currently on the network are taken as known – no flood of notifications. The list is in `/data/known_devices.json` (delete the file to start over).
-- Devices seen for the first time in the last 24 hours have a **new** tag in the client tables and on the router page.
+- Devices seen for the first time in the last `new_device_hours` hours (default 24, 0 = off) have a **new** tag in the client tables and on the router page.
 - Phones use a **random (private) MAC** per Wi-Fi network; such addresses are marked in the notification. `notify_random_mac: false` skips them.
 - APs and the router themselves are never reported.
 
@@ -369,6 +370,7 @@ names:                       # vlastní jména podle MAC, nejvyšší priorita
 notify_new_devices: true     # upozornění v HA, když se v síti objeví zařízení, které add-on ještě neviděl
 notify_service: ""           # volitelně, např. notify.mobile_app_telefon (i do mobilu)
 notify_random_mac: true      # false = neupozorňovat na náhodné (soukromé) MAC telefonů
+new_device_hours: 24         # h, 0 = vypnuto: jak dlouho má zařízení štítek „nové“
 update_check_hours: 12       # h, 0 = vypnuto: kontrola balíčků k aktualizaci a nové verze OpenWrt
 backup_interval_days: 7      # dny, 0 = vypnuto: automatická záloha konfigurace každého zařízení
 backup_keep: 10              # kolik záloh se drží pro každé zařízení
@@ -499,7 +501,7 @@ Entity vzniknou při prvním zápisu. Nemají `unique_id`, takže je nejde přej
 Když se v síti objeví zařízení (MAC adresa), které add-on ještě nikdy neviděl – na Wi-Fi, na portu AP nebo v ARP tabulce routeru – pošle upozornění do Home Assistantu (zvoneček, `persistent_notification`). Je v něm jméno (pokud je známé), MAC, IP, síť/VLAN a kde zařízení je (AP + SSID, port AP, router). S `notify_service` (např. `notify.mobile_app_telefon`) jde upozornění i do té služby.
 
 - Při **prvním spuštění** se všechna zařízení, která jsou zrovna v síti, berou jako známá – žádná záplava upozornění. Seznam je v `/data/known_devices.json` (smazáním souboru se začne znovu).
-- Zařízení poprvé viděná za posledních 24 hodin mají v tabulkách klientů a na stránce routeru štítek **nové**.
+- Zařízení poprvé viděná za posledních `new_device_hours` hodin (výchozí 24, 0 = vypnuto) mají v tabulkách klientů a na stránce routeru štítek **nové**.
 - Telefony používají pro každou Wi-Fi **náhodnou (soukromou) MAC**; takové adresy jsou v upozornění označené. `notify_random_mac: false` je vynechá.
 - Samotné AP a router se nehlásí.
 

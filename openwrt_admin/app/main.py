@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -53,7 +54,8 @@ def load_options() -> dict:
             "ha_names": True, "names": [], "notify_new_devices": True, "notify_service": "", "notify_random_mac": True,
             "update_check_hours": 12, "backup_interval_days": 7, "backup_keep": 10, "switches": [],
             "stats": True, "stats_interval": 5, "ping_targets": list(DEFAULT_PING), "ping_devices": True,
-            "traffic_source": "auto", "top_clients": 10, "ha_sensors": False, "ha_sensors_interval": 30}
+            "traffic_source": "auto", "top_clients": 10, "ha_sensors": False, "ha_sensors_interval": 30,
+            "new_device_hours": 24}
     if OPTIONS.exists():
         opts.update(json.loads(OPTIONS.read_text()))
     return opts
@@ -403,10 +405,17 @@ class Store:
         self.stats_last = now
 
     def router_ifaces(self) -> list[dict]:
-        """Rozhrani routeru se statistikami: WAN, LAN, VLANy, pak ostatni (tunely); bez loopbacku."""
+        """Rozhrani routeru se statistikami: WAN, LAN, VLANy, pak ostatni (tunely); bez loopbacku.
+        Vic rozhrani na jednom zarizeni (wan + wan6 na eth0) = jeden radek, prednost ma zapnute."""
         if not self.router:
             return []
-        out = [i for i in self.router.interfaces if i.get("device") in self.stats.ifaces]
+        cand = sorted((i for i in self.router.interfaces if i.get("device") in self.stats.ifaces),
+                      key=lambda i: (not i.get("up"), "6" in i["name"], i["name"]))
+        out, seen = [], set()
+        for i in cand:
+            if i["device"] not in seen:
+                seen.add(i["device"])
+                out.append(i)
         return sorted(out, key=lambda i: (not i.get("wan"), i["name"] != "lan", i.get("vlan") is None, i.get("vlan") or 0, i["name"]))
 
     def wan_load(self) -> tuple | None:
@@ -1106,7 +1115,17 @@ templates.env.filters["speed"] = lambda mbps: (f"{mbps / 1000:g} Gb/s" if mbps >
 templates.env.filters["left"] = lambda ts: max(0, int(ts - time.time()))  # zbyva sekund
 templates.env.filters["bps"] = statsmod.fmt_bps
 templates.env.filters["ms"] = lambda v: "–" if v is None else (f"{v:.1f} ms" if v < 10 else f"{v:.0f} ms")
-templates.env.tests["recent"] = lambda ts, hours=24: bool(ts) and time.time() - ts < hours * 3600
+def new_hours() -> int:
+    """Jak dlouho ma zarizeni stitek „nove“ (volba new_device_hours, 0 = nikdy)."""
+    try:
+        return max(0, int(store.opts.get("new_device_hours", 24))) if store else 24
+    except (TypeError, ValueError):
+        return 24
+
+
+templates.env.tests["recent"] = lambda ts, hours=None: bool(ts) and time.time() - ts < (new_hours() if hours is None else hours) * 3600
+# verze statickych souboru do URL – prohlizec/Ingress jinak drzi stare style.css z cache
+STATIC_VER = hashlib.md5(b"".join((BASE_DIR / "static" / f).read_bytes() for f in ("style.css", "htmx.min.js"))).hexdigest()[:10]
 
 
 REFRESH_CHOICES = [0, 10, 15, 30, 60, 120, 300]
@@ -1129,7 +1148,7 @@ def render(request: Request, name: str, **ctx):
     base = request.headers.get("X-Ingress-Path", "").rstrip("/")
     refresh, refresh_own = refresh_interval(request)
     return templates.TemplateResponse(request, name, {
-        "base": base, "store": store, "now": time.time(), "autorefresh": True,
+        "base": base, "store": store, "now": time.time(), "autorefresh": True, "static_ver": STATIC_VER,
         "refresh": refresh, "refresh_own": refresh_own, "refresh_choices": REFRESH_CHOICES, "refresh_cookie": REFRESH_COOKIE,
         "t": request.state.t, "lang": request.state.lang, "lang_source": request.state.lang_source,
         "languages": i18n.NAMES, "lang_cookie": LANG_COOKIE, "lang_ha_cookie": LANG_HA_COOKIE,

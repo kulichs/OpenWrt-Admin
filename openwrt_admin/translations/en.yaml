@@ -41,6 +41,9 @@ configuration:
   notify_random_mac:
     name: Notify about random MACs too
     description: "Phones use a private (random) MAC for each Wi-Fi. Off = do not notify about such addresses."
+  new_device_hours:
+    name: "\"New\" tag (h)"
+    description: "How long after it was first seen a device has the new tag in the tables, in hours (0–720). 0 = no tag."
   update_check_hours:
     name: Update check (h)
     description: "How often the packages to update (apk/opkg update) and a new OpenWrt release are checked on each device. 0 = off."

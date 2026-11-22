@@ -422,5 +422,7 @@
   "setup.sensors_ok": "{n} entit, každých {s} s",
   "setup.sensors_demo": "demo – připraveno {n} entit, do HA se v demu nic neposílá",
   "setup.sensors_wait": "čeká na první odeslání",
-  "setup.stats_hint": "Senzory se jmenují sensor.openwrt_admin_* a binary_sensor.openwrt_admin_*. Vytvoří se samy při prvním zápisu přes REST API Home Assistantu (bez unique_id, takže je nejde upravit v UI). Ukládají se do historie HA a odtud i do InfluxDB a Grafany."
+  "setup.stats_hint": "Senzory se jmenují sensor.openwrt_admin_* a binary_sensor.openwrt_admin_*. Vytvoří se samy při prvním zápisu přes REST API Home Assistantu (bez unique_id, takže je nejde upravit v UI). Ukládají se do historie HA a odtud i do InfluxDB a Grafany.",
+  "setup.new_tag": "Štítek „nové“",
+  "setup.new_tag_val": "{h} h od prvního výskytu"
 }

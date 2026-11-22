@@ -47,6 +47,8 @@ chmod 600 /etc/dropbear/authorized_keys</pre>
     <dd>{% if store.opts.notify_new_devices %}<span class="sig good">{{ t("state.on") }}</span>{% if store.opts.notify_service %} · <span class="mono">persistent_notification + {{ store.opts.notify_service }}</span>{% endif %}{% if not store.opts.notify_random_mac %} · <span class="muted">{{ t("setup.notify_no_random") }}</span>{% endif %}{% else %}<span class="muted">{{ t("state.off") }}</span>{% endif %}
       {% if store.notify_status and store.notify_status != 'ok' %}<br><span class="err small">{{ store.notify_status }}</span>{% endif %}
       <span class="muted small">· {{ t("setup.known_devices", n=(store.known.data | length)) }}</span></dd>
+    <dt>{{ t("setup.new_tag") }}</dt>
+    <dd>{% set nh = store.opts.get("new_device_hours", 24) %}{% if nh %}{{ t("setup.new_tag_val", h=nh) }}{% else %}<span class="muted">{{ t("state.off") }}</span>{% endif %} <span class="muted small">(new_device_hours)</span></dd>
     <dt>{{ t("upd.title") }}</dt>
     <dd>{{ t("upd.hint", h=store.opts.update_check_hours) if store.opts.update_check_hours else t("upd.hint_off") }}</dd>
     <dt>{{ t("backup.title") }}</dt>

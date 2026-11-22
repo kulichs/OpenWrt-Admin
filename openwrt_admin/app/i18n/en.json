@@ -414,5 +414,7 @@
   "setup.sensors_ok": "{n} entities, every {s} s",
   "setup.sensors_demo": "demo – {n} entities prepared, nothing is sent to HA in demo mode",
   "setup.sensors_wait": "waiting for the first update",
-  "setup.stats_hint": "Sensors are called sensor.openwrt_admin_* and binary_sensor.openwrt_admin_*. They are created on the first write through the Home Assistant REST API (without a unique_id, so they cannot be edited in the UI). They are stored in the HA history and from there in InfluxDB and Grafana."
+  "setup.stats_hint": "Sensors are called sensor.openwrt_admin_* and binary_sensor.openwrt_admin_*. They are created on the first write through the Home Assistant REST API (without a unique_id, so they cannot be edited in the UI). They are stored in the HA history and from there in InfluxDB and Grafana.",
+  "setup.new_tag": "\"New\" tag",
+  "setup.new_tag_val": "{h} h after first seen"
 }

@@ -1,5 +1,5 @@
 name: OpenWrt-Admin
-version: "0.15.0"
+version: "0.16.0"
 slug: openwrt_admin
 description: Manage OpenWrt access points and Wi-Fi clients over SSH (overview, SSIDs, network map, statistics, switches via SNMP, updates, backups)
 arch:
@@ -27,6 +27,7 @@ options:
   notify_new_devices: true
   notify_service: ""
   notify_random_mac: true
+  new_device_hours: 24
   update_check_hours: 12
   backup_interval_days: 7
   backup_keep: 10
@@ -72,6 +73,7 @@ schema:
   notify_new_devices: bool?
   notify_service: str?
   notify_random_mac: bool?
+  new_device_hours: int(0,720)?
   update_check_hours: int(0,168)?
   backup_interval_days: int(0,90)?
   backup_keep: int(1,100)?

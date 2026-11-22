@@ -2,6 +2,15 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.16.0
+- New option `new_device_hours` (default 24, 0 = off): how long a device has the "new" tag; shown on the Settings page.
+- Fix: charts and the ping history were black after updating – the browser (Ingress) kept the old `style.css` in its cache. Static files now have a version in their URL, and the charts carry their colours also directly in the SVG.
+- Statistics: several interfaces on one device (e.g. `wan` + `wan6` on `eth0`) are shown as one row (the active one).
+---
+- Nová volba `new_device_hours` (výchozí 24, 0 = vypnuto): jak dlouho má zařízení štítek „nové“; vidět i na stránce Nastavení.
+- Oprava: grafy a historie pingu byly po aktualizaci černé – prohlížeč (Ingress) držel v cache staré `style.css`. Statické soubory mají v adrese verzi a grafy mají barvy i přímo v SVG.
+- Statistiky: víc rozhraní na jednom zařízení (např. `wan` + `wan6` na `eth0`) je jeden řádek (to zapnuté).
+
 ## 0.15.0
 - New **Statistics** page: router interface speeds (WAN, LAN, every VLAN) with packets/s, peak and a chart of the last hour, router CPU temperature and load, ping to internet targets (`ping_targets`), the ISP gateway, APs and switches with loss and history, top internet users (`top_clients`) and the busiest switch ports. History of the last hour in memory.
 - Top internet users from **nlbwmon** when it runs on the router (nothing is installed), otherwise from **conntrack** (`traffic_source`: auto / nlbwmon / conntrack / off).
