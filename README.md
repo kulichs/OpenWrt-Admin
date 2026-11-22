@@ -16,6 +16,8 @@ About the project, with screenshots (blog, in Czech): [OpenWrt-Admin – správa
 
 Developers: [CONTRIBUTING.md](CONTRIBUTING.md) (Czech) and project rules in [CLAUDE.md](CLAUDE.md).
 
+**License:** [MIT](LICENSE) – free to use, modify and share, keep the copyright notice. Bundled htmx is 0BSD.
+
 **New release:** bump `version` in `openwrt_admin/config.yaml`, add a `CHANGELOG.md` entry, `git push`. Home Assistant offers the update by itself.
 
 ## Česky
@@ -31,5 +33,7 @@ Celá dokumentace: [openwrt_admin/DOCS.md](openwrt_admin/DOCS.md) (v HA i na kar
 O projektu se screenshoty na blogu: [OpenWrt-Admin – správa domácí OpenWrt sítě z Home Assistantu](https://tadyk.info/openwrt-admin-sprava-domaci-openwrt-site-z-home-assistantu.html).
 
 Pro vývojáře: [CONTRIBUTING.md](CONTRIBUTING.md) a pravidla projektu v [CLAUDE.md](CLAUDE.md).
+
+**Licence:** [MIT](LICENSE) – volně k použití, úpravám i šíření, stačí zachovat uvedení autora. Přibalené htmx má licenci 0BSD.
 
 **Nová verze:** zvednout `version` v `openwrt_admin/config.yaml`, doplnit `CHANGELOG.md`, `git push`. HA nabídne aktualizaci sám.

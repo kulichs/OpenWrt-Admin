@@ -30,6 +30,7 @@ spravované switche. Webové rozhraní běží přes Ingress v panelu Home Assis
 - **Akce** (restart, SSID, `apk`, zálohy, odpojení klienta) jen pro uživatele s plným přístupem.
 - Uživatelé a role podle hlaviček Ingressu (`X-Remote-User-*`) a voleb `full_access` / `read_access`.
 
+Licence: [MIT](LICENSE) (htmx 0BSD). Cizí kód jen s kompatibilní licencí a zápisem do `LICENSE`.
 Repozitář: [GitHub `kulichs/OpenWrt-Admin`](https://github.com/kulichs/OpenWrt-Admin) (zrcadlo hlavního repozitáře správce).
 Článek o projektu: [tadyk.info](https://tadyk.info/openwrt-admin-sprava-domaci-openwrt-site-z-home-assistantu.html).
 Home Assistant si add-on stahuje z repozitáře (`ha store reload` → Aktualizovat).

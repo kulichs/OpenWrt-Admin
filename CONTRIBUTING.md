@@ -101,3 +101,7 @@ V CHANGELOGu poctivě uveď, co běželo naostro a co jen v demu nebo simulaci.
   skutečné topologii, smoke test všech stránek v demu (cs + en), kontrola shodných klíčů i18n.
 - Kontrola stylu (např. `ruff`) a jednoduché CI na Gitei.
 - Nápady a chyby: issues na GitHubu.
+
+## 8. Licence
+
+Projekt je pod licencí [MIT](LICENSE). Kdo pošle změnu (pull request, patch), souhlasí, že ji dává pod stejnou licencí. Nové soubory třetích stran přidávej jen s kompatibilní licencí (MIT, BSD, 0BSD, Apache-2.0) a zapiš je na konec `LICENSE`.
