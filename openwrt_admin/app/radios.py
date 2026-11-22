@@ -34,7 +34,13 @@ IW_BSSID = re.compile(r"Access Point:\s*([0-9A-Fa-f:]{17})")
 RADIO_CMD = ("iwinfo 2>/dev/null; echo '@@survey'; seen=''; for n in /sys/class/net/*; do f=$n/phy80211/name; "
              "[ -r $f ] || continue; ph=$(cat $f); case \" $seen \" in *\" $ph \"*) continue;; esac; "
              "i=${n##*/}; out=$(iw dev $i survey dump 2>/dev/null | awk '/frequency/{u=/in use/} u'); "
-             "[ -n \"$out\" ] || continue; seen=\"$seen $ph\"; echo \"== $ph $i\"; echo \"$out\"; done")
+             "[ -n \"$out\" ] || continue; seen=\"$seen $ph\"; echo \"== $ph $i\"; echo \"$out\"; done; "
+             # povolene kanaly, vykony a sirky – jen jednou za phy (iwinfo chce jmeno rozhrani, ne phyN)
+             "echo '@@lists'; seen=''; for n in /sys/class/net/*; do f=$n/phy80211/name; [ -r $f ] || continue; "
+             "ph=$(cat $f); case \" $seen \" in *\" $ph \"*) continue;; esac; i=${n##*/}; "
+             "iwinfo $i freqlist >/dev/null 2>&1 || continue; seen=\"$seen $ph\"; echo \"== $ph $i\"; "
+             "echo '-- freq'; iwinfo $i freqlist 2>/dev/null; echo '-- txpower'; iwinfo $i txpowerlist 2>/dev/null; "
+             "echo '-- htmode'; iwinfo $i htmodelist 2>/dev/null; done")
 
 
 def _int(v):
@@ -118,8 +124,57 @@ def parse_survey(text: str) -> dict[str, dict]:
 
 
 def split_radio_output(text: str) -> tuple[str, str]:
+    """-> (iwinfo, survey); seznamy (@@lists) se z survey odriznou – viz split_lists."""
     a, _, b = (text or "").partition("@@survey")
-    return a, b
+    return a, b.partition("@@lists")[0]
+
+
+def split_lists(text: str) -> str:
+    return (text or "").partition("@@lists")[2]
+
+
+FREQ_RE = re.compile(r"^\s*(\*)?\s*([\d.]+)\s*GHz\s*\((?:Band:\s*[^,]+,\s*)?Channel\s+(\d+)\)\s*(?:\[(.*)\])?")
+TXP_RE = re.compile(r"^\s*(\*)?\s*(-?\d+)\s*dbm", re.I)
+HTMODE_TOKEN = re.compile(r"\b(NOHT|HT20|HT40[+-]?|VHT(?:20|40|80|80\+80|160)|HE(?:20|40|80|160)|EHT(?:20|40|80|160|320))\b")
+
+
+def parse_lists(text: str) -> dict[str, dict]:
+    """Sekce @@lists -> {phy: {ifname, freqs: [{channel, mhz, flags, dfs, active}], txpowers: [dBm], htmodes: [...]}}."""
+    out: dict[str, dict] = {}
+    cur = None
+    part = ""
+    for line in (text or "").splitlines():
+        if line.startswith("== "):
+            p = line[3:].split()
+            if len(p) >= 2:
+                cur = out.setdefault(p[0], {"ifname": p[1], "freqs": [], "txpowers": [], "htmodes": []})
+            continue
+        if line.startswith("-- "):
+            part = line[3:].strip()
+            continue
+        if cur is None:
+            continue
+        if part == "freq":
+            m = FREQ_RE.match(line)
+            if m:
+                flags = [f.strip() for f in (m.group(4) or "").split(",") if f.strip()]
+                if any(f.lower() == "disabled" for f in flags):
+                    continue
+                ch = int(m.group(3))
+                cur["freqs"].append({"channel": ch, "mhz": round(float(m.group(2)) * 1000), "flags": flags,
+                                     "dfs": any("RADAR" in f.upper() or f.upper() == "DFS" for f in flags) or is_dfs(ch),
+                                     "active": bool(m.group(1))})
+        elif part == "txpower":
+            m = TXP_RE.match(line)
+            if m:
+                v = int(m.group(2))
+                if v not in cur["txpowers"]:
+                    cur["txpowers"].append(v)
+        elif part == "htmode":
+            for tok in HTMODE_TOKEN.findall(line):
+                if tok not in cur["htmodes"]:
+                    cur["htmodes"].append(tok)
+    return out
 
 
 def width_of(htmode: str) -> int:
@@ -408,3 +463,158 @@ def scan_warnings(rows: list[dict], scans: dict) -> list[dict]:
             out.append({"level": "info", "key": "radio.w_better", "ap": r["ap"], "radio": r["radio"],
                         "args": {"ap": r["ap"], "band": r["band"], "ch": r["channel"], "best": cand[0][0]}})
     return out
+
+
+# ---------------------------------------------------------------- uprava radii (0.17.9)
+
+HTMODE_RE = re.compile(r"^(NOHT|HT20|HT40[+-]?|VHT(20|40|80|160)|HE(20|40|80|160)|EHT(20|40|80|160|320))$")
+SECTION_RE = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
+
+
+def family(htmode: str) -> str:
+    """'VHT80' -> 'VHT', 'HT20' -> 'HT', 'HE40' -> 'HE', '' -> 'HT'."""
+    m = re.match(r"^(EHT|HE|VHT|HT)", htmode or "")
+    return m.group(1) if m else "HT"
+
+
+def htmode_options(radio: dict) -> list[str]:
+    """Sirky, ktere radio nabidne: z `iwinfo htmodelist`, kdyz ho iwinfo umi, jinak odhad podle rodiny
+    soucasneho htmode (HT radio nikdy nedostane VHT80). Soucasna hodnota je vzdy mezi moznostmi."""
+    band = radio.get("band", "")
+    cur = str(radio.get("htmode") or radio.get("act_htmode") or "")
+    listed = [h for h in radio.get("htmodes") or [] if HTMODE_RE.match(h)]
+    if listed:
+        opts = listed
+    else:
+        fam = family(cur)
+        widths = [20, 40] if band.startswith("2") else ([20, 40] if fam == "HT" else [20, 40, 80])
+        if band.startswith("6"):
+            widths = [20, 40, 80, 160]
+        opts = [f"{fam}{w}" for w in widths]
+        if fam != "HT" and band.startswith("5"):
+            opts = ["HT20", "HT40"] + opts
+    if band.startswith("2"):
+        opts = [o for o in opts if width_of(o) <= 40]
+    if cur and cur not in opts:
+        opts.insert(0, cur)
+    return opts
+
+
+def channel_options(radio: dict) -> list[dict]:
+    """Povolene kanaly z `iwinfo freqlist` (bez vypnutych); bez seznamu standardni sada pro pasmo."""
+    fr = radio.get("freqs") or []
+    if fr:
+        return [{"channel": f["channel"], "dfs": f["dfs"]} for f in fr]
+    if str(radio.get("band", "")).startswith("2"):
+        return [{"channel": c, "dfs": False} for c in range(1, 14)]
+    return [{"channel": c, "dfs": is_dfs(c)} for c in CH5]
+
+
+def txpower_options(radio: dict) -> list[int]:
+    return list(radio.get("txpowers") or range(0, 21))
+
+
+def radio_cmds(section: str, channel: str | None = None, htmode: str | None = None, txpower: str | None = None,
+               country: str | None = None) -> list[str]:
+    """uci prikazy pro zmenu radia (None = beze zmeny; txpower 'auto' = smazat volbu -> ovladac vybere sam).
+    Hodnoty musi projit validate_radio."""
+    s = f"wireless.{section}"
+    out = []
+    if channel is not None:
+        out.append(f"uci set {s}.channel={channel}")
+    if htmode is not None:
+        out.append(f"uci set {s}.htmode={htmode}")
+    if txpower is not None:
+        out.append(f"uci -q delete {s}.txpower" if txpower == "auto" else f"uci set {s}.txpower={txpower}")
+    if country is not None:
+        out.append(f"uci set {s}.country={country}")
+    return out
+
+
+def validate_radio(radio: dict, channel: str | None, htmode: str | None, txpower: str | None, country: str | None) -> str:
+    """'' = v poradku, jinak klic chyby (i18n)."""
+    if not SECTION_RE.match(radio.get("name", "")):
+        return "radio.err_section"
+    if channel is not None:
+        if channel != "auto" and (not channel.isdigit() or int(channel) not in {c["channel"] for c in channel_options(radio)}):
+            return "radio.err_channel"
+    if htmode is not None and (not HTMODE_RE.match(htmode) or htmode not in htmode_options(radio)):
+        return "radio.err_htmode"
+    if txpower is not None and txpower != "auto" and (not txpower.lstrip("-").isdigit() or int(txpower) not in txpower_options(radio)):
+        return "radio.err_txpower"
+    if country is not None and not COUNTRY_RE.match(country):
+        return "radio.err_country"
+    return ""
+
+
+def best_width(radio: dict) -> str:
+    """Doporucena sirka: 2,4 GHz 20 MHz, 5 GHz nejvic 80 MHz (HT radio 40 MHz), ze stejne rodiny."""
+    opts = htmode_options(radio)
+    fam = family(str(radio.get("htmode") or radio.get("act_htmode") or ""))
+    if str(radio.get("band", "")).startswith("2"):
+        want = [f"{fam}20", "HT20"]
+    else:
+        want = [f"{fam}80", f"{fam}40", "VHT80", "HT40", f"{fam}20"]
+    return next((w for w in want if w in opts), opts[0] if opts else "")
+
+
+def propose(aps, cells: list[dict], dfs_ok: bool = False) -> list[dict]:
+    """Navrh pro vsechna zapnuta radia: kanal (vlastni AP navzajem na ruznych, mimo obsazene kanaly ze skenu),
+    sirka a vykon (2,4 GHz o 3 dB slabsi nez 5 GHz na stejnem AP, 5 GHz nejvyssi povoleny).
+    -> [{ap, radio, band, cur: {channel, htmode, txpower}, new: {...}, why: [klice]}]"""
+    radios = [(a, r) for a in aps if a.online for r in a.radios if r.get("up") and not r.get("disabled")]
+    out = []
+    taken: dict[str, list[set]] = {}
+    # nejdriv radia s nejvic klienty (dostanou nejlepsi kanal)
+    order = sorted(radios, key=lambda ar: -sum(1 for c in ar[0].clients if c.get("ifname") in set(ar[1].get("ifnames") or [])))
+    for a, r in order:
+        band = r.get("band", "")
+        ht = best_width(r)
+        allowed = {c["channel"] for c in channel_options(r) if dfs_ok or not c["dfs"]}
+        axis = list(range(1, 14)) if band.startswith("2") else CH5
+        occ = occupancy(cells, band, axis)
+        cands = [(c, sc) for c, sc in best_channels(band, ht, occ, dfs_ok) if c in allowed]
+        if not cands:
+            cands = [(r.get("act_channel") or 0, 0.0)]
+        best = None
+        for c, sc in cands:
+            mine = set(occupied(band, c, ht))
+            clash = sum(1 for t in taken.get(band, []) if t & mine)
+            cost = sc + clash * 1000
+            if best is None or cost < best[1]:
+                best = (c, cost, clash)
+        ch = best[0]
+        taken.setdefault(band, []).append(set(occupied(band, ch, ht)))
+        cur = {"channel": r.get("act_channel") or r.get("channel"), "htmode": r.get("act_htmode") or r.get("htmode"),
+               "txpower": r.get("act_txpower")}
+        why = []
+        if ch != cur["channel"]:
+            why.append("radio.why_channel_clash" if best[2] == 0 and any(
+                set(occupied(band, cur["channel"] or 0, cur["htmode"] or "")) & t for t in taken[band][:-1]) else "radio.why_channel_free")
+        if ht != cur["htmode"]:
+            why.append("radio.why_width")
+        out.append({"ap": a.name, "radio": r["name"], "band": band, "cur": cur,
+                     "new": {"channel": ch, "htmode": ht, "txpower": cur["txpower"]}, "why": why, "_r": r})
+    # vykon: 5 GHz nejvyssi povoleny, 2,4 GHz o 3 dB mene (ne pod 10 dBm a ne nad soucasny)
+    by_ap: dict[str, dict] = {}
+    for p in out:
+        by_ap.setdefault(p["ap"], {})[p["band"][:1]] = p
+    for ap, d in by_ap.items():
+        p5 = d.get("5")
+        if p5 and p5["_r"].get("txpowers"):
+            mx = max(p5["_r"]["txpowers"])
+            if p5["cur"]["txpower"] is None or mx > p5["cur"]["txpower"]:
+                p5["new"]["txpower"] = mx
+                p5["why"].append("radio.why_power5")
+        p2 = d.get("2")
+        if p2 and p5 and p5["new"]["txpower"] is not None and p2["_r"].get("txpowers"):
+            target = max(10, p5["new"]["txpower"] - 3)
+            cands = [v for v in p2["_r"]["txpowers"] if v <= target]
+            if cands and (p2["cur"]["txpower"] is None or max(cands) < p2["cur"]["txpower"]):
+                p2["new"]["txpower"] = max(cands)
+                p2["why"].append("radio.why_power24")
+    for p in out:
+        p.pop("_r")
+        p["changed"] = any(p["new"][k] != p["cur"][k] for k in ("channel", "htmode", "txpower"))
+    return sorted(out, key=lambda p: (p["ap"], p["radio"]))

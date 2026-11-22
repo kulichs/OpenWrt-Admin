@@ -7,6 +7,29 @@
 <p class="muted">{{ t("ssid.readonly") }}</p>
 {% endif %}
 {% if not groups %}<p class="empty">{{ t("ssid.none") }}</p>{% endif %}
+{% if can_edit and new_radios %}
+<details class="panel" id="new-ssid">
+  <summary><b>{{ t("ssid.new_title") }}</b></summary>
+  <form hx-post="{{ base }}/ssids/new/preview" hx-target="next .cmd-out" hx-disabled-elt="find button[type=submit]">
+    <div class="filters edit">
+      <label>SSID <input name="ssid" maxlength="32" required></label>
+      <label>{{ t("ssid.new_key") }} <input name="key" type="password" minlength="8" maxlength="63" autocomplete="new-password" required></label>
+      <label>{{ t("col.encryption") }} <select name="encryption">{% for e in encryptions %}<option value="{{ e }}">{{ t("ssid.enc_" ~ e | replace('-', '_')) }}</option>{% endfor %}</select></label>
+      <label>{{ t("col.network") }} <select name="network">{% for n in new_nets %}<option value="{{ n }}">{{ n }}</option>{% endfor %}</select></label>
+      <label><input type="checkbox" name="hidden" value="1"> {{ t("col.hidden") }}</label>
+    </div>
+    <table class="list">
+      <thead><tr><th></th><th>AP</th><th>{{ t("col.radio") }}</th><th>{{ t("col.band") }}</th></tr></thead>
+      {% for r in new_radios %}
+      <tr class="{{ '' if r.up else 'row-off' }}"><td><input type="checkbox" name="target" value="{{ r.ap }}|{{ r.radio }}"></td><td>{{ r.ap }}</td><td class="mono small">{{ r.radio }}</td><td>{{ r.band | band }}</td></tr>
+      {% endfor %}
+    </table>
+    <div class="filters edit"><button type="submit">{{ t("ssid.preview") }}</button></div>
+  </form>
+  <div class="cmd-out"></div>
+  <p class="muted small">{{ t("ssid.new_hint") }}</p>
+</details>
+{% endif %}
 {% for g in groups %}
 <div class="panel">
   <h2>{{ g.ssid or t("ssid.unnamed") }}</h2>

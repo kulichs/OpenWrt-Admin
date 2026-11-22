@@ -98,6 +98,7 @@ def demo_states() -> tuple[list[APState], dict]:
         r.update(ifnames=sorted(s["ifname"] for s in ap.ssids if s["radio"] == r["name"]),
                  phy="phy" + r["name"][-1], act_channel=ch, act_htmode=r["htmode"], act_txpower=tx, noise=noise, hw=hw,
                  freq=(2407 + 5 * ch) if ch < 14 else (5000 + 5 * ch),
+                 txpowers=list(range(0, 21 if ch < 14 else 24)),
                  survey={"active": int(active), "busy": int(active * util + 4e5 * math.sin((now - T0) / 300)),
                          "rx": int(active * util * 0.7), "tx": int(active * util * 0.2)})
 

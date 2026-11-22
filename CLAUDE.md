@@ -77,7 +77,9 @@ Home Assistant si add-on stahuje z repozitáře (`ha store reload` → Aktualizo
 - **Akce jen pro plný přístup** – kontrola na serveru (`require_full`, role v `request.state.user`),
   ne jen skrytím tlačítka. Zálohy obsahují hesla Wi-Fi a klíče → stažení jen plný přístup.
 - **Switche jen čtení** (SNMP v2c GET/GETBULK). Žádné SET.
-- Změny SSID vždy s náhledem a potvrzením; blokace klienta jen v paměti `hostapd` (zruší ji restart Wi-Fi).
+- Změny SSID i rádií (kanál, šířka, výkon, země) a nová SSID vždy s náhledem a potvrzením (token na serveru,
+  `pending_cmds`, platí 10 min), hodnoty validované proti `iwinfo freqlist/txpowerlist/htmodelist`; nová SSID jen
+  jako nové sekce `owadmin_*`, existující se nemažou. Blokace klienta jen v paměti `hostapd` (zruší ji restart Wi-Fi).
 
 ## Konvence kódu
 
@@ -139,14 +141,14 @@ openwrt_admin/
   app/
     main.py                  # FastAPI, Store (stav, poll, udrzba), routy, role
     collector.py             # SSH sber z AP a routeru + parsery
-    actions.py               # akce na zarizenich (restart, SSID, apk, kick)
+    actions.py               # akce na zarizenich (restart, SSID, nove SSID, uci, apk, kick)
     wired.py                 # umisteni kabelovych zarizeni, uplink, porty
     topology.py              # mapa site (server-side SVG), VLAN, site
     switch.py, snmp.py       # switche pres SNMP, vlastni SNMP v2c klient
     maint.py                 # aktualizace, zalohy, nova zarizeni
     ha.py                    # API Home Assistantu (jmena, notifikace, senzory pres REST)
     stats.py                 # statistiky: parsery, historie, ping, top klienti, senzory, demo
-    radios.py                # radia: iwinfo, iw survey, upozorneni, mapa kanalu
+    radios.py                # radia: iwinfo, iw survey, sken, upozorneni, mapa kanalu, navrh, uci prikazy
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/

@@ -208,3 +208,7 @@ svg.chanmap { display: block; max-width: 100%; height: auto; font: 12px system-u
 .chanmap .chan-col.dfs { fill: var(--ok); fill-opacity: .12; }
 .chanmap .chan-tick { fill: var(--muted); } .chanmap .chan-tick.best { fill: var(--good); font-weight: 600; }
 .chanmap .chan-label { fill: var(--fg); }
+select.changed { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
+details.panel > summary { cursor: pointer; }
+.btns .toggle { text-decoration: none; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: .3rem .7rem; }
+.btns .toggle.on { color: var(--accent); border-color: var(--accent); }

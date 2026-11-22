@@ -1,0 +1,22 @@
+<div class="result preview">
+  <strong>{{ t("preview.title") }}</strong>
+  <table class="list">
+    <thead><tr><th>AP</th><th>{{ t("col.radio") }}</th><th>{{ t("preview.change") }}</th><th>{{ t("preview.commands") }}</th></tr></thead>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.ap }}</td>
+      <td>{{ r.label | band }}</td>
+      <td>{% for c in r.changes %}{{ c }}<br>{% endfor %}{% if r.dfs %}<span class="warn small">DFS</span>{% endif %}</td>
+      <td><pre class="small">{{ r.cmds | join('\n') }}</pre></td>
+    </tr>
+    {% endfor %}
+  </table>
+  <pre class="small">uci commit wireless
+wifi reload</pre>
+  <p class="muted small">{{ note }}</p>
+  <form hx-post="{{ base }}/pending/apply" hx-target="closest .cmd-out" hx-disabled-elt="find button">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button type="submit" class="warnbtn">{{ t("preview.apply", n=(rows | map(attribute='ap') | unique | list | length)) }}</button>
+    <span class="htmx-indicator muted">{{ t("preview.writing") }}</span>
+  </form>
+</div>

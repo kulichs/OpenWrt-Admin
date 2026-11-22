@@ -2,6 +2,19 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.17.9
+- **Edit radios** on the Radios page (full access): channel, width, transmit power for each radio and the country for all, with options from `iwinfo freqlist`/`txpowerlist`/`htmodelist` (DFS marked; old iwinfo without htmodelist: widths by the radio family). Preview of the `uci` commands per AP → **Apply** (`uci commit wireless && wifi reload`, `uci revert` on error).
+- **Propose settings**: pre-fills the form with a channel plan for all APs (own APs on different channels, away from neighbours from the last scan, optionally DFS), the widest sensible width and power balance (5 GHz max, 2.4 GHz 3 dB lower) – each change with a reason.
+- **Add a new SSID** on the SSID page: name, password, WPA2 / WPA2+WPA3 / WPA3, network, hidden, on selected radios of any APs (new `wifi-iface` sections `owadmin_<ssid>_<radio>`), with a preview; the password is never shown or logged.
+- The APs now also report allowed channels, transmit powers and widths (`iwinfo freqlist/txpowerlist/htmodelist`, once per radio).
+- Verified: parsers on real `iwinfo` output (AR9580: freqlist with flags, txpowerlist, empty htmodelist), the shell command with simulated sysfs/iwinfo/iw, preview/apply and validation in the demo (cs + en). Not yet on the real network.
+---
+- **Upravit rádia** na stránce Rádia (plný přístup): kanál, šířka, vysílací výkon každého rádia a země pro všechna, s možnostmi z `iwinfo freqlist`/`txpowerlist`/`htmodelist` (DFS označené; starý iwinfo bez htmodelist: šířky podle rodiny rádia). Náhled příkazů `uci` pro každé AP → **Použít** (`uci commit wireless && wifi reload`, při chybě `uci revert`).
+- **Navrhnout nastavení**: předvyplní formulář návrhem kanálů pro všechna AP (vlastní AP na různých kanálech, mimo sousedy z posledního skenu, volitelně DFS), nejširší rozumnou šířkou a vyvážením výkonu (5 GHz max., 2,4 GHz o 3 dB méně) – u každé změny důvod.
+- **Přidat nové SSID** na stránce SSID: název, heslo, WPA2 / WPA2+WPA3 / WPA3, síť, skrytí, na vybraných rádiích libovolných AP (nové sekce `wifi-iface` `owadmin_<ssid>_<rádio>`), s náhledem; heslo se nikde nezobrazuje ani neloguje.
+- AP nově hlásí i povolené kanály, výkony a šířky (`iwinfo freqlist/txpowerlist/htmodelist`, jednou za rádio).
+- Ověřeno: parsery na skutečném výstupu `iwinfo` (AR9580: freqlist s příznaky, txpowerlist, prázdný htmodelist), příkaz pro shell se simulovaným sysfs/iwinfo/iw, náhled/použití a validace v demu (cs + en). Na skutečné síti zatím ne.
+
 ## 0.17.1
 - Optional **neighbour scan** on the Radios page (option `radio_scan`, off by default, full access): **Scan** per radio or for all radios (`iwinfo <if> scan`). Shows neighbouring networks (SSID, BSSID, channel, width, signal, encryption; own APs marked by BSSID/SSID), channel occupancy bars in the channel map, warnings about strong foreign networks on your channel and a less busy channel suggestion (2.4 GHz 1/6/11, 5 GHz 36–48 without DFS).
 - Radios read also their BSSIDs from `iwinfo` (recognising own APs in scans).

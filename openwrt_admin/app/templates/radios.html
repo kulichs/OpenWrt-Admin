@@ -55,6 +55,48 @@
   {% endif %}
 </div>
 
+{% if can_edit and edit %}
+<div class="panel" id="edit">
+  <h2>{{ t("radio.edit_title") }}</h2>
+  <div class="btns" style="margin-bottom: .6rem">
+    <a class="toggle {{ 'on' if plan }}" href="{{ base }}/radios?plan=1{{ '&dfs=1' if plan_dfs }}#edit">{{ t("radio.propose") }}</a>
+    {% if plan %}<a class="toggle {{ 'on' if plan_dfs }}" href="{{ base }}/radios?plan=1&dfs={{ '0' if plan_dfs else '1' }}#edit">{{ '☑' if plan_dfs else '☐' }} {{ t("radio.propose_dfs") }}</a>
+    <a class="toggle" href="{{ base }}/radios#edit">{{ t("radio.propose_reset") }}</a>{% endif %}
+  </div>
+  {% if plan %}<p class="small">{{ t("radio.propose_hint") }}{% if not rv.scanned %} <span class="warn">{{ t("radio.propose_noscan") }}</span>{% endif %}</p>{% endif %}
+  <form hx-post="{{ base }}/radios/preview" hx-target="next .cmd-out" hx-disabled-elt="find button[type=submit]">
+    <table class="list">
+      <thead><tr><th>AP</th><th>{{ t("col.radio") }}</th><th>{{ t("col.band") }}</th><th>{{ t("col.channel") }}</th><th>{{ t("col.width") }}</th><th>{{ t("col.txpower") }}</th>{% if plan %}<th>{{ t("radio.why") }}</th>{% endif %}</tr></thead>
+      {% for e in edit %}
+      {% set k = e.ap ~ '|' ~ e.radio %}
+      <tr class="{{ 'row-off' if not e.up }}">
+        <td>{{ e.ap }}</td><td class="mono small">{{ e.radio }}</td><td>{{ e.band | band }}</td>
+        <td><select name="{{ k }}|channel" class="{{ 'changed' if e.sel_channel != e.cfg_channel }}">
+          <option value="auto" {{ 'selected' if e.sel_channel in ('auto', '0') }}>auto</option>
+          {% for c in e.channels %}<option value="{{ c.channel }}" {{ 'selected' if e.sel_channel == c.channel | string }}>{{ c.channel }}{{ ' (DFS)' if c.dfs }}{{ ' ✓' if e.band.startswith('2') and c.channel in (1, 6, 11) }}</option>{% endfor %}
+        </select>{% if e.sel_channel != e.cfg_channel %} <span class="muted small">{{ t("radio.was", v=e.cfg_channel) }}</span>{% endif %}</td>
+        <td><select name="{{ k }}|htmode" class="{{ 'changed' if e.sel_htmode != e.cfg_htmode }}">
+          {% for h in e.htmodes %}<option value="{{ h }}" {{ 'selected' if e.sel_htmode == h }}>{{ h }}</option>{% endfor %}
+        </select>{% if e.sel_htmode != e.cfg_htmode %} <span class="muted small">{{ t("radio.was", v=e.cfg_htmode) }}</span>{% endif %}</td>
+        <td><select name="{{ k }}|txpower" class="{{ 'changed' if e.sel_txpower != e.cfg_txpower }}">
+          <option value="auto" {{ 'selected' if e.sel_txpower == 'auto' }}>auto</option>
+          {% for p in e.txpowers %}<option value="{{ p }}" {{ 'selected' if e.sel_txpower == p | string }}>{{ p }} dBm</option>{% endfor %}
+        </select>{% if e.sel_txpower != e.cfg_txpower %} <span class="muted small">{{ t("radio.was", v=e.cfg_txpower) }}</span>{% endif %}</td>
+        {% if plan %}<td class="small">{% for w in e.why %}{{ t(w) }}{{ '; ' if not loop.last }}{% else %}<span class="muted">{{ t("radio.why_ok") }}</span>{% endfor %}</td>{% endif %}
+      </tr>
+      {% endfor %}
+    </table>
+    <div class="filters edit">
+      <label>{{ t("col.country") }} <input name="country" maxlength="2" size="3" placeholder="{{ countries | join('/') or 'CZ' }}" style="text-transform: uppercase"></label>
+      <span class="muted small">{{ t("radio.country_hint") }}</span>
+      <button type="submit">{{ t("ssid.preview") }}</button>
+    </div>
+  </form>
+  <div class="cmd-out"></div>
+  <p class="muted small">{{ t("radio.edit_hint") }}</p>
+</div>
+{% endif %}
+
 {% for m in rv.maps if m.bars %}
 <div class="panel">
   <h2>{{ t("radio.map", band=(m.band | band)) }}</h2>

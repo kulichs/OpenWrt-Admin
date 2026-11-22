@@ -137,6 +137,7 @@ class Store:
         self.sensor_count = 0
         self._bad_hosts: set[str] = set()
         self.scans: dict[tuple[str, str], dict] = {}   # (ap, radio) -> {ts, cells, error} – sken okoli
+        self.pending_cmds: dict[str, tuple[float, str, dict[str, list[str]]]] = {}  # token -> (ts, druh, {ap: prikazy})
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -549,6 +550,50 @@ class Store:
                  f" ({res['error']})" if res["error"] else "")
         return res
 
+    def radio(self, ap_name: str, radio_name: str) -> tuple[APState, dict] | None:
+        a = next((x for x in self.aps if x.name == ap_name and x.online), None)
+        r = next((x for x in (a.radios if a else []) if x["name"] == radio_name), None)
+        return (a, r) if r else None
+
+    def scan_cells(self) -> list[dict]:
+        """Vysledky vsech skenu dohromady (kazda cizi sit jednou, nejsilnejsi signal)."""
+        merged: dict[str, dict] = {}
+        for sc in self.scans.values():
+            for c in sc.get("cells") or []:
+                if c["bssid"] not in merged or (c["signal"] or -200) > (merged[c["bssid"]]["signal"] or -200):
+                    merged[c["bssid"]] = c
+        return list(merged.values())
+
+    def add_pending(self, kind: str, plan: dict[str, list[str]]) -> str:
+        now = time.time()
+        self.pending_cmds = {k: v for k, v in self.pending_cmds.items() if now - v[0] < 600}
+        token = secrets.token_urlsafe(16)
+        self.pending_cmds[token] = (now, kind, plan)
+        return token
+
+    def radios_edit(self, plan: list[dict] | None) -> list[dict]:
+        """Radky formulare pro upravu radii: moznosti z iwinfo a predvyplnena hodnota (navrh nebo nastaveni)."""
+        pl = {(p["ap"], p["radio"]): p for p in plan or []}
+        out = []
+        for a in self.aps:
+            if not a.online:
+                continue
+            for r in a.radios:
+                p = pl.get((a.name, r["name"]))
+                cfg_ch, cfg_ht, cfg_tx = str(r.get("channel", "")), str(r.get("htmode") or ""), str(r.get("txpower") or "auto")
+                out.append({"ap": a.name, "radio": r["name"], "band": r.get("band", ""), "up": r.get("up"),
+                            "channels": radiomod.channel_options(r), "htmodes": radiomod.htmode_options(r),
+                            "txpowers": radiomod.txpower_options(r), "cfg_channel": cfg_ch, "cfg_htmode": cfg_ht,
+                            "cfg_txpower": cfg_tx,
+                            # z navrhu jen to, co navrh opravdu meni (kanal i pri "auto" – navrh = pevny kanal)
+                            "sel_channel": str(p["new"]["channel"]) if p and (p["new"]["channel"] != p["cur"]["channel"]
+                                                                              or cfg_ch in ("auto", "0")) else cfg_ch,
+                            "sel_htmode": p["new"]["htmode"] if p and p["new"]["htmode"] != p["cur"]["htmode"] else cfg_ht,
+                            "sel_txpower": str(p["new"]["txpower"]) if p and p["new"]["txpower"] is not None
+                            and p["new"]["txpower"] != p["cur"]["txpower"] else cfg_tx,
+                            "why": p["why"] if p else [], "planned": bool(p and p["changed"])})
+        return out
+
     def radios_view(self) -> dict:
         rows = radiomod.radio_rows(self.aps, self.stats.util())
         for r in rows:
@@ -557,13 +602,7 @@ class Store:
             r["spark"] = statsmod.spark([ser.values()], 140, 26, vmax=100) if ser and len(ser.d) > 1 else None
             r["scan"] = self.scans.get((r["ap"], r["radio"]))
         bands = sorted({r["band"] for r in rows if r["band"]}, key=lambda b: (b[:1] != "2", b))
-        # vysledky vsech skenu dohromady (kazda cizi sit jednou, nejsilnejsi signal)
-        merged: dict[str, dict] = {}
-        for sc in self.scans.values():
-            for c in sc.get("cells") or []:
-                if c["bssid"] not in merged or (c["signal"] or -200) > (merged[c["bssid"]]["signal"] or -200):
-                    merged[c["bssid"]] = c
-        cells = list(merged.values())
+        cells = self.scan_cells()
         return {"rows": rows, "warnings": radiomod.warnings(rows) + radiomod.scan_warnings(rows, self.scans),
                 "maps": [radiomod.channel_map(rows, b, cells) for b in bands],
                 "offline": [a.name for a in self.aps if not a.online],
@@ -1303,8 +1342,128 @@ async def map_page(request: Request, clients: str = "1", empty: str = "0"):
 
 
 @app.get("/radios", response_class=HTMLResponse)
-async def radios_page(request: Request):
-    return render(request, "radios.html", page="radios", rv=store.radios_view())
+async def radios_page(request: Request, plan: str = "", dfs: str = ""):
+    """plan=1: formular predvyplneny navrhem (kanaly, sirky, vykon) – stranka se pak sama neobnovuje."""
+    pl = radiomod.propose(store.aps, store.scan_cells(), dfs_ok=dfs == "1") if plan == "1" else None
+    countries = sorted({str(r.get("country") or "") for a in store.aps for r in a.radios} - {""})
+    return render(request, "radios.html", page="radios", rv=store.radios_view(), edit=store.radios_edit(pl),
+                  plan=pl, plan_dfs=dfs == "1", countries=countries, autorefresh=not pl)
+
+
+@app.post("/radios/preview", response_class=HTMLResponse)
+async def radios_preview(request: Request):
+    require_htmx(request)
+    t = request.state.t
+    title = t("preview.title")
+    if request.state.user["role"] != "full":
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
+    form = await request.form()
+    country = str(form.get("country") or "").strip().upper() or None
+    plan: dict[str, list[str]] = {}
+    rows = []
+    for a in store.aps:
+        if not a.online:
+            continue
+        for r in a.radios:
+            k = f"{a.name}|{r['name']}"
+            if f"{k}|channel" not in form:
+                continue
+            ch, ht, tx = (str(form.get(f"{k}|{f}") or "") for f in ("channel", "htmode", "txpower"))
+            new = {"channel": ch if ch and ch != str(r.get("channel", "")) else None,
+                   "htmode": ht if ht and ht != str(r.get("htmode") or "") else None,
+                   "txpower": tx if tx and tx != str(r.get("txpower") or "auto") else None,
+                   "country": country if country and country != str(r.get("country") or "") else None}
+            if not any(new.values()):
+                continue
+            err = radiomod.validate_radio(r, *new.values())
+            if err:
+                return result(request, title, actions.Result(False, f"{a.name} {r['name']}: {t(err)}"))
+            cmds = radiomod.radio_cmds(r["name"], *new.values())
+            plan.setdefault(a.name, []).extend(cmds)
+            old = {"channel": r.get("channel"), "htmode": r.get("htmode"), "txpower": r.get("txpower") or "auto",
+                   "country": r.get("country") or "–"}
+            rows.append({"ap": a.name, "label": f"{r['name']} · {r.get('band', '')}",
+                         "changes": [f"{t('radio.f_' + f)}: {old[f]} → {v}" for f, v in new.items() if v is not None],
+                         "cmds": cmds,
+                         "dfs": new["channel"] not in (None, "auto") and radiomod.is_dfs(int(new["channel"]))})
+    if not rows:
+        return result(request, title, actions.Result(False, t("msg.no_change")))
+    token = store.add_pending("radio", plan)
+    note = t("radio.apply_note") + (" " + t("radio.apply_dfs_note") if any(x["dfs"] for x in rows) else "")
+    return render(request, "_cmd_preview.html", rows=rows, token=token, note=note)
+
+
+@app.post("/pending/apply", response_class=HTMLResponse)
+async def pending_apply(request: Request, token: str = Form(...)):
+    """Provede cekajici uci zmenu (radia, nove SSID) po nahledu – na kazdem AP zvlast, AP paralelne."""
+    require_htmx(request)
+    t = request.state.t
+    title = t("preview.apply_title")
+    if request.state.user["role"] != "full":
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
+    entry = store.pending_cmds.pop(token, None)
+    if not entry or time.time() - entry[0] > 600:
+        return result(request, title, actions.Result(False, t("msg.preview_expired")))
+    _, kind, plan = entry
+    log.info("%s: %s na %s", who(request), kind, ", ".join(plan))
+    if store.opts.get("demo"):
+        await asyncio.sleep(1)
+        return result(request, title, actions.Result(True, "\n".join(f"{ap}: OK (demo)" for ap in plan)))
+
+    async def one(ap_name, cmds):
+        async with store.ap_lock(ap_name):
+            r = await actions.apply_uci(store.cfg(ap_name), store.key, cmds, t)
+        return f"== {ap_name} ==\n{r.output}", r.ok
+
+    res = await asyncio.gather(*(one(a, c) for a, c in plan.items()))
+
+    async def repoll():
+        await asyncio.sleep(10)  # wifi reload chvili trva
+        await store.poll()
+    asyncio.create_task(repoll())
+    return result(request, title, actions.Result(all(ok for _, ok in res), "\n\n".join(o for o, _ in res)))
+
+
+@app.post("/ssids/new/preview", response_class=HTMLResponse)
+async def ssid_new_preview(request: Request, ssid: str = Form(""), key: str = Form(""), encryption: str = Form("psk2"),
+                           network: str = Form(""), hidden: str = Form("")):
+    """Nove SSID na vybranych radiich (nova wifi-iface sekce). Heslo se do stranky ani logu nevraci."""
+    require_htmx(request)
+    t = request.state.t
+    title = t("preview.title")
+    if request.state.user["role"] != "full":
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
+    form = await request.form()
+    targets = form.getlist("target")  # "ap|radio"
+    plan: dict[str, list[str]] = {}
+    rows = []
+    for target in targets:
+        ap_name, _, radio_name = target.partition("|")
+        ar = store.radio(ap_name, radio_name)
+        if not ar:
+            continue
+        a, r = ar
+        nets = {i["name"] for i in a.interfaces if not i.get("wan")}
+        if nets and network not in nets:
+            return result(request, title, actions.Result(False, t("ssid.err_network", ap=a.name, net=network)))
+        if any(w["ssid"] == ssid and w["device"] == r["name"] for w in a.wifi_ifaces):
+            return result(request, title, actions.Result(False, t("ssid.err_exists", ap=a.name, ssid=ssid, radio=r["name"])))
+        existing = {w["section"] for w in a.wifi_ifaces} | {p.split("=")[0].split(".")[1] for p in plan.get(a.name, [])
+                                                              if p.endswith("=wifi-iface")}
+        n = actions.NewSsid(device=r["name"], ssid=ssid, key=key, encryption=encryption, network=network,
+                            hidden=hidden == "1")
+        n.section = actions.new_section(ssid, r["name"], existing)
+        err = actions.validate_new(n, t)
+        if err:
+            return result(request, title, actions.Result(False, err))
+        cmds = actions.new_ssid_cmds(n)
+        plan.setdefault(a.name, []).extend(cmds)
+        rows.append({"ap": a.name, "label": f"{r['name']} · {r.get('band', '')}",
+                     "changes": [t("ssid.new_row", ssid=ssid, net=network, enc=encryption)], "cmds": [actions.mask(c) for c in cmds]})
+    if not rows:
+        return result(request, title, actions.Result(False, t("ssid.err_no_target")))
+    token = store.add_pending("new-ssid", plan)
+    return render(request, "_cmd_preview.html", rows=rows, token=token, note=t("ssid.new_note"))
 
 
 @app.post("/radios/scan", response_class=HTMLResponse)
@@ -1567,7 +1726,12 @@ async def client_unban(request: Request, mac: str = Form(...), ssid: str = Form(
 
 @app.get("/ssids", response_class=HTMLResponse)
 async def ssids_page(request: Request):
-    return render(request, "ssids.html", page="ssids", groups=store.ssid_groups(), autorefresh=False)
+    nets = sorted({i["name"] for a in store.aps for i in a.interfaces if not i.get("wan") and i.get("name") != "loopback"},
+                  key=lambda n: (n != "lan", n))
+    radios = [{"ap": a.name, "radio": r["name"], "band": r.get("band", ""), "up": r.get("up")}
+              for a in store.aps if a.online for r in a.radios]
+    return render(request, "ssids.html", page="ssids", groups=store.ssid_groups(), autorefresh=False,
+                  new_nets=nets or ["lan"], new_radios=radios, encryptions=actions.ENCRYPTIONS)
 
 
 def _tri(v: str) -> bool | None:

@@ -111,14 +111,70 @@ def mask(cmd: str) -> str:
 
 
 async def apply_ssid(cfg: APConfig, key, changes: list[SsidChange], t) -> Result:
-    cmds = [c for ch in changes for c in uci_commands(ch)]
+    return await apply_uci(cfg, key, [c for ch in changes for c in uci_commands(ch)], t)
+
+
+async def apply_uci(cfg: APConfig, key, cmds: list[str], t) -> Result:
+    """uci prikazy pro wireless -> commit + wifi reload; pri chybe uci revert (nic se nezapise)."""
     if not cmds:
         return Result(True, t("msg.unchanged"))
     script = " && ".join(cmds) + " && uci commit wireless && wifi reload && echo OK"
     log.info("%s: %s", cfg.name, " ; ".join(mask(c) for c in cmds))
-    r = await run(cfg, key, f"{script} || {{ uci revert wireless; echo {shlex.quote(t('msg.reverted'))}; exit 1; }}",
-                  timeout=60, t=t)
-    return r
+    return await run(cfg, key, f"{script} || {{ uci revert wireless; echo {shlex.quote(t('msg.reverted'))}; exit 1; }}",
+                     timeout=60, t=t)
+
+
+# ---------------------------------------------------------------- nove SSID (nova wifi-iface sekce)
+
+ENCRYPTIONS = ("psk2", "sae-mixed", "sae")
+NETWORK_RE = re.compile(r"^[A-Za-z0-9_]{1,32}$")
+
+
+@dataclass
+class NewSsid:
+    device: str          # sekce radia (radio0)
+    ssid: str
+    key: str
+    encryption: str      # psk2 / sae-mixed / sae
+    network: str         # rozhrani site (lan, iot…)
+    hidden: bool = False
+    section: str = ""    # nova uci sekce, viz new_section()
+
+
+def new_section(ssid: str, device: str, existing: set[str]) -> str:
+    """Jmeno nove wifi-iface sekce: owadmin_<ssid>_<radio>, jen [A-Za-z0-9_], unikatni na AP."""
+    base = re.sub(r"[^A-Za-z0-9]+", "_", ssid).strip("_").lower()[:20] or "ssid"
+    name = f"owadmin_{base}_{device}"[:56]
+    k, out = 2, name
+    while out in existing:
+        out, k = f"{name}_{k}", k + 1
+    return out
+
+
+def validate_new(n: NewSsid, t) -> str | None:
+    if not SECTION_RE.match(n.device) or not SECTION_RE.match(n.section):
+        return t("msg.bad_section", section=n.section or n.device)
+    if not (1 <= len(n.ssid.encode()) <= 32) or not n.ssid.isprintable():
+        return t("msg.bad_ssid")
+    if not (8 <= len(n.key) <= 63 and n.key.isascii() and n.key.isprintable()):
+        return t("msg.bad_key")
+    if n.encryption not in ENCRYPTIONS:
+        return t("msg.bad_request")
+    if not NETWORK_RE.match(n.network):
+        return t("msg.bad_request")
+    return None
+
+
+def new_ssid_cmds(n: NewSsid) -> list[str]:
+    s = f"wireless.{n.section}"
+    out = [f"uci set {s}=wifi-iface", f"uci set {s}.device={n.device}", f"uci set {s}.mode=ap",
+           f"uci set {s}.ssid={shlex.quote(n.ssid)}", f"uci set {s}.network={n.network}",
+           f"uci set {s}.encryption={n.encryption}", f"uci set {s}.key={shlex.quote(n.key)}"]
+    if n.encryption != "psk2":
+        out.append(f"uci set {s}.ieee80211w=1")  # WPA3/SAE vyzaduje (u mixed doporucuje) ochranu ridicich ramcu
+    if n.hidden:
+        out.append(f"uci set {s}.hidden=1")
+    return out
 
 
 # ---------------------------------------------------------------- odpojeni klienta

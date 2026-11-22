@@ -12,7 +12,7 @@ from typing import Any
 
 import asyncssh
 
-from .radios import RADIO_CMD, parse_iwinfo, parse_survey, split_radio_output
+from .radios import RADIO_CMD, parse_iwinfo, parse_lists, parse_survey, split_lists, split_radio_output
 
 log = logging.getLogger("openwrt_admin.collector")
 
@@ -226,7 +226,7 @@ async def _read_system(conn, st: APState, timeout: float) -> None:
 def attach_radio_info(radios: list[dict], iface_meta: dict[str, dict], radio_out: str) -> None:
     """Doplni radia o skutecny stav z iwinfo (kanal, sirka, vykon, sum, hardware, phy) a citace survey."""
     iw_text, sv_text = split_radio_output(radio_out)
-    iw, survey = parse_iwinfo(iw_text), parse_survey(sv_text)
+    iw, survey, lists = parse_iwinfo(iw_text), parse_survey(sv_text), parse_lists(split_lists(radio_out))
     for r in radios:
         ifs = sorted(i for i, m in iface_meta.items() if m.get("radio") == r["name"])
         r["ifnames"] = ifs
@@ -236,6 +236,9 @@ def attach_radio_info(radios: list[dict], iface_meta: dict[str, dict], radio_out
         r.update(phy=info["phy"], act_channel=info["channel"], freq=info["freq"], act_htmode=info["htmode"],
                  act_txpower=info["txpower"], noise=info["noise"], hw=info["hw"],
                  bssids=[iw[i]["bssid"] for i in ifs if i in iw and iw[i].get("bssid")])
+        ls = lists.get(info["phy"])
+        if ls:
+            r.update(freqs=ls["freqs"], txpowers=ls["txpowers"], htmodes=ls["htmodes"])
         sv = survey.get(info["phy"])
         if sv:
             r["survey"] = {k: sv.get(k) for k in ("active", "busy", "rx", "tx")}
