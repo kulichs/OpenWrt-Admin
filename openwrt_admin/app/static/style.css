@@ -196,3 +196,15 @@ td.spark-cell { padding-top: .2rem !important; padding-bottom: .2rem !important;
 .stat.stat-bad .num { color: var(--bad); }
 .stat.stat-good .num { color: var(--good); }
 .num-cell { white-space: nowrap; }
+
+/* radia */
+.warnlist { list-style: none; padding: 0; margin: 0; }
+.warnlist li { padding: .35rem 0; border-bottom: 1px solid var(--line); }
+.warnlist li:last-child { border-bottom: 0; }
+.tag.tag-warn { border-color: var(--ok); color: var(--ok); }
+svg.chanmap { display: block; max-width: 100%; height: auto; font: 12px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.chanmap .chan-col { fill: var(--line); fill-opacity: .35; }
+.chanmap .chan-col.best { fill: var(--good); fill-opacity: .12; }
+.chanmap .chan-col.dfs { fill: var(--ok); fill-opacity: .12; }
+.chanmap .chan-tick { fill: var(--muted); } .chanmap .chan-tick.best { fill: var(--good); font-weight: 600; }
+.chanmap .chan-label { fill: var(--fg); }

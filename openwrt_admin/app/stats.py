@@ -358,6 +358,8 @@ class Stats:
         self.wifi: dict[tuple[str, str], tuple[float, float]] = {}    # (ap, mac) -> (down, up) b/s
         self._wifi_prev: dict[tuple[str, str], tuple[float, int, int]] = {}
         self.ports: dict[tuple[str, str], dict] = {}   # (switch, port) -> {down, up: Series, prev: (ts, in, out, bits)}
+        self.radio_util: dict[tuple[str, str], Series] = {}   # (ap, radio) -> vytizeni kanalu v %
+        self._radio_prev: dict[tuple[str, str], dict] = {}
         self.router_ts = 0.0
         self.router_error = ""
         self.switch_errors: dict[str, str] = {}
@@ -455,6 +457,28 @@ class Stats:
                         rates[k] = (dtx * 8 / (ts - p[0]), dr * 8 / (ts - p[0]))
         self._wifi_prev, self.wifi = cur, rates
 
+    # ---- radia
+    def update_radios(self, ts: float, aps):
+        """Vytizeni kanalu z citacu `iw survey` (busy/active v ms od startu) mezi dvema nactenimi AP."""
+        maxlen = max(10, HISTORY // 10)
+        for ap in aps:
+            for r in ap.radios:
+                sv = r.get("survey")
+                if not sv or sv.get("active") is None or sv.get("busy") is None:
+                    continue
+                k = (ap.name, r["name"])
+                p = self._radio_prev.get(k)
+                self._radio_prev[k] = sv
+                if not p:
+                    continue
+                da, db = sv["active"] - p["active"], sv["busy"] - p["busy"]
+                if da <= 0 or db < 0:
+                    continue
+                self.radio_util.setdefault(k, Series(maxlen)).add(ts, min(100.0, 100.0 * db / da))
+
+    def util(self) -> dict[tuple[str, str], float]:
+        return {k: s.last for k, s in self.radio_util.items() if s.last is not None}
+
     # ---- vystupy pro stranky
     def top_clients(self, n: int, resolve) -> list[dict]:
         """resolve(mac, ip) -> {hostname, ip, mac}. Serazeno podle soucasne rychlosti (down + up)."""
@@ -539,7 +563,7 @@ def mbit(v) -> float | None:
 
 
 def ha_entities(st: Stats, router_name: str, ifaces: list[dict], top: list[dict], switches: list,
-                internet_keys: list[str]) -> list[tuple[str, object, dict]]:
+                internet_keys: list[str], radios: list[dict] | None = None) -> list[tuple[str, object, dict]]:
     """-> [(entity_id, stav, atributy)] pro REST API HA. ifaces: [{name, device, vlan, wan}] z routeru."""
     out: list[tuple[str, object, dict]] = []
     rate = {"unit_of_measurement": "Mbit/s", "device_class": "data_rate", "state_class": "measurement"}
@@ -577,6 +601,14 @@ def ha_entities(st: Stats, router_name: str, ifaces: list[dict], top: list[dict]
         "friendly_name": "Internet – top clients", "icon": "mdi:account-network", "source": st.traffic.source,
         "clients": [{"name": r["hostname"] or r["mac"] or r["ip"], "ip": r["ip"], "mac": r["mac"],
                      "download": mbit(r["down"]), "upload": mbit(r["up"])} for r in top]}))
+    for r in radios or []:
+        if r.get("util") is None:
+            continue
+        base = f"openwrt_admin_{slug(r['ap'])}_{slug(r['radio'])}"
+        out.append((f"sensor.{base}_channel_utilization", round(r["util"], 1), {
+            "unit_of_measurement": "%", "state_class": "measurement", "icon": "mdi:wifi-settings",
+            "friendly_name": f"{r['ap']} {r['band'].replace(',', '.')} channel utilization",
+            "channel": r["channel"], "htmode": r["htmode"], "txpower": r["txpower"], "noise": r["noise"]}))
     for sw in switches:
         if not sw.online:
             continue

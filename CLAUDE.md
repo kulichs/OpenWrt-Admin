@@ -117,6 +117,10 @@ Proč je co tak, jak je – čti, než něco „zjednodušíš“:
   při vynechání neplatné adresy neposouvají. Provoz klientů: nlbwmon jen když už běží (nic se neinstaluje),
   jinak conntrack (čítače spojení, rozdíly mezi čteními). Historie jen v paměti (1 h); dlouhodobě = senzory HA
   přes REST `/api/states` (bez unique_id). Směry: u portu switche ↓ = out (k zařízení), u uplinku switche obráceně.
+- **Rádia (`app/radios.py`):** skutečný stav z `iwinfo` (bez parametru, `iwinfo phyN …` starší verze neberou,
+  chtějí jméno rozhraní), vytížení kanálu z rozdílu čítačů `iw survey` (od startu) mezi dvěma načteními AP.
+  Survey jen jednou za phy (první rozhraní s blokem `[in use]`). Bez `iw` se vytížení jen nezobrazí.
+  V šablonách nepoužívat proměnnou `r` z kontextu – `base.html` si ji přepisuje (`set r = store.router`).
 
 ## Struktura
 
@@ -140,6 +144,7 @@ openwrt_admin/
     maint.py                 # aktualizace, zalohy, nova zarizeni
     ha.py                    # API Home Assistantu (jmena, notifikace, senzory pres REST)
     stats.py                 # statistiky: parsery, historie, ping, top klienti, senzory, demo
+    radios.py                # radia: iwinfo, iw survey, upozorneni, mapa kanalu
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/

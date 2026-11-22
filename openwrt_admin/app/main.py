@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import logging
 import os
 import secrets
@@ -19,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, radios as radiomod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_states, demo_switch
 from .snmp import SnmpError
@@ -220,6 +221,15 @@ class Store:
                 self.attach_router_to_switches()
                 self.wired_state = wiredmod.locate(self.l2(), self.router, self.info, self.seen, known=self._known())
                 self.stats.update_wifi(time.time(), self.aps)
+                self.stats.update_radios(time.time(), self.aps)
+                for ap in self.aps:  # demo: hodina historie vytizeni kanalu
+                    for r in ap.radios:
+                        sv = r.get("survey")
+                        ser = self.stats.radio_util.setdefault((ap.name, r["name"]), statsmod.Series(360)) if sv else None
+                        if ser is not None and len(ser.d) < 2:
+                            base = 100 * sv["busy"] / max(1, sv["active"])
+                            for k in range(120, 0, -1):
+                                ser.add(time.time() - k * 30, max(0.0, base * (0.7 + 0.6 * abs(math.sin(k / 9)))))
                 # ukazka: zablokovany klient na HomeWiFi (oba AP)
                 for ap in self.aps:
                     ap.bans_ok = ap.online
@@ -257,6 +267,7 @@ class Store:
             self.info = self.build_info()
             self.wired_state = wiredmod.locate(self.l2(), self.router, self.info, self.seen, known=self._known())
             self.stats.update_wifi(time.time(), self.aps)
+            self.stats.update_radios(time.time(), self.aps)
             self._save_seen()
             self.last_poll = time.time()
         await self.track_new()
@@ -488,7 +499,7 @@ class Store:
     async def publish_sensors(self):
         top = self.stats.top_clients(int(self.opts.get("top_clients", 10) or 10), self.resolve_host)
         ents = statsmod.ha_entities(self.stats, self.router.name if self.router else "router", self.router_ifaces(), top,
-                                    self.switches, self.internet_keys())
+                                    self.switches, self.internet_keys(), radiomod.radio_rows(self.aps, self.stats.util()))
         self.sensor_count = len(ents)
         if self.opts.get("demo") or not os.environ.get("SUPERVISOR_TOKEN"):
             self.sensor_status = "demo"
@@ -499,6 +510,18 @@ class Store:
         except Exception as e:  # noqa: BLE001 - senzory jsou bonus
             self.sensor_status = f"{type(e).__name__}: {e}"
             log.warning("Senzory do HA: %s", self.sensor_status)
+
+    # ------------------------------------------------------------ radia
+    def radios_view(self) -> dict:
+        rows = radiomod.radio_rows(self.aps, self.stats.util())
+        for r in rows:
+            ser = self.stats.radio_util.get((r["ap"], r["radio"]))
+            r["util_avg"] = ser.avg() if ser else None
+            r["spark"] = statsmod.spark([ser.values()], 140, 26, vmax=100) if ser and len(ser.d) > 1 else None
+        bands = sorted({r["band"] for r in rows if r["band"]}, key=lambda b: (b[:1] != "2", b))
+        return {"rows": rows, "warnings": radiomod.warnings(rows),
+                "maps": [radiomod.channel_map(rows, b) for b in bands],
+                "offline": [a.name for a in self.aps if not a.online]}
 
     # ------------------------------------------------------------ switche
     def l2(self) -> list[APState]:
@@ -1231,6 +1254,11 @@ async def map_page(request: Request, clients: str = "1", empty: str = "0"):
                           ap_wired=ap_wired, parent=w["parent"], speeds=speeds,
                           loads=store.link_loads() if store.stats_on else {})
     return render(request, "map.html", page="map", topo=topo, show_clients=show_clients, show_empty=show_empty)
+
+
+@app.get("/radios", response_class=HTMLResponse)
+async def radios_page(request: Request):
+    return render(request, "radios.html", page="radios", rv=store.radios_view())
 
 
 @app.get("/stats", response_class=HTMLResponse)

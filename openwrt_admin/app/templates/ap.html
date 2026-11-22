@@ -42,12 +42,16 @@
   <div class="panel">
     <h2>{{ t("ap.radios") }}</h2>
     <table class="list">
-      <thead><tr><th>{{ t("col.radio") }}</th><th>{{ t("col.band") }}</th><th>{{ t("col.channel") }}</th><th>{{ t("col.width") }}</th><th>{{ t("col.txpower") }}</th><th>{{ t("col.country") }}</th><th>{{ t("col.state") }}</th></tr></thead>
+      <thead><tr><th>{{ t("col.radio") }}</th><th>{{ t("col.band") }}</th><th>{{ t("col.channel") }}</th><th>{{ t("col.width") }}</th><th>{{ t("col.txpower") }}</th><th>{{ t("col.country") }}</th><th class="num">{{ t("radio.util") }}</th><th>{{ t("col.state") }}</th></tr></thead>
+      {% set util = store.stats.util() %}
       {% for r in ap.radios %}
-      <tr><td>{{ r.name }}</td><td>{{ r.band | band }}</td><td>{{ r.channel }}</td><td>{{ r.htmode }}</td>
-          <td>{{ r.txpower }}</td><td>{{ r.country }}</td><td>{{ t("state.on") if r.up else (t("state.off") if r.disabled else t("state.down")) }}</td></tr>
+      {% set u = util.get((ap.name, r.name)) %}
+      <tr><td>{{ r.name }}</td><td>{{ r.band | band }}</td><td>{{ r.act_channel or r.channel }}{% if r.act_channel and r.channel in ('auto', '0') %} <span class="muted small">(auto)</span>{% endif %}</td><td>{{ r.act_htmode or r.htmode }}</td>
+          <td>{% if r.act_txpower is not none and r.act_txpower is defined %}{{ r.act_txpower }} dBm{% else %}{{ r.txpower }}{% endif %}</td><td>{{ r.country }}</td>
+          <td class="num">{% if u is not none %}<span class="{{ 'err' if u >= 50 else ('warn' if u >= 30 else '') }}">{{ u | round | int }} %</span>{% else %}–{% endif %}</td><td>{{ t("state.on") if r.up else (t("state.off") if r.disabled else t("state.down")) }}</td></tr>
       {% endfor %}
     </table>
+    <p class="small"><a href="{{ base }}/radios">{{ t("radio.all_link") }}</a></p>
     <h2>SSID {% if can_edit %}<a class="small" href="{{ base }}/ssids">{{ t("ap.edit") }}</a>{% endif %}</h2>
     <table class="list">
       <thead><tr><th>SSID</th><th>{{ t("col.network") }}</th><th>{{ t("col.band") }}</th><th>{{ t("col.interface") }}</th><th>{{ t("col.encryption") }}</th><th class="num">{{ t("col.clients") }}</th></tr></thead>

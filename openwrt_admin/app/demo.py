@@ -88,6 +88,19 @@ def demo_states() -> tuple[list[APState], dict]:
                           "network": "guest", "encryption": "psk2", "has_key": True, "hidden": False,
                           "disabled": True})
 
+    # skutecny stav radii (iwinfo) a citace survey (vytizeni kanalu); AP-Office 2,4 GHz schvalne na kanalu 3
+    b.radios[0]["channel"] = 3
+    for ap, r, util, tx, noise, hw in [(a, a.radios[0], 0.34, 20, -92, "Atheros AR9342"),
+                                        (b, b.radios[0], 0.22, 17, -95, "MediaTek MT7628"),
+                                        (b, b.radios[1], 0.06, 23, -97, "MediaTek MT7612E")]:
+        active = (now - T0) * 1000 + 5e8
+        ch = int(r["channel"])
+        r.update(ifnames=sorted(s["ifname"] for s in ap.ssids if s["radio"] == r["name"]),
+                 phy="phy" + r["name"][-1], act_channel=ch, act_htmode=r["htmode"], act_txpower=tx, noise=noise, hw=hw,
+                 freq=(2407 + 5 * ch) if ch < 14 else (5000 + 5 * ch),
+                 survey={"active": int(active), "busy": int(active * util + 4e5 * math.sin((now - T0) / 300)),
+                         "rx": int(active * util * 0.7), "tx": int(active * util * 0.2)})
+
     leases = {}
     names = ["phone-anna", "laptop", "esp-thermo", "tv-living", "shelly-1", "tablet"]
     for i, cl in enumerate(a.clients + b.clients):

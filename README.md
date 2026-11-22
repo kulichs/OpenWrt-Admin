@@ -6,7 +6,7 @@
 
 | Add-on | Description |
 |---|---|
-| [OpenWrt-Admin](openwrt_admin/) | Manage OpenWrt access points and Wi-Fi clients over SSH (`ubus`/`uci`): overview, clients, SSIDs, router, network map with VLANs, wired devices on AP ports and managed switches (SNMP), network statistics (interface speeds, ping, top internet users, switch port traffic, optional HA sensors), new-device notifications, update overview, configuration backups, disconnecting clients, reboot, permissions per Home Assistant user. UI in English and Czech. |
+| [OpenWrt-Admin](openwrt_admin/) | Manage OpenWrt access points and Wi-Fi clients over SSH (`ubus`/`uci`): overview, clients, SSIDs, radios and channels (utilisation, warnings, channel map), router, network map with VLANs, wired devices on AP ports and managed switches (SNMP), network statistics (interface speeds, ping, top internet users, switch port traffic, optional HA sensors), new-device notifications, update overview, configuration backups, disconnecting clients, reboot, permissions per Home Assistant user. UI in English and Czech. |
 
 **Install:** Home Assistant → **Settings → Apps (Add-ons) → store → ⋮ → Repositories** → add the URL of this repository (or `ha store add <URL>` in the HA terminal). Not via *Marketplace → Add from link*, that one is GitHub/HACS only.
 
@@ -22,7 +22,7 @@ Developers: [CONTRIBUTING.md](CONTRIBUTING.md) (Czech) and project rules in [CLA
 
 | Add-on | Popis |
 |---|---|
-| [OpenWrt-Admin](openwrt_admin/) | Správa OpenWrt AP a Wi-Fi klientů přes SSH (`ubus`/`uci`): přehled, klienti, SSID, router, mapa sítě s VLANy, kabelovými zařízeními na portech AP a spravovanými switchi (SNMP), statistiky sítě (rychlosti rozhraní, ping, kdo vytěžuje internet, provoz na portech switche, volitelně senzory do HA), upozornění na nová zařízení, přehled aktualizací, zálohy konfigurace, odpojení klientů, restart, oprávnění podle uživatelů Home Assistantu. Rozhraní česky a anglicky. |
+| [OpenWrt-Admin](openwrt_admin/) | Správa OpenWrt AP a Wi-Fi klientů přes SSH (`ubus`/`uci`): přehled, klienti, SSID, rádia a kanály (vytížení, upozornění, mapa kanálů), router, mapa sítě s VLANy, kabelovými zařízeními na portech AP a spravovanými switchi (SNMP), statistiky sítě (rychlosti rozhraní, ping, kdo vytěžuje internet, provoz na portech switche, volitelně senzory do HA), upozornění na nová zařízení, přehled aktualizací, zálohy konfigurace, odpojení klientů, restart, oprávnění podle uživatelů Home Assistantu. Rozhraní česky a anglicky. |
 
 **Instalace:** Home Assistant → **Nastavení → Aplikace (Doplňky) → obchod → ⋮ → Repozitáře** → přidat URL tohoto repozitáře (nebo `ha store add <URL>` v terminálu HA). Ne přes *Marketplace → Přidat z odkazu*, ten bere jen GitHub/HACS.
 

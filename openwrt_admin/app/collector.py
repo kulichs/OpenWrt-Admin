@@ -12,6 +12,8 @@ from typing import Any
 
 import asyncssh
 
+from .radios import RADIO_CMD, parse_iwinfo, parse_survey, split_radio_output
+
 log = logging.getLogger("openwrt_admin.collector")
 
 
@@ -221,6 +223,25 @@ async def _read_system(conn, st: APState, timeout: float) -> None:
         st.overlay_avail = int(parts[3]) * 1024
 
 
+def attach_radio_info(radios: list[dict], iface_meta: dict[str, dict], radio_out: str) -> None:
+    """Doplni radia o skutecny stav z iwinfo (kanal, sirka, vykon, sum, hardware, phy) a citace survey."""
+    iw_text, sv_text = split_radio_output(radio_out)
+    iw, survey = parse_iwinfo(iw_text), parse_survey(sv_text)
+    for r in radios:
+        ifs = sorted(i for i, m in iface_meta.items() if m.get("radio") == r["name"])
+        r["ifnames"] = ifs
+        info = next((iw[i] for i in ifs if i in iw), None)
+        if not info:
+            continue
+        r.update(phy=info["phy"], act_channel=info["channel"], freq=info["freq"], act_htmode=info["htmode"],
+                 act_txpower=info["txpower"], noise=info["noise"], hw=info["hw"])
+        sv = survey.get(info["phy"])
+        if sv:
+            r["survey"] = {k: sv.get(k) for k in ("active", "busy", "rx", "tx")}
+            if r.get("noise") is None:
+                r["noise"] = sv.get("noise")
+
+
 # ---------------------------------------------------------------- AP
 
 async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0) -> APState:
@@ -234,7 +255,7 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
             known_hosts=None,  # host klice se meni pri sysupgrade -n; jen LAN a jen cteni
             connect_timeout=timeout,
         ) as conn:
-            (wstatus, hostapd_list, uci_wl, ifdump, devstatus, ucinet, arl, arp, swports), _ = await asyncio.gather(
+            (wstatus, hostapd_list, uci_wl, ifdump, devstatus, ucinet, arl, arp, swports, radio_out), _ = await asyncio.gather(
                 asyncio.gather(
                     _ubus(conn, "network.wireless", "status", timeout),
                     _run(conn, "ubus list 'hostapd.*'", timeout),
@@ -245,6 +266,7 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
                     _run(conn, ARL_CMD, timeout),
                     _run(conn, "cat /proc/net/arp", timeout),
                     _run(conn, PORTS_CMD, timeout),
+                    _run(conn, RADIO_CMD, timeout),
                 ),
                 _read_system(conn, st, timeout),
             )
@@ -283,6 +305,8 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
                         "hidden": bool(ic.get("hidden")),
                         "disabled": bool(ic.get("disabled")),
                     }
+
+            attach_radio_info(st.radios, iface_meta, radio_out)
 
             for obj in hostapd_list.split():
                 ifname = obj.split(".", 1)[1] if "." in obj else obj

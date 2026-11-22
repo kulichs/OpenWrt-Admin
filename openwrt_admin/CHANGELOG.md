@@ -2,6 +2,19 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.17.0
+- New **Radios** page: all radios of all APs in one table with the real channel (also with `auto`), width, transmit power, noise and chip from `iwinfo`, and **channel utilisation** (now, average, chart of the last hour) from `iw survey`.
+- Warnings and tips: own APs on the same/overlapping channel, 2.4 GHz outside 1/6/11 or 40 MHz wide, 5 GHz only 20 MHz, channel `auto`, DFS, busy channel, high noise, 2.4 GHz stronger than 5 GHz, different/missing country.
+- Channel map per band (occupied channels with width, 1/6/11 and DFS highlighted).
+- AP page: real channel, width, power and channel utilisation in the radio table. HA sensors: channel utilisation per radio.
+- Verified: parsers on real `iwinfo` and `iw survey` output (AR9340/AR9580), the shell command against a simulated sysfs, demo cs + en. Not yet on the real network.
+---
+- Nová stránka **Rádia**: všechna rádia všech AP v jedné tabulce se skutečným kanálem (i u `auto`), šířkou, vysílacím výkonem, šumem a čipem z `iwinfo` a **vytížením kanálu** (teď, průměr, graf za hodinu) z `iw survey`.
+- Upozornění a tipy: vlastní AP na stejném/překrývajícím se kanálu, 2,4 GHz mimo 1/6/11 nebo 40 MHz, 5 GHz jen 20 MHz, kanál `auto`, DFS, vytížený kanál, vysoký šum, 2,4 GHz silnější než 5 GHz, různá/chybějící země.
+- Mapa kanálů pro každé pásmo (zabrané kanály i se šířkou, zvýrazněné 1/6/11 a DFS).
+- Stránka AP: skutečný kanál, šířka, výkon a vytížení kanálu v tabulce rádií. Senzory HA: vytížení kanálu každého rádia.
+- Ověřeno: parsery na skutečném výstupu `iwinfo` a `iw survey` (AR9340/AR9580), příkaz pro shell proti simulovanému sysfs, demo cs + en. Na skutečné síti zatím ne.
+
 ## 0.16.0
 - New option `new_device_hours` (default 24, 0 = off): how long a device has the "new" tag; shown on the Settings page.
 - Fix: charts and the ping history were black after updating – the browser (Ingress) kept the old `style.css` in its cache. Static files now have a version in their URL, and the charts carry their colours also directly in the SVG.

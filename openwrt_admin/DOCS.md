@@ -132,6 +132,22 @@ AP and router pages have a **Ports** panel: every physical port with its state, 
 - Colours: green 1 Gb/s and more, orange 100 Mb/s, red 10 Mb/s, dashed = disconnected; half-duplex is flagged. **100 Mb/s instead of 1 Gb/s** usually means a damaged or 4-wire cable, or a device that cannot do more.
 - On the **map** the line to each AP is labelled with the speed of its uplink port, and wired devices on AP ports show their port speed (green 1 Gb/s, orange below).
 
+### Radios and channels
+
+The **Radios** page lists every radio of every AP in one table and checks the settings:
+
+| Column | Source |
+|---|---|
+| channel (and frequency), width, transmit power, noise, chip | `iwinfo` – the real values; with channel `auto` the channel the radio actually uses, power after hardware limits |
+| configured channel and power | `uci`/`network.wireless status` (shown next to the real value when they differ) |
+| channel utilisation now, average and chart of the last hour | `iw dev <if> survey dump` – `channel busy time` / `channel active time` between two AP readings (every `poll_interval`) |
+
+- **Warnings and tips:** two of your APs on the same or overlapping channel, 2.4 GHz outside channels 1/6/11, 40 MHz on 2.4 GHz, 5 GHz only 20 MHz wide, channel `auto`, DFS channel (52–144), channel busy over 50 %, high noise, 2.4 GHz transmitting stronger than 5 GHz on the same AP (phones then stick to 2.4 GHz), different or missing country.
+- **Channel map** for each band: which channels every AP occupies with its width; channels 1/6/11 and DFS channels are highlighted.
+- The AP page shows the real channel, width, power and channel utilisation in its radio table.
+- With `ha_sensors` each radio also gets `sensor.openwrt_admin_<ap>_<radio>_channel_utilization` (%).
+- Read-only for now. Planned: an optional neighbour scan and changing channel/width/power with a preview and a proposed channel plan.
+
 ### Statistics
 
 The **Statistics** page (option `stats`, on by default) shows what the network is doing right now and in the last hour:
@@ -167,6 +183,7 @@ With `ha_sensors: true` the add-on writes the statistics every `ha_sensors_inter
 | `binary_sensor.openwrt_admin_internet` | on when at least one internet target answers |
 | `sensor.openwrt_admin_top_clients` | number of active clients; attribute `clients` = list (name, IP, MAC, download, upload in Mbit/s) |
 | `sensor.openwrt_admin_<switch>_port<N>_down` / `_up` | Mbit/s, connected ports only |
+| `sensor.openwrt_admin_<ap>_<radio>_channel_utilization` | % (attributes channel, htmode, txpower, noise) |
 
 The entities are created on the first write. They have no `unique_id`, so they cannot be renamed in the UI, and after an HA restart they appear again with the next update. They have `state_class: measurement`, so HA keeps long-term statistics and they can go to InfluxDB and be shown in **Grafana**. The Settings page shows how many entities are sent and the last error.
 
@@ -292,6 +309,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | device names (Home Assistant) | websocket `config/device_registry/list` (MAC connections) |
 | statistics (router, every `stats_interval`) | `/proc/net/dev`, `/sys/class/thermal`, `/proc/loadavg`, `ping -c 1 -W 1`, `nlbw -c json -g mac,ip` or `/proc/net/nf_conntrack` |
 | switch port traffic | SNMP `ifHCInOctets`, `ifHCOutOctets` |
+| radios: real channel, width, power, noise; channel utilisation | `iwinfo`, `iw dev <if> survey dump` |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
 
@@ -458,6 +476,22 @@ Stránka AP i routeru má panel **Porty**: každý fyzický port se stavem, vyje
 - Barvy: zeleně 1 Gb/s a víc, oranžově 100 Mb/s, červeně 10 Mb/s, čárkovaně = odpojeno; half-duplex je označený. **100 Mb/s místo 1 Gb/s** bývá poškozený nebo 4žilový kabel, případně zařízení, které víc neumí.
 - Na **mapě** je u čáry ke každému AP rychlost jeho uplink portu a kabelová zařízení na portech AP mají rychlost svého portu (1 Gb/s zeleně, pod 1 Gb/s oranžově).
 
+### Rádia a kanály
+
+Stránka **Rádia** ukazuje všechna rádia všech AP v jedné tabulce a kontroluje nastavení:
+
+| Sloupec | Zdroj |
+|---|---|
+| kanál (a frekvence), šířka, vysílací výkon, šum, čip | `iwinfo` – skutečné hodnoty; u kanálu `auto` ten, na kterém rádio opravdu vysílá, výkon po omezení hardwarem |
+| nastavený kanál a výkon | `uci`/`network.wireless status` (ukáže se vedle skutečné hodnoty, když se liší) |
+| vytížení kanálu teď, průměr a graf za poslední hodinu | `iw dev <if> survey dump` – `channel busy time` / `channel active time` mezi dvěma načteními AP (každých `poll_interval`) |
+
+- **Upozornění a tipy:** dvě tvoje AP na stejném nebo překrývajícím se kanálu, 2,4 GHz mimo kanály 1/6/11, 40 MHz na 2,4 GHz, 5 GHz jen 20 MHz, kanál `auto`, DFS kanál (52–144), kanál vytížený nad 50 %, vysoký šum, 2,4 GHz vysílá silněji než 5 GHz na stejném AP (telefony se pak drží 2,4 GHz), různá nebo chybějící země.
+- **Mapa kanálů** pro každé pásmo: které kanály každé AP zabírá i se šířkou; kanály 1/6/11 a DFS kanály jsou zvýrazněné.
+- Stránka AP ukazuje v tabulce rádií skutečný kanál, šířku, výkon a vytížení kanálu.
+- S `ha_sensors` má každé rádio i senzor `sensor.openwrt_admin_<ap>_<rádio>_channel_utilization` (%).
+- Zatím jen čtení. V plánu: volitelný sken okolních sítí a změna kanálu/šířky/výkonu s náhledem a návrhem rozdělení kanálů.
+
 ### Statistiky
 
 Stránka **Statistiky** (volba `stats`, ve výchozím stavu zapnutá) ukazuje, co síť dělá teď a za poslední hodinu:
@@ -493,6 +527,7 @@ S `ha_sensors: true` add-on každých `ha_sensors_interval` sekund zapisuje stat
 | `binary_sensor.openwrt_admin_internet` | on, když odpovídá aspoň jeden cíl v internetu |
 | `sensor.openwrt_admin_top_clients` | počet aktivních klientů; atribut `clients` = seznam (jméno, IP, MAC, download, upload v Mbit/s) |
 | `sensor.openwrt_admin_<switch>_port<N>_down` / `_up` | Mbit/s, jen připojené porty |
+| `sensor.openwrt_admin_<ap>_<rádio>_channel_utilization` | % (atributy kanál, htmode, výkon, šum) |
 
 Entity vzniknou při prvním zápisu. Nemají `unique_id`, takže je nejde přejmenovat v UI, a po restartu HA se objeví znovu s další aktualizací. Mají `state_class: measurement`, takže HA drží dlouhodobé statistiky a jdou do InfluxDB a do **Grafany**. Stránka Nastavení ukazuje, kolik entit se posílá, a poslední chybu.
 
@@ -618,6 +653,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | jména zařízení (Home Assistant) | websocket `config/device_registry/list` (MAC v connections) |
 | statistiky (router, každých `stats_interval`) | `/proc/net/dev`, `/sys/class/thermal`, `/proc/loadavg`, `ping -c 1 -W 1`, `nlbw -c json -g mac,ip` nebo `/proc/net/nf_conntrack` |
 | provoz na portech switche | SNMP `ifHCInOctets`, `ifHCOutOctets` |
+| rádia: skutečný kanál, šířka, výkon, šum; vytížení kanálu | `iwinfo`, `iw dev <if> survey dump` |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).
 

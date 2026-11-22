@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("radio.title") }}</h1>
+{% if rv.offline %}<p class="muted small">{{ t("radio.offline", aps=(rv.offline | join(", "))) }}</p>{% endif %}
+{% if not rv.rows %}
+<p class="empty">{{ t("radio.none") }}</p>
+{% else %}
+<div class="panel">
+  <table class="list">
+    <thead><tr><th>AP</th><th>{{ t("col.radio") }}</th><th>{{ t("col.band") }}</th><th>{{ t("col.channel") }}</th><th>{{ t("col.width") }}</th>
+      <th class="num">{{ t("col.txpower") }}</th><th>{{ t("col.country") }}</th><th class="num">{{ t("radio.noise") }}</th>
+      <th class="num">{{ t("col.clients") }}</th><th class="num">{{ t("radio.util") }}</th><th>{{ t("stats.col_history") }}</th><th>{{ t("radio.hw") }}</th></tr></thead>
+    {% for x in rv.rows %}
+    <tr class="{{ '' if x.up else 'row-off' }}">
+      <td><a href="{{ base }}/ap/{{ x.ap | urlencode }}">{{ x.ap }}</a></td>
+      <td class="mono small">{{ x.radio }}{% if x.phy %} <span class="muted">{{ x.phy }}</span>{% endif %}</td>
+      <td><span class="tag band-{{ '5' if x.band == '5 GHz' else ('6' if x.band == '6 GHz' else '24') }}">{{ x.band | band }}</span></td>
+      <td><b>{{ x.channel or "–" }}</b>{% if x.cfg_channel in ('auto', '0') %} <span class="muted small">(auto)</span>{% endif %}{% if x.dfs %} <span class="tag" title="{{ t('radio.dfs_title') }}">DFS</span>{% endif %}{% if x.freq %} <span class="muted small">{{ x.freq }} MHz</span>{% endif %}</td>
+      <td>{{ x.htmode or "–" }}</td>
+      <td class="num num-cell">{% if x.txpower is not none %}{{ x.txpower }} dBm{% else %}–{% endif %}{% if x.cfg_txpower and x.cfg_txpower not in ('auto', '') %} <span class="muted small">({{ t("radio.cfg") }} {{ x.cfg_txpower }})</span>{% endif %}</td>
+      <td>{{ x.country or "–" }}</td>
+      <td class="num num-cell">{% if x.noise is not none %}{{ x.noise }} dBm{% else %}–{% endif %}</td>
+      <td class="num">{{ x.clients }}</td>
+      <td class="num num-cell">{% if x.util is not none %}<span class="{{ 'err' if x.util >= 50 else ('warn' if x.util >= 30 else '') }}">{{ x.util | round | int }} %</span>{% if x.util_avg is not none %} <span class="muted small">⌀ {{ x.util_avg | round | int }} %</span>{% endif %}{% else %}–{% endif %}</td>
+      <td class="spark-cell">{% if x.spark %}<svg class="spark" width="{{ x.spark.w }}" height="{{ x.spark.h }}" viewBox="0 0 {{ x.spark.w }} {{ x.spark.h }}" preserveAspectRatio="none"><path d="{{ x.spark.paths[0] }}" class="a" fill="#03a9f4" fill-opacity="0.18" stroke="#03a9f4" stroke-width="1.2"/><title>0–100 %</title></svg>{% endif %}</td>
+      <td class="small muted">{{ x.hw or "–" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">{{ t("radio.hint") }}</p>
+</div>
+
+<div class="panel">
+  <h2>{{ t("radio.warnings") }}</h2>
+  {% if rv.warnings %}
+  <ul class="warnlist">
+    {% for w in rv.warnings %}
+    <li class="lvl-{{ w.level }}"><span class="tag {{ 'tag-warn' if w.level == 'warn' else '' }}">{{ t("radio.level_" ~ w.level) }}</span> {{ t(w.key, **w.args) | replace(",4 GHz", (",4 GHz" if lang == "cs" else ".4 GHz")) }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="sig good">{{ t("radio.no_warnings") }}</p>
+  {% endif %}
+</div>
+
+{% for m in rv.maps if m.bars %}
+<div class="panel">
+  <h2>{{ t("radio.map", band=(m.band | band)) }}</h2>
+  <svg class="chanmap" width="{{ m.width }}" height="{{ m.height }}" viewBox="0 0 {{ m.width }} {{ m.height }}" role="img">
+    {% for tk in m.ticks %}
+    <rect x="{{ tk.x - m.col / 2 + 1 }}" y="20" width="{{ m.col - 2 }}" height="{{ m.height - 20 }}" class="chan-col {{ 'best' if tk.best }} {{ 'dfs' if tk.dfs }}"/>
+    <text x="{{ tk.x }}" y="14" text-anchor="middle" class="chan-tick {{ 'best' if tk.best }}">{{ tk.ch }}</text>
+    {% endfor %}
+    {% for b in m.bars %}
+    <text x="{{ m.x0 - 8 }}" y="{{ b.y + 13 }}" text-anchor="end" class="chan-label">{{ b.ap | replace('OpenWrt_', '') }}</text>
+    <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="18" rx="4" fill="{{ b.color }}" fill-opacity="0.35" stroke="{{ b.color }}"><title>{{ b.ap }} · {{ b.radio }} · {{ t("col.channel") }} {{ b.channel }} · {{ b.htmode }}</title></rect>
+    {% if b.cx %}<circle cx="{{ b.cx }}" cy="{{ b.y + 9 }}" r="3.5" fill="{{ b.color }}"/>{% endif %}
+    {% endfor %}
+  </svg>
+  <p class="muted small">{{ t("radio.map_hint_24") if m.band.startswith('2') else t("radio.map_hint_5") }}</p>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

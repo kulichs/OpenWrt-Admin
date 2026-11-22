@@ -51,7 +51,7 @@ Mimo Ingress add-on pouští jen požadavky z lokální adresy; uživatele nasim
 Automatická testovací sada v repozitáři **zatím není** (viz otevřené body níže). Před předáním změny:
 
 1. **Syntaxe:** `python -m py_compile app/*.py`, `config.yaml` a `translations/*.yaml` se načtou přes `yaml.safe_load`.
-2. **Demo, všechny stránky v cs i en:** `/`, `/clients`, `/ssids`, `/map`, `/stats`, `/setup`, `/ap/<každé zařízení>`, `/api/stats`
+2. **Demo, všechny stránky v cs i en:** `/`, `/clients`, `/ssids`, `/map`, `/radios`, `/stats`, `/setup`, `/ap/<každé zařízení>`, `/api/stats`
    vrací 200 a v HTML nezůstal žádný nepřeložený klíč (`upd.…`, `map.…` apod.).
 3. **Role:** uživatel jen pro čtení nevidí akční tlačítka a akce mu server odmítne (`msg.no_permission`).
 4. **Parsery na skutečných výstupech:** nový parser vyzkoušej na výstupu ze skutečného zařízení
