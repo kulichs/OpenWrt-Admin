@@ -230,3 +230,5 @@ td.btns button { margin-right: .2rem; }
 /* zalozky zarizeni (0.18.1) */
 nav.subtabs { display: flex; gap: 1.4rem; border-bottom: 1px solid var(--line); margin: -.4rem 0 1rem; }
 nav.subtabs a { margin: 0; padding: .35rem 0; }
+.spinner { display: inline-block; width: .9em; height: .9em; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -.1em; }
+@keyframes spin { to { transform: rotate(360deg); } }

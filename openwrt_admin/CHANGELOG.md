@@ -2,6 +2,13 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.18.2
+- Faster **Services** tab: "starts on boot" is read from `/etc/rc.d` instead of running `/etc/init.d/<x> enabled` for each of ~40 scripts (took seconds on the router); the adblock search command is detected from the init script without running it.
+- The tab opens immediately and the data is loaded into it ("Loading…"); within 60 s of the last read (and after every action) it is shown straight from memory.
+---
+- Rychlejší záložka **Služby**: „spouští se po startu“ se čte z `/etc/rc.d` místo spouštění `/etc/init.d/<x> enabled` u každého z ~40 skriptů (na routeru to trvalo sekundy); příkaz hledání v adblocku se pozná z init skriptu bez jeho spuštění.
+- Záložka se otevře hned a data se do ní dotáhnou („Načítám…“); do 60 s od posledního načtení (a po každé akci) se ukáže rovnou z paměti.
+
 ## 0.18.1
 - Services moved from a separate page to a **Services tab on each device** (router and AP page: Overview | Services) – every action applies only to that device. The old `/services` address redirects to the router.
 ---

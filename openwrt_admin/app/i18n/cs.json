@@ -605,5 +605,6 @@
   "list.del_block": "odebrat {v} z blokovaných",
   "svc.st_static": "bez procesu",
   "dev.tab_overview": "Přehled",
-  "dev.tab_services": "Služby"
+  "dev.tab_services": "Služby",
+  "svc.loading": "Načítám služby ze zařízení…"
 }

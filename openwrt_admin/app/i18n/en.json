@@ -597,5 +597,6 @@
   "list.del_block": "remove {v} from blocked",
   "svc.st_static": "no process",
   "dev.tab_overview": "Overview",
-  "dev.tab_services": "Services"
+  "dev.tab_services": "Services",
+  "svc.loading": "Loading services from the device…"
 }

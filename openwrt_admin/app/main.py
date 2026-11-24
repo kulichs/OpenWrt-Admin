@@ -1568,14 +1568,31 @@ async def services_redirect(request: Request):
     return RedirectResponse(f"{base}/ap/{quote(devs[0].name)}/services" if devs else f"{base}/", status_code=303)
 
 
+def _svc_data(ap: APState) -> dict:
+    return {"name": ap.name, "kind": ap.kind, "online": ap.online, **(store.svc.get(ap.name) or {})}
+
+
+SVC_FRESH = 60.0  # s – do te doby se zalozka ukaze hned z pameti (po akci se nacita vzdy znovu)
+
+
 @app.get("/ap/{name}/services", response_class=HTMLResponse)
 async def device_services(request: Request, name: str):
+    """Zalozka Sluzby: s cerstvymi daty hned, jinak stranka hned a obsah se dotahne (/services/body)."""
     ap = store.ap(name)
     if ap.kind == "switch":
         raise HTTPException(404, "device not found")
-    await store.load_services(only=name)
-    d = {"name": ap.name, "kind": ap.kind, "online": ap.online, **(store.svc.get(ap.name) or {})}
-    return render(request, "services.html", page="ap:" + name, ap=ap, d=d, autorefresh=False)
+    fresh = time.time() - (store.svc.get(name) or {}).get("ts", 0) < SVC_FRESH
+    return render(request, "services.html", page="ap:" + name, ap=ap, d=_svc_data(ap) if fresh else None,
+                  autorefresh=False)
+
+
+@app.get("/ap/{name}/services/body", response_class=HTMLResponse)
+async def device_services_body(request: Request, name: str):
+    ap = store.ap(name)
+    if ap.kind == "switch":
+        raise HTTPException(404, "device not found")
+    await store.load_services(only=name, max_age=SVC_FRESH)
+    return render(request, "_services_body.html", ap=ap, d=_svc_data(ap))
 
 
 def _svc_plan(t, form) -> tuple[str, list[str], dict, list[str]] | str:

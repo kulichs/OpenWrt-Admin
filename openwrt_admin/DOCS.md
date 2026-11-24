@@ -187,7 +187,7 @@ The **Radios** page lists every radio of every AP in one table and checks the se
 
 ### Services, adblock and banIP
 
-The **Services** tab on each device page (router and AP: Overview | Services) lists the services of that device (`ubus call service list` and `/etc/init.d/* enabled`): running, finished (one-shot scripts such as adblock with exit code 0), stopped, failed (exit code ≠ 0 while enabled on boot), no process (init scripts without a procd service, e.g. `firewall`), and whether it starts on boot. Scripts that only set something up at boot (`boot`, `sysctl`, `led`…) are hidden. The status is read when the tab opens – read only, nothing is written to the device log.
+The **Services** tab on each device page (router and AP: Overview | Services) lists the services of that device (`ubus call service list`, start on boot from the `S..` links in `/etc/rc.d`): running, finished (one-shot scripts such as adblock with exit code 0), stopped, failed (exit code ≠ 0 while enabled on boot), no process (init scripts without a procd service, e.g. `firewall`), and whether it starts on boot. Scripts that only set something up at boot (`boot`, `sysctl`, `led`…) are hidden. The status is read when the tab opens (kept for 60 s, re-read after every action) – read only, nothing is written to the device log.
 
 With full access: start, stop, restart, start on boot / don't start. Every action shows the command first and runs after **Apply**. `dropbear`, `network`, `rpcd`, `log`, `ubus`, `system` can only be restarted, and the restart runs in the background after 2 s – without them the app could not reach the device.
 
@@ -362,7 +362,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | switch port traffic | SNMP `ifHCInOctets`, `ifHCOutOctets` |
 | radios: real channel, width, power, noise; channel utilisation | `iwinfo`, `iw dev <if> survey dump` |
 | neighbouring networks (only on Scan, `radio_scan`) | `iwinfo <if> scan` |
-| services, adblock, banIP (only when the Services tab opens) | `ubus call service list`, `/etc/init.d/* enabled`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, allow/block list files |
+| services, adblock, banIP (only when the Services tab opens) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, allow/block list files |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
 
@@ -584,7 +584,7 @@ Stránka **Rádia** ukazuje všechna rádia všech AP v jedné tabulce a kontrol
 
 ### Služby, adblock a banIP
 
-Záložka **Služby** na stránce každého zařízení (router a AP: Přehled | Služby) ukazuje služby toho zařízení (`ubus call service list` a `/etc/init.d/* enabled`): běží, dokončeno (jednorázové skripty jako adblock s kódem 0), zastaveno, selhalo (kód ≠ 0, když se má spouštět po startu), bez procesu (init skripty bez procd služby, např. `firewall`) a jestli se spouští po startu. Skripty, které jen něco nastaví při startu (`boot`, `sysctl`, `led`…), se neukazují. Stav se čte při otevření záložky – jen čtení, do logu zařízení se nic nezapisuje.
+Záložka **Služby** na stránce každého zařízení (router a AP: Přehled | Služby) ukazuje služby toho zařízení (`ubus call service list`, spouštění po startu z odkazů `S..` v `/etc/rc.d`): běží, dokončeno (jednorázové skripty jako adblock s kódem 0), zastaveno, selhalo (kód ≠ 0, když se má spouštět po startu), bez procesu (init skripty bez procd služby, např. `firewall`) a jestli se spouští po startu. Skripty, které jen něco nastaví při startu (`boot`, `sysctl`, `led`…), se neukazují. Stav se čte při otevření záložky (drží se 60 s, po každé akci znovu) – jen čtení, do logu zařízení se nic nezapisuje.
 
 S plným přístupem: spustit, zastavit, restart, spouštět / nespouštět po startu. Každá akce nejdřív ukáže příkaz a provede se po **Použít**. `dropbear`, `network`, `rpcd`, `log`, `ubus`, `system` jdou jen restartovat, a to na pozadí za 2 s – bez nich by se aplikace na zařízení nedostala.
 
@@ -759,7 +759,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | provoz na portech switche | SNMP `ifHCInOctets`, `ifHCOutOctets` |
 | rádia: skutečný kanál, šířka, výkon, šum; vytížení kanálu | `iwinfo`, `iw dev <if> survey dump` |
 | okolní sítě (jen po Skenovat, `radio_scan`) | `iwinfo <if> scan` |
-| služby, adblock, banIP (jen při otevření záložky Služby) | `ubus call service list`, `/etc/init.d/* enabled`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, soubory povolených/blokovaných |
+| služby, adblock, banIP (jen při otevření záložky Služby) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, soubory povolených/blokovaných |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).
 

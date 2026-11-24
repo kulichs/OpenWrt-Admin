@@ -135,7 +135,8 @@ Proč je co tak, jak je – čti, než něco „zjednodušíš“:
   (zjišťuje se z nápovědy init skriptu); stav „neblokuje“ = zapnutý, ale `adb_list.overall` prázdný (suspend ho
   vyprázdní a `adblock_status` dál hlásí enabled). Pozastavení na čas = časovač na zařízení (`/tmp/owadmin-adb-resume`),
   ne v aplikaci. Akce = náhled → token (`svc_pending`) → `/services/apply`. htmx cíl `previous .cmd-out` – `.cmd-out`
-  musí být v HTML před tlačítky.
+  musí být v HTML před tlačítky. „Po startu“ z `/etc/rc.d` (S..), ne `init.d/X enabled` – 40× rc.common = sekundy.
+  Záložka: čerstvá data (60 s) hned, jinak `hx-get …/services/body` s `hx-trigger=load`.
 
 ## Struktura
 

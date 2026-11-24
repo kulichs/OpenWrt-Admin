@@ -30,12 +30,13 @@ BAN_ALLOW = "/etc/banip/banip.allowlist"
 BAN_BLOCK = "/etc/banip/banip.blocklist"
 
 SVC_CMD = r"""echo @@services; ubus call service list 2>/dev/null
-echo @@enabled; for f in /etc/init.d/*; do n=${f##*/}; if "$f" enabled 2>/dev/null; then echo "$n 1"; else echo "$n 0"; fi; done
+echo @@initd; ls /etc/init.d 2>/dev/null
+echo @@rcd; ls /etc/rc.d 2>/dev/null
 if [ -x /etc/init.d/adblock ]; then
  echo @@adblock; /etc/init.d/adblock status 2>&1 | head -40
  echo @@adb_meta
  echo "enabled $(uci -q get adblock.global.adb_enabled)"
- /etc/init.d/adblock 2>&1 | grep -qE '^[[:space:]]+search[[:space:]]' && echo "searchcmd search" || echo "searchcmd query"
+ grep -qE 'extra_command[[:space:]]+"search"' /etc/init.d/adblock 2>/dev/null && echo "searchcmd search" || echo "searchcmd query"
  f=$(ls /tmp/dnsmasq.d/adb_list.overall /tmp/*/adb_list.overall /var/lib/unbound/adb_list.overall /var/lib/kresd/adb_list.overall 2>/dev/null | head -1)
  [ -n "$f" ] && echo "list $f $(wc -c < "$f") $(wc -l < "$f")"
  [ -f %(mark)s ] && echo "resume_at $(cat %(mark)s)"
@@ -95,17 +96,31 @@ def parse_list(text: str) -> list[str]:
     return out
 
 
-def parse_services(ubus_json: str, enabled_text: str) -> list[dict]:
+def enabled_from_rcd(initd_text: str, rcd_text: str) -> dict[str, bool]:
+    """Spousteni po startu = odkaz S<NN><jmeno> v /etc/rc.d (totez, co dela `/etc/init.d/X enabled`, ale bez
+    spousteni ~40 skriptu – to na routeru trva sekundy)."""
+    started = set()
+    for line in (rcd_text or "").split():
+        m = re.match(r"^S\d+(.+)$", line.strip())
+        if m:
+            started.add(m.group(1))
+    return {n: n in started for n in (initd_text or "").split() if NAME_RE.match(n)}
+
+
+def parse_services(ubus_json: str, enabled_text: str | dict) -> list[dict]:
     """Seznam sluzeb: jmeno, bezi / dobehlo / zastaveno, spousteni po startu, chranena."""
     try:
         data = json.loads(ubus_json or "{}")
     except ValueError:
         data = {}
     enabled: dict[str, bool] = {}
-    for line in (enabled_text or "").splitlines():
-        n, _, v = line.strip().partition(" ")
-        if n:
-            enabled[n] = v.strip() == "1"
+    if isinstance(enabled_text, dict):
+        enabled = dict(enabled_text)
+    else:
+        for line in (enabled_text or "").splitlines():
+            n, _, v = line.strip().partition(" ")
+            if n:
+                enabled[n] = v.strip() == "1"
     names = (set(data) | set(enabled)) - BOOT_ONLY
     out = []
     for n in sorted(names):
@@ -194,7 +209,8 @@ def parse_banip(sec: dict[str, str]) -> dict | None:
 
 def parse_all(text: str) -> dict:
     sec = split_sections(text)
-    return {"ts": time.time(), "services": parse_services(sec.get("services", ""), sec.get("enabled", "")),
+    en = enabled_from_rcd(sec["initd"], sec.get("rcd", "")) if "initd" in sec else sec.get("enabled", "")
+    return {"ts": time.time(), "services": parse_services(sec.get("services", ""), en),
             "adblock": parse_adblock(sec), "banip": parse_banip(sec), "error": "" if "end" in sec else "incomplete"}
 
 
@@ -310,7 +326,7 @@ def demo_text(name: str, router: bool, state: dict | None = None) -> str:
         svc.pop("dnsmasq")
         svc["wpad"] = {"instances": {"hostapd": {"running": True, "pid": 1500}, "wpa_supplicant": {"running": True, "pid": 1501}}}
         en += ["wpad 1"]
-        return "@@services\n" + json.dumps(svc) + "\n@@enabled\n" + "\n".join(en) + "\n@@end\n"
+        return "@@services\n" + json.dumps(svc) + _demo_rc(en) + "\n@@end\n"
     svc["adblock"] = {"instances": {"adblock": {"running": False, "exit_code": 0}}}
     svc["banip"] = {"instances": {"banip-service": {"running": False, "exit_code": 1}}}
     svc["nlbwmon"] = {"instances": {"instance1": {"running": True, "pid": 2001}}}
@@ -335,10 +351,16 @@ def demo_text(name: str, router: bool, state: dict | None = None) -> str:
         meta.append("resume_at 0")
     ban_allow = state.get("ban_allow", ["203.0.113.10"])
     ban_block = state.get("ban_block", ["198.51.100.0/24"])
-    return ("@@services\n" + json.dumps(svc) + "\n@@enabled\n" + "\n".join(en) + "\n@@adblock\n" + adb +
+    return ("@@services\n" + json.dumps(svc) + _demo_rc(en) + "\n@@adblock\n" + adb +
             "\n@@adb_meta\n" + "\n".join(meta) + "\n@@adb_allow\n" + "\n".join(allow) + "\n@@adb_block\n" + "\n".join(block) +
             "\n@@banip\n::: no banIP runtime information available\n@@ban_meta\nenabled 0\n@@ban_allow\n" +
             "\n".join(ban_allow) + "\n@@ban_block\n" + "\n".join(ban_block) + "\n@@end\n")
+
+
+def _demo_rc(en: list[str]) -> str:
+    names = [x.split()[0] for x in en]
+    on = [f"S{10 + i:02d}{x.split()[0]}" for i, x in enumerate(en) if x.endswith(" 1")]
+    return "\n@@initd\n" + "\n".join(names) + "\n@@rcd\n" + "\n".join(on)
 
 
 def demo_search(kind: str, value: str, adb: dict | None) -> str:
