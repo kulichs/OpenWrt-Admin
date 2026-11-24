@@ -602,7 +602,7 @@
   "dhcp.loading": "Loading DHCP from the router…",
   "dhcp.intro": "Address ranges per network and static leases on the router (dnsmasq). Every change shows a preview of the uci commands, is written after Apply (uci commit dhcp, dnsmasq reload) and reverted on error. The router configuration is backed up before the first change of the day.",
   "dhcp.readonly": "Read only – only users with full access can change ranges and leases.",
-  "dhcp.warn_apknew": "{file} exists on the router – a default configuration from a package upgrade that was not merged. Compare and then delete it:",
+  "dhcp.warn_apknew": "{file} exists on the router – the new default DHCP configuration from a package upgrade (yours was not overwritten). It usually differs only in what you configured; compare and then delete it:",
   "dhcp.warn_tight": "Only {free} of {size} addresses are left in the dynamic range of {net} – new devices may not get an address. Enlarge the range or move static leases out of it.",
   "dhcp.pools": "Networks and ranges",
   "dhcp.subnet": "Subnet · router",
@@ -658,5 +658,7 @@
   "dhcp.do_add": "add static lease {name} · {mac} · {ip}",
   "dhcp.do_edit": "edit lease {name} → {new}",
   "dhcp.do_del": "delete static lease {name} ({ip})",
-  "dhcp.do_pool": "DHCP in {net}: {first} – {last}, {lt}"
+  "dhcp.do_pool": "DHCP in {net}: {first} – {last}, {lt}",
+  "dhcp.apk_other": "Other unmerged configurations from package upgrades: {n}",
+  "dhcp.apk_other_hint": "Harmless – apk does not overwrite your modified configuration and stores the new default next to it as .apk-new. Look through the differences (copy over any new options you want by hand) and delete the files:"
 }

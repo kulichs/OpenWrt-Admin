@@ -213,7 +213,7 @@ The **DHCP** tab on the router page (Overview | Services | DHCP) works with dnsm
 
 Every change: preview of the `uci` commands → **Apply** → `uci commit dhcp` and `/etc/init.d/dnsmasq reload` (DNS and DHCP keep running); on error `uci revert dhcp`. Before the first change of the day the app makes a configuration backup of the router (as the Backup button does). Anonymous sections are read with `uci -X` (names like `cfg0a1b2c`), so an edit targets the right lease even if another one was added in the meantime. A new static IP applies once the device renews its lease. IPv6 (odhcpd) is not changed.
 
-The tab also warns about unmerged `/etc/config/*.apk-new` (or `*-opkg`) files – default configurations left after a package upgrade; compare them with `diff` and delete them.
+The tab also warns about an unmerged `/etc/config/dhcp.apk-new` (or `dhcp-opkg`) – the default configuration left after a package upgrade; compare it with `diff -u` and delete it. Other such files (luci, uhttpd…) are listed in one collapsed line – they are harmless, apk never overwrites your modified configuration.
 
 ### Statistics
 
@@ -627,7 +627,7 @@ Záložka **DHCP** na stránce routeru (Přehled | Služby | DHCP) pracuje s dns
 
 Každá změna: náhled příkazů `uci` → **Použít** → `uci commit dhcp` a `/etc/init.d/dnsmasq reload` (DNS i DHCP běží dál); při chybě `uci revert dhcp`. Před první změnou dne aplikace udělá zálohu konfigurace routeru (stejně jako tlačítko Záloha). Anonymní sekce se čtou přes `uci -X` (jména jako `cfg0a1b2c`), takže úprava trefí správnou zápůjčku, i když mezitím přibyla jiná. Nová statická IP platí, až si zařízení obnoví zápůjčku. IPv6 (odhcpd) se nemění.
 
-Záložka také upozorní na nesloučené soubory `/etc/config/*.apk-new` (nebo `*-opkg`) – výchozí konfigurace, které zůstaly po aktualizaci balíčku; porovnej je přes `diff` a smaž.
+Záložka také upozorní na nesloučený `/etc/config/dhcp.apk-new` (nebo `dhcp-opkg`) – výchozí konfiguraci, která zůstala po aktualizaci balíčku; porovnej ji přes `diff -u` a smaž. Ostatní takové soubory (luci, uhttpd…) jsou v jednom sbaleném řádku – jsou neškodné, apk tvoji upravenou konfiguraci nikdy nepřepíše.
 
 ### Statistiky
 

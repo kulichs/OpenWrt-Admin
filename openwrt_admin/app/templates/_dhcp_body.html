@@ -6,11 +6,19 @@
 <div id="dhcp-body">
 {% if m.error and not m.hosts %}<p class="err">{{ m.error }}</p>{% else %}
 <p class="muted">{{ t("dhcp.intro") if can_edit else t("dhcp.readonly") }}</p>
-{% if m.apknew or tight %}
+{% if apk_dhcp or tight %}
 <div class="panel"><ul class="warnlist">
-  {% for f in m.apknew %}<li>⚠ {{ t("dhcp.warn_apknew", file=f) }} <code>diff {{ f | replace('.apk-new', '') | replace('-opkg', '') }} {{ f }}</code></li>{% endfor %}
+  {% for f in apk_dhcp %}<li>⚠ {{ t("dhcp.warn_apknew", file=f) }} <code>diff -u {{ f | replace('.apk-new', '') | replace('-opkg', '') }} {{ f }}</code></li>{% endfor %}
   {% for p in tight %}<li>⚠ {{ t("dhcp.warn_tight", net=p.iface, free=p.free, size=p.size) }}</li>{% endfor %}
 </ul></div>
+{% endif %}
+{% if apk_other %}
+<details class="muted small apk-other"><summary>{{ t("dhcp.apk_other", n=apk_other | length) }}</summary>
+  <p>{{ t("dhcp.apk_other_hint") }}</p>
+  <p class="mono">{% for f in apk_other %}{{ f }}<br>{% endfor %}</p>
+  <pre class="small">for f in /etc/config/*.apk-new; do echo "== $f"; diff -u "${f%.apk-new}" "$f"; done
+rm /etc/config/*.apk-new</pre>
+</details>
 {% endif %}
 
 <div class="panel">

@@ -2,6 +2,11 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.19.1
+- DHCP tab: only `dhcp.apk-new` is shown as a warning; other unmerged `*.apk-new` files (luci, uhttpd, adblock…) are in one collapsed line with an explanation (harmless – apk keeps your configuration) and the commands to compare and delete them.
+---
+- Záložka DHCP: jako upozornění se ukazuje jen `dhcp.apk-new`; ostatní nesloučené `*.apk-new` (luci, uhttpd, adblock…) jsou v jednom sbaleném řádku s vysvětlením (neškodné – apk tvoji konfiguraci nepřepíše) a příkazy na porovnání a smazání.
+
 ## 0.19.0
 - New **DHCP** tab on the router page (Overview | Services | DHCP), dnsmasq:
   - **Networks and ranges**: subnet, router address, dynamic range, lease time and usage (static leases inside the range, dynamic leases, free addresses); edit start / count / lease time, turn DHCP on/off, enable DHCP in a network without it. Warning when 5 or fewer addresses are free.

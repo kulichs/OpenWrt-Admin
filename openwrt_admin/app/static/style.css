@@ -240,3 +240,5 @@ details.inline-edit { display: inline-block; }
 details.inline-edit summary { cursor: pointer; color: var(--accent); }
 details.inline-edit[open] { display: block; }
 details.inline-edit form { margin-top: .4rem; }
+details.apk-other { margin: 0 0 1rem; }
+details.apk-other summary { cursor: pointer; }

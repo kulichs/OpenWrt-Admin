@@ -610,7 +610,7 @@
   "dhcp.loading": "Načítám DHCP z routeru…",
   "dhcp.intro": "Rozsahy adres podle sítí a statické zápůjčky na routeru (dnsmasq). Každá změna ukáže náhled uci příkazů, po Použít se zapíše (uci commit dhcp, dnsmasq reload), při chybě se vrátí. Před první změnou dne se udělá záloha konfigurace routeru.",
   "dhcp.readonly": "Jen čtení – měnit rozsahy a zápůjčky může jen uživatel s plným přístupem.",
-  "dhcp.warn_apknew": "Na routeru je {file} – výchozí konfigurace z aktualizace balíčku, která nebyla sloučena. Porovnej a pak smaž:",
+  "dhcp.warn_apknew": "Na routeru je {file} – nová výchozí konfigurace DHCP z aktualizace balíčku (tvoje se nepřepsala). Většinou se liší jen v tom, co sis nastavil; porovnej a pak smaž:",
   "dhcp.warn_tight": "V síti {net} zbývá v dynamickém rozsahu jen {free} z {size} adres – nová zařízení nemusí dostat adresu. Zvětši rozsah, nebo přesuň statické zápůjčky mimo něj.",
   "dhcp.pools": "Sítě a rozsahy",
   "dhcp.subnet": "Podsíť · router",
@@ -666,5 +666,7 @@
   "dhcp.do_add": "přidat statickou zápůjčku {name} · {mac} · {ip}",
   "dhcp.do_edit": "upravit zápůjčku {name} → {new}",
   "dhcp.do_del": "smazat statickou zápůjčku {name} ({ip})",
-  "dhcp.do_pool": "DHCP v síti {net}: {first} – {last}, {lt}"
+  "dhcp.do_pool": "DHCP v síti {net}: {first} – {last}, {lt}",
+  "dhcp.apk_other": "Další nesloučené konfigurace z aktualizací balíčků: {n}",
+  "dhcp.apk_other_hint": "Neškodné – apk při aktualizaci nepřepíše tvoji upravenou konfiguraci a novou výchozí uloží vedle jako .apk-new. Stačí projít rozdíly (nové volby, které chceš, přenést ručně) a soubory smazat:"
 }

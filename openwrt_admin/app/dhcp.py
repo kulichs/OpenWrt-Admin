@@ -398,7 +398,7 @@ def demo_text(model: dict[str, dict], leases: dict[str, dict]) -> str:
     now = int(time.time())
     ls = "\n".join(f"{now + 3600 + i * 60} {mac} {l['ip']} {l.get('hostname') or '*'} 01:{mac}"
                    for i, (mac, l) in enumerate(leases.items()) if l.get("ip"))
-    return (f"@@uci\n{to_uci(model)}\n@@net\n{DEMO_NET}\n@@leases\n{ls}\n@@apknew\n/etc/config/dhcp.apk-new\n"
+    return (f"@@uci\n{to_uci(model)}\n@@net\n{DEMO_NET}\n@@leases\n{ls}\n@@apknew\n/etc/config/dhcp.apk-new\n/etc/config/luci.apk-new\n/etc/config/uhttpd.apk-new\n"
             f"@@now\n{now}\n@@end\n")
 
 

@@ -1652,7 +1652,11 @@ def _dhcp_ctx(ap: APState) -> dict:
         size = ipaddress.ip_network(nd["subnet"]).num_addresses
         start = 100 if size > 200 else 2
         nd["default_start"], nd["default_limit"] = start, max(1, min(150, size - start - 2))
+    apk = m.get("apknew") or []
+    apk_dhcp = [f for f in apk if f.rsplit("/", 1)[-1].split(".")[0].split("-")[0] == "dhcp"]
+    apk_other = [f for f in apk if f not in apk_dhcp]
     return {"m": m, "online": online, "suggest": suggest, "leases": leases, "pools": pools,
+            "apk_dhcp": apk_dhcp, "apk_other": apk_other,
             "nets": [n for n in m["_nets"] if not n.startswith("wan")], "tight": [p for p in pools if p["size"] and not p["ignore"] and p["free"] <= 5]}
 
 
