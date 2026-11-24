@@ -2,6 +2,25 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.19.0
+- New **DHCP** tab on the router page (Overview | Services | DHCP), dnsmasq:
+  - **Networks and ranges**: subnet, router address, dynamic range, lease time and usage (static leases inside the range, dynamic leases, free addresses); edit start / count / lease time, turn DHCP on/off, enable DHCP in a network without it. Warning when 5 or fewer addresses are free.
+  - **Static leases** (`dhcp.@host`): add, edit, delete, search; online state; tag when the IP is inside the dynamic range. A new IP is suggested as the first free address below the range (not reserved, leased, in ARP or used by a local name). Checks: name, MAC, IP in a router network, not the network/broadcast/router address, IP and MAC not used by another reservation; warnings for an IP leased to another device, inside the range, used by a local name or in a network without DHCP.
+  - **Current leases** with **Make static** (fills in name, MAC and IP).
+  - Every change: preview of the `uci` commands → Apply → `uci commit dhcp` + `dnsmasq reload`, `uci revert` on error; a configuration backup of the router before the first change of the day; written to the router syslog with the HA user.
+  - Warning about unmerged `/etc/config/*.apk-new` (`*-opkg`) files from package upgrades.
+- Anonymous sections are read with `uci -X` (real names like `cfg0a1b2c`), so an edit always hits the right lease. IPv6 (odhcpd) is not changed.
+- Verified: parser on a real router configuration (5 networks, 39 static leases, 14 local names, `.apk-new`), shell syntax of all commands, demo cs + en (preview, apply, edit, delete, range change, read-only user). Not yet on the real network.
+---
+- Nová záložka **DHCP** na stránce routeru (Přehled | Služby | DHCP), dnsmasq:
+  - **Sítě a rozsahy**: podsíť, adresa routeru, dynamický rozsah, doba zápůjčky a obsazenost (statické zápůjčky v rozsahu, dynamické, volné); úprava začátku / počtu / doby, zapnutí a vypnutí DHCP, zapnutí DHCP v síti bez něj. Upozornění, když zbývá 5 a méně volných adres.
+  - **Statické zápůjčky** (`dhcp.@host`): přidat, upravit, smazat, hledat; stav online; štítek, když je IP uvnitř dynamického rozsahu. Nová IP se navrhne jako první volná pod rozsahem (mimo rezervace, zápůjčky, ARP a místní jména). Kontroly: jméno, MAC, IP v síti routeru, ne adresa sítě/broadcast/routeru, IP a MAC nemá jiná rezervace; varování, když IP má zapůjčené jiné zařízení, je v rozsahu, u místního jména nebo v síti bez DHCP.
+  - **Aktuální zápůjčky** s tlačítkem **Udělat statickou** (doplní jméno, MAC a IP).
+  - Každá změna: náhled příkazů `uci` → Použít → `uci commit dhcp` + `dnsmasq reload`, při chybě `uci revert`; před první změnou dne záloha konfigurace routeru; zápis do syslogu routeru se jménem uživatele HA.
+  - Upozornění na nesloučené soubory `/etc/config/*.apk-new` (`*-opkg`) po aktualizaci balíčků.
+- Anonymní sekce se čtou přes `uci -X` (skutečná jména jako `cfg0a1b2c`), takže úprava vždy trefí správnou zápůjčku. IPv6 (odhcpd) se nemění.
+- Ověřeno: parser na skutečné konfiguraci routeru (5 sítí, 39 statických zápůjček, 14 místních jmen, `.apk-new`), syntaxe všech příkazů v shellu, demo cs + en (náhled, použití, úprava, smazání, změna rozsahu, uživatel jen pro čtení). Na skutečné síti zatím ne.
+
 ## 0.18.2
 - Faster **Services** tab: "starts on boot" is read from `/etc/rc.d` instead of running `/etc/init.d/<x> enabled` for each of ~40 scripts (took seconds on the router); the adblock search command is detected from the init script without running it.
 - The tab opens immediately and the data is loaded into it ("Loading…"); within 60 s of the last read (and after every action) it is shown straight from memory.

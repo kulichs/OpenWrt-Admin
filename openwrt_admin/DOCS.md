@@ -132,6 +132,8 @@ logread -e dropbear          # logins (with a dedicated user you see "owadmin" i
 | Pause / resume adblock, reload lists | router page → Services → adblock | `/etc/init.d/adblock suspend` / `resume` / `reload`; timed pause: timer on the device (`/tmp/owadmin-adb-resume`) |
 | Unblock / block a domain (adblock) | router page → Services → adblock | line in `/etc/adblock/adblock.allowlist` / `adblock.blocklist`, then `adblock reload` |
 | Unblock / block an IP or network (banIP) | router page → Services → banIP | line in `/etc/banip/banip.allowlist` / `banip.blocklist`, then `banip reload` (only when enabled) |
+| Static DHCP lease: add / edit / delete | router page → DHCP | `uci add dhcp host` / `uci set dhcp.<cfg…>.name/mac/ip/dns` / `uci delete dhcp.<cfg…>` → `uci commit dhcp`, `dnsmasq reload` (`uci revert` on error) |
+| DHCP range, lease time, on/off | router page → DHCP | `uci set dhcp.<net>.start/limit/leasetime/ignore` → commit, `dnsmasq reload` |
 
 - **Adding an SSID:** name, password (8–63 characters), encryption WPA2 (`psk2`), WPA2/WPA3 (`sae-mixed`) or WPA3 (`sae`; both SAE variants also set `ieee80211w`), network (interface on the AP, e.g. `lan` or a VLAN network) and hidden; tick the radios (AP + band). The network must exist on each selected AP and the same SSID must not already be on that radio. WPA3 needs wpad with SAE (wpad-basic-mbedtls and newer).
 - Editing SSIDs changes **existing** SSIDs (`wifi-iface` sections). Tick the APs/radios (bands) the change applies to. A preview of the `uci` commands is shown first; the change is written only after confirming. The password is never shown.
@@ -198,6 +200,20 @@ With full access: start, stop, restart, start on boot / don't start. Every actio
 - **Unblock (allow) / Block** adds the domain to `/etc/adblock/adblock.allowlist` / `adblock.blocklist` (and removes it from the other list), then `adblock reload` (tens of seconds). The allowlist matches exactly – `ads.example.com` does not allow `x.ads.example.com`. The lists below can be edited with ✕.
 
 **banIP** (if `/etc/init.d/banip` exists): state (disabled / running / not running), set elements, lists. **Why is it blocked?** runs `/etc/init.d/banip search <IP>` and shows the set (e.g. `blocklistv4`, `cinsscorev4`). **Unblock / Block** works with `/etc/banip/banip.allowlist` / `banip.blocklist` (IPv4/IPv6 address or CIDR network); the sets are reloaded only when banIP is enabled. banIP itself (feeds, countries, interfaces) is configured in LuCI.
+
+### DHCP (router)
+
+The **DHCP** tab on the router page (Overview | Services | DHCP) works with dnsmasq on the router (`/etc/config/dhcp`):
+
+- **Networks and ranges** – for every network with DHCP: subnet, router address, dynamic range (network address + `start` … + `start` + `limit` − 1, as in LuCI), lease time and usage: static leases inside the range, dynamic leases, free addresses. With full access: edit start, count, lease time, turn DHCP on/off. Networks with a static address and no DHCP section are listed as "No DHCP" with an option to enable it. A warning appears when 5 or fewer addresses are free.
+- **Static leases** (`dhcp.@host`) – name, MAC, IP, network, "name in DNS" (`dns=1`), online state; search. Add / edit / delete. The suggested IP for a new lease is the first free address **below** the dynamic range (not used by another reservation, lease, ARP entry or local name), so the range stays free for other devices.
+  - Errors stop the change: invalid name (letters, digits, hyphen), MAC or IP, IP outside the router networks, network/broadcast/router address, IP or MAC already in another reservation.
+  - Warnings are shown in the preview: the IP is currently leased to another device, lies inside the dynamic range, is used by a local name, or the network has no DHCP.
+- **Current leases** (`/tmp/dhcp.leases`) with the remaining time; **Make static** fills the add form with the name, MAC and current IP.
+
+Every change: preview of the `uci` commands → **Apply** → `uci commit dhcp` and `/etc/init.d/dnsmasq reload` (DNS and DHCP keep running); on error `uci revert dhcp`. Before the first change of the day the app makes a configuration backup of the router (as the Backup button does). Anonymous sections are read with `uci -X` (names like `cfg0a1b2c`), so an edit targets the right lease even if another one was added in the meantime. A new static IP applies once the device renews its lease. IPv6 (odhcpd) is not changed.
+
+The tab also warns about unmerged `/etc/config/*.apk-new` (or `*-opkg`) files – default configurations left after a package upgrade; compare them with `diff` and delete them.
 
 ### Statistics
 
@@ -363,6 +379,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | radios: real channel, width, power, noise; channel utilisation | `iwinfo`, `iw dev <if> survey dump` |
 | neighbouring networks (only on Scan, `radio_scan`) | `iwinfo <if> scan` |
 | services, adblock, banIP (only when the Services tab opens) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, allow/block list files |
+| DHCP (only when the DHCP tab opens) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `ls /etc/config/*.apk-new` |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
 
@@ -529,6 +546,8 @@ logread -e dropbear          # přihlášení (s vlastním uživatelem uvidíš 
 | Pozastavit / obnovit adblock, znovu načíst seznamy | stránka routeru → Služby → adblock | `/etc/init.d/adblock suspend` / `resume` / `reload`; pozastavení na čas: časovač na zařízení (`/tmp/owadmin-adb-resume`) |
 | Odblokovat / zablokovat doménu (adblock) | stránka routeru → Služby → adblock | řádek v `/etc/adblock/adblock.allowlist` / `adblock.blocklist`, pak `adblock reload` |
 | Odblokovat / zablokovat IP nebo síť (banIP) | stránka routeru → Služby → banIP | řádek v `/etc/banip/banip.allowlist` / `banip.blocklist`, pak `banip reload` (jen když je zapnutý) |
+| Statická DHCP zápůjčka: přidat / upravit / smazat | stránka routeru → DHCP | `uci add dhcp host` / `uci set dhcp.<cfg…>.name/mac/ip/dns` / `uci delete dhcp.<cfg…>` → `uci commit dhcp`, `dnsmasq reload` (při chybě `uci revert`) |
+| Rozsah DHCP, doba zápůjčky, zapnutí/vypnutí | stránka routeru → DHCP | `uci set dhcp.<síť>.start/limit/leasetime/ignore` → commit, `dnsmasq reload` |
 
 - **Přidání SSID:** název, heslo (8–63 znaků), šifrování WPA2 (`psk2`), WPA2/WPA3 (`sae-mixed`) nebo WPA3 (`sae`; u obou SAE se nastaví i `ieee80211w`), síť (rozhraní na AP, např. `lan` nebo VLAN síť) a skrytí; zaškrtnou se rádia (AP + pásmo). Síť musí na každém vybraném AP existovat a stejné SSID na tom rádiu ještě nesmí být. WPA3 potřebuje wpad s SAE (wpad-basic-mbedtls a novější).
 - Úprava SSID mění **existující** SSID (sekce `wifi-iface`). Zaškrtnutím se vybírají AP a rádia (pásma), kterých se změna týká. Nejdřív se zobrazí náhled příkazů `uci`, zapíše se až po potvrzení. Heslo se nikde nezobrazuje.
@@ -595,6 +614,20 @@ S plným přístupem: spustit, zastavit, restart, spouštět / nespouštět po s
 - **Odblokovat (povolit) / Zablokovat** přidá doménu do `/etc/adblock/adblock.allowlist` / `adblock.blocklist` (a smaže ji ze druhého seznamu), pak `adblock reload` (desítky sekund). Povolení platí přesně – `ads.example.com` nepovolí `x.ads.example.com`. Seznamy pod tím jde upravit křížkem ✕.
 
 **banIP** (když existuje `/etc/init.d/banip`): stav (vypnuto / běží / neběží), počet prvků v sadách, seznamy. **Proč je blokovaná?** spustí `/etc/init.d/banip search <IP>` a ukáže sadu (např. `blocklistv4`, `cinsscorev4`). **Odblokovat / Zablokovat** pracuje s `/etc/banip/banip.allowlist` / `banip.blocklist` (IPv4/IPv6 adresa nebo síť CIDR); sady se znovu načtou jen když je banIP zapnutý. Samotný banIP (seznamy, země, rozhraní) se nastavuje v LuCI.
+
+### DHCP (router)
+
+Záložka **DHCP** na stránce routeru (Přehled | Služby | DHCP) pracuje s dnsmasq na routeru (`/etc/config/dhcp`):
+
+- **Sítě a rozsahy** – u každé sítě s DHCP: podsíť, adresa routeru, dynamický rozsah (adresa sítě + `start` … + `start` + `limit` − 1, jako v LuCI), doba zápůjčky a obsazenost: statické zápůjčky v rozsahu, dynamické zápůjčky, volné adresy. S plným přístupem: úprava začátku, počtu, doby, zapnutí/vypnutí DHCP. Sítě se statickou adresou bez DHCP sekce jsou uvedené jako „Bez DHCP“ s možností DHCP zapnout. Když zbývá 5 a méně volných adres, objeví se upozornění.
+- **Statické zápůjčky** (`dhcp.@host`) – jméno, MAC, IP, síť, „jméno do DNS“ (`dns=1`), stav online; hledání. Přidat / upravit / smazat. Navržená IP pro novou zápůjčku je první volná adresa **pod** dynamickým rozsahem (nemá ji jiná rezervace, zápůjčka, záznam v ARP ani místní jméno), aby rozsah zůstal volný pro ostatní zařízení.
+  - Chyby změnu zastaví: neplatné jméno (písmena, číslice, pomlčka), MAC nebo IP, IP mimo sítě routeru, adresa sítě/broadcast/routeru, IP nebo MAC už v jiné rezervaci.
+  - Varování se ukážou v náhledu: IP má teď zapůjčené jiné zařízení, leží v dynamickém rozsahu, používá ji místní jméno, nebo síť nemá DHCP.
+- **Aktuální zápůjčky** (`/tmp/dhcp.leases`) se zbývajícím časem; **Udělat statickou** předvyplní formulář jménem, MAC a současnou IP.
+
+Každá změna: náhled příkazů `uci` → **Použít** → `uci commit dhcp` a `/etc/init.d/dnsmasq reload` (DNS i DHCP běží dál); při chybě `uci revert dhcp`. Před první změnou dne aplikace udělá zálohu konfigurace routeru (stejně jako tlačítko Záloha). Anonymní sekce se čtou přes `uci -X` (jména jako `cfg0a1b2c`), takže úprava trefí správnou zápůjčku, i když mezitím přibyla jiná. Nová statická IP platí, až si zařízení obnoví zápůjčku. IPv6 (odhcpd) se nemění.
+
+Záložka také upozorní na nesloučené soubory `/etc/config/*.apk-new` (nebo `*-opkg`) – výchozí konfigurace, které zůstaly po aktualizaci balíčku; porovnej je přes `diff` a smaž.
 
 ### Statistiky
 
@@ -760,6 +793,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | rádia: skutečný kanál, šířka, výkon, šum; vytížení kanálu | `iwinfo`, `iw dev <if> survey dump` |
 | okolní sítě (jen po Skenovat, `radio_scan`) | `iwinfo <if> scan` |
 | služby, adblock, banIP (jen při otevření záložky Služby) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, soubory povolených/blokovaných |
+| DHCP (jen při otevření záložky DHCP) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `ls /etc/config/*.apk-new` |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).
 

@@ -137,6 +137,12 @@ Proč je co tak, jak je – čti, než něco „zjednodušíš“:
   ne v aplikaci. Akce = náhled → token (`svc_pending`) → `/services/apply`. htmx cíl `previous .cmd-out` – `.cmd-out`
   musí být v HTML před tlačítky. „Po startu“ z `/etc/rc.d` (S..), ne `init.d/X enabled` – 40× rc.common = sekundy.
   Záložka: čerstvá data (60 s) hned, jinak `hx-get …/services/body` s `hx-trigger=load`.
+- **DHCP (`app/dhcp.py`):** jen router, záložka `/ap/{router}/dhcp`. Čtení `uci -X show dhcp` – anonymní sekce
+  se skutečnými jmény (`cfg…`), ne `@host[N]` (index se posune, když někdo mezitím přidá zápůjčku). Zápis
+  `dhcp.apply_script`: uci → commit → `dnsmasq reload`, při chybě `uci revert dhcp`; před první změnou dne
+  záloha routeru (`dhcp_apply`). `uci -q delete … || true` v řetězu `&&` jen v `{ …; }`, jinak zamaskuje chybu.
+  Návrh volné IP pod dynamickým rozsahem, bere v úvahu i ARP routeru (zařízení s pevnou IP mimo DHCP).
+  Skutečná jména/MAC/IP z konfigurace uživatele nepatří do dema ani testů v repu.
 
 ## Struktura
 
@@ -162,6 +168,7 @@ openwrt_admin/
     stats.py                 # statistiky: parsery, historie, ping, top klienti, senzory, demo
     radios.py                # radia: iwinfo, iw survey, sken, upozorneni, mapa kanalu, navrh, uci prikazy
     services.py              # sluzby (procd/init.d), adblock, banIP: cteni, parsery, prikazy akci, demo
+    dhcp.py                  # DHCP routeru: uci parser, site a rozsahy, staticke zapujcky, validace, uci prikazy, demo
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/

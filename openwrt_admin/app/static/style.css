@@ -232,3 +232,11 @@ nav.subtabs { display: flex; gap: 1.4rem; border-bottom: 1px solid var(--line); 
 nav.subtabs a { margin: 0; padding: .35rem 0; }
 .spinner { display: inline-block; width: .9em; height: .9em; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -.1em; }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* DHCP (0.19.0) */
+.poolbar { display: flex; width: 160px; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin: .2rem 0; }
+.poolbar .res { background: var(--accent); }
+.poolbar .dyn { background: var(--ok); }
+details.inline-edit { display: inline-block; }
+details.inline-edit summary { cursor: pointer; color: var(--accent); }
+details.inline-edit[open] { display: block; }
+details.inline-edit form { margin-top: .4rem; }

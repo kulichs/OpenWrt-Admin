@@ -1,0 +1,139 @@
+{# obsah zalozky DHCP – vklada se primo, nebo se dotahne pres htmx (/ap/<router>/dhcp/body) #}
+{% macro pv(vals, label, cls="secondary small", confirm="") -%}
+<button type="button" class="{{ cls }}" hx-post="{{ base }}/dhcp/preview" hx-target="previous .cmd-out"
+        hx-vals='{{ vals | tojson }}'{% if confirm %} hx-confirm="{{ confirm }}"{% endif %}>{{ label }}</button>
+{%- endmacro %}
+<div id="dhcp-body">
+{% if m.error and not m.hosts %}<p class="err">{{ m.error }}</p>{% else %}
+<p class="muted">{{ t("dhcp.intro") if can_edit else t("dhcp.readonly") }}</p>
+{% if m.apknew or tight %}
+<div class="panel"><ul class="warnlist">
+  {% for f in m.apknew %}<li>⚠ {{ t("dhcp.warn_apknew", file=f) }} <code>diff {{ f | replace('.apk-new', '') | replace('-opkg', '') }} {{ f }}</code></li>{% endfor %}
+  {% for p in tight %}<li>⚠ {{ t("dhcp.warn_tight", net=p.iface, free=p.free, size=p.size) }}</li>{% endfor %}
+</ul></div>
+{% endif %}
+
+<div class="panel">
+  <h2>{{ t("dhcp.pools") }}</h2>
+  <div class="cmd-out"></div>
+  <table class="list">
+    <thead><tr><th>{{ t("col.network") }}</th><th>{{ t("dhcp.subnet") }}</th><th>{{ t("dhcp.range") }}</th><th>{{ t("dhcp.leasetime") }}</th>
+      <th>{{ t("dhcp.usage") }}</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    {% for p in pools %}
+    <tr class="{{ 'row-off' if p.ignore }}">
+      <td><b>{{ p.iface }}</b></td>
+      <td class="mono small">{{ p.subnet }} <span class="muted">· {{ p.router_ip }}</span></td>
+      <td class="mono small">{% if p.ignore %}<span class="muted">{{ t("dhcp.disabled") }}</span>{% else %}{{ p.first }} – {{ p.last }} <span class="muted">({{ p.size }})</span>{% endif %}</td>
+      <td>{{ p.leasetime }}</td>
+      <td>{% if p.size and not p.ignore %}
+        <div class="poolbar" title="{{ t('dhcp.usage_title', res=p.res_in, dyn=p.dyn, free=p.free) }}">
+          <span class="res" style="width: {{ (100 * p.res_in / p.size) | round(1) }}%"></span><span class="dyn" style="width: {{ (100 * p.dyn / p.size) | round(1) }}%"></span>
+        </div>
+        <span class="small {{ 'err' if p.free <= 5 else 'muted' }}">{{ t("dhcp.usage_text", res=p.res_in, dyn=p.dyn, free=p.free) }}</span>{% endif %}</td>
+      {% if can_edit %}<td>
+        <details class="inline-edit"><summary class="small">{{ t("dhcp.edit") }}</summary>
+          <form class="filters edit" hx-post="{{ base }}/dhcp/preview" hx-target="previous .cmd-out">
+            <input type="hidden" name="op" value="pool"><input type="hidden" name="iface" value="{{ p.iface }}">
+            <label>{{ t("dhcp.start") }} <input name="start" type="number" min="1" value="{{ p.start }}" style="width:5em"></label>
+            <label>{{ t("dhcp.limit") }} <input name="limit" type="number" min="1" value="{{ p.limit }}" style="width:5em"></label>
+            <label>{{ t("dhcp.leasetime") }} <input name="leasetime" value="{{ p.leasetime }}" style="width:5em"></label>
+            <label><input type="checkbox" name="enabled" value="1" {{ 'checked' if not p.ignore }}> {{ t("dhcp.enabled") }}</label>
+            <button type="submit">{{ t("ssid.preview") }}</button>
+          </form>
+        </details></td>{% endif %}
+    </tr>
+    {% endfor %}
+    {% for nd in m.no_dhcp %}
+    <tr class="row-off">
+      <td><b>{{ nd.iface }}</b></td><td class="mono small">{{ nd.subnet }} <span class="muted">· {{ nd.router_ip }}</span></td>
+      <td colspan="3" class="muted small">{{ t("dhcp.no_dhcp") }}</td>
+      {% if can_edit %}<td>
+        <details class="inline-edit"><summary class="small">{{ t("dhcp.enable") }}</summary>
+          <form class="filters edit" hx-post="{{ base }}/dhcp/preview" hx-target="previous .cmd-out">
+            <input type="hidden" name="op" value="pool"><input type="hidden" name="iface" value="{{ nd.iface }}"><input type="hidden" name="enabled" value="1">
+            <label>{{ t("dhcp.start") }} <input name="start" type="number" min="1" value="{{ nd.default_start }}" style="width:5em"></label>
+            <label>{{ t("dhcp.limit") }} <input name="limit" type="number" min="1" value="{{ nd.default_limit }}" style="width:5em"></label>
+            <label>{{ t("dhcp.leasetime") }} <input name="leasetime" value="12h" style="width:5em"></label>
+            <button type="submit">{{ t("ssid.preview") }}</button>
+          </form>
+        </details></td>{% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">{{ t("dhcp.pools_hint") }}</p>
+</div>
+
+<div class="panel" id="static-panel">
+  <h2>{{ t("dhcp.static") }} <span class="muted small">{{ m.hosts | length }}</span></h2>
+  <div class="cmd-out"></div>
+  {% if can_edit %}
+  <form class="filters edit" id="host-add" hx-post="{{ base }}/dhcp/preview" hx-target="previous .cmd-out">
+    <input type="hidden" name="op" value="host_add">
+    <label>{{ t("col.network") }} <select name="net" onchange="owSuggest(this)">
+      {% for n in nets %}<option value="{{ n }}" data-ip="{{ suggest[n] }}" {{ 'selected' if n == 'lan' }}>{{ n }}</option>{% endfor %}</select></label>
+    <label>{{ t("dhcp.name") }} <input name="name" required maxlength="63" placeholder="nas"></label>
+    <label>MAC <input name="mac" required maxlength="17" placeholder="aa:bb:cc:dd:ee:ff" class="mono"></label>
+    <label>IP <input name="ip" required maxlength="15" class="mono" value="{{ suggest.get('lan') or (suggest.values() | first) or '' }}"></label>
+    <label><input type="checkbox" name="dns" value="1" checked> {{ t("dhcp.dns") }}</label>
+    <button type="submit">{{ t("dhcp.add") }}</button>
+  </form>
+  {% endif %}
+  <div class="filters"><label>{{ t("dhcp.filter") }} <input type="search" oninput="owFilter(this, 'hosts-table')" placeholder="{{ t('dhcp.filter_ph') }}"></label></div>
+  <table class="list" id="hosts-table">
+    <thead><tr><th>{{ t("dhcp.name") }}</th><th>MAC</th><th>IP</th><th>{{ t("col.network") }}</th><th>DNS</th><th>{{ t("dhcp.state") }}</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    {% for h in m.hosts %}
+    <tr>
+      <td><b>{{ h.name or "–" }}</b></td>
+      <td class="mono small">{{ h.macs | join(", ") | upper }}</td>
+      <td class="mono small">{{ h.ip or "–" }}{% if h.in_pool %} <span class="tag tag-warn" title="{{ t('dhcp.in_pool_title') }}">{{ t("dhcp.in_pool") }}</span>{% endif %}</td>
+      <td>{{ h.net or "–" }}</td>
+      <td>{{ "✓" if h.dns else "" }}</td>
+      <td>{% if h.macs and online.get(h.macs[0]) %}<span class="tag svc-running">online</span>{% else %}<span class="muted small">offline</span>{% endif %}</td>
+      {% if can_edit %}<td class="btns">
+        <details class="inline-edit"><summary class="small">{{ t("dhcp.edit") }}</summary>
+          <form class="filters edit" hx-post="{{ base }}/dhcp/preview" hx-target="previous .cmd-out">
+            <input type="hidden" name="op" value="host_edit"><input type="hidden" name="id" value="{{ h.id }}">
+            <label>{{ t("dhcp.name") }} <input name="name" value="{{ h.name }}" maxlength="63"></label>
+            <label>MAC <input name="mac" value="{{ (h.macs | first or '') | upper }}" maxlength="17" class="mono"></label>
+            <label>IP <input name="ip" value="{{ h.ip }}" maxlength="15" class="mono"></label>
+            <label><input type="checkbox" name="dns" value="1" {{ 'checked' if h.dns }}> DNS</label>
+            <button type="submit">{{ t("ssid.preview") }}</button>
+          </form>
+        </details>
+        {{ pv({"op": "host_del", "id": h.id}, "✕", "secondary small") }}
+      </td>{% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">{{ t("dhcp.static_hint") }}</p>
+</div>
+
+<div class="panel">
+  <h2>{{ t("dhcp.leases") }} <span class="muted small">{{ leases | length }}</span></h2>
+  <table class="list">
+    <thead><tr><th>{{ t("dhcp.name") }}</th><th>IP</th><th>MAC</th><th>{{ t("dhcp.expires") }}</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    {% for l in leases %}
+    <tr>
+      <td>{{ l.name or "–" }}</td><td class="mono small">{{ l.ip }}</td><td class="mono small">{{ l.mac | upper }}</td>
+      <td class="small">{% if l.left > 0 %}{{ l.left | duration }}{% else %}<span class="muted">{{ t("dhcp.expired") }}</span>{% endif %}</td>
+      {% if can_edit %}<td>{% if l.reserved %}<span class="muted small">{{ t("dhcp.is_static") }}</span>{% else %}
+        <button type="button" class="secondary small" onclick='owMakeStatic({{ l.name | tojson }}, {{ l.mac | tojson }}, {{ l.ip | tojson }})'>{{ t("dhcp.make_static") }}</button>{% endif %}</td>{% endif %}
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">{{ t("dhcp.no_leases") }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+<script>
+function owSuggest(sel) { var o = sel.selectedOptions[0]; var ip = sel.form.querySelector('[name=ip]'); if (o && o.dataset.ip) ip.value = o.dataset.ip; }
+function owFilter(inp, id) { var q = inp.value.toLowerCase(); document.querySelectorAll('#' + id + ' tbody tr, #' + id + ' tr').forEach(function (tr) { if (tr.querySelector('th')) return; tr.style.display = !q || tr.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none'; }); }
+function owMakeStatic(name, mac, ip) {
+  var f = document.getElementById('host-add'); if (!f) return;
+  f.querySelector('[name=name]').value = (name || '').replace(/[^A-Za-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  f.querySelector('[name=mac]').value = mac.toUpperCase(); f.querySelector('[name=ip]').value = ip;
+  var parts = ip.split('.'); f.querySelectorAll('[name=net] option').forEach(function (o) { if (o.dataset.ip && o.dataset.ip.split('.').slice(0, 3).join('.') === parts.slice(0, 3).join('.')) o.selected = true; });
+  document.getElementById('static-panel').scrollIntoView({behavior: 'smooth'}); f.querySelector('[name=name]').focus();
+}
+</script>
+{% endif %}
+</div>

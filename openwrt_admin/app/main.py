@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 import json
 import math
 import logging
@@ -21,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, dhcp as dhcpmod, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
@@ -143,6 +144,8 @@ class Store:
         self.svc: dict[str, dict] = {}                 # zarizeni -> vysledek services.parse_all
         self.svc_pending: dict[str, tuple[float, str, list[str], dict]] = {}  # token -> (ts, zarizeni, prikazy, info)
         self.svc_demo: dict[str, dict] = {}            # demo: stav adblocku/banIP po akcich
+        self.dhcp: dict | None = None                  # DHCP routeru (dhcp.build) – nacita se se zalozkou DHCP
+        self.dhcp_demo: dict = {k: dict(v) for k, v in dhcpmod.DEMO_UCI.items()}
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -603,6 +606,27 @@ class Store:
                 res["error"] = r.output[-300:]
             self.svc[d.name] = res
         await asyncio.gather(*(one(d) for d in self.svc_devices()))
+
+    async def load_dhcp(self, max_age: float = 60.0, force: bool = False):
+        """DHCP routeru (jen cteni, bez zapisu do logu routeru)."""
+        r = self.router
+        if not r or (not force and self.dhcp and time.time() - self.dhcp["ts"] < max_age):
+            return
+        if self.opts.get("demo"):
+            self.dhcp = dhcpmod.build(dhcpmod.demo_text(self.dhcp_demo, self.leases))
+            return
+        if not r.online:
+            self.dhcp = {"ts": time.time(), "error": r.error or "offline"}
+            return
+        res = await actions.run(self.cfg(r.name), self.key, dhcpmod.READ_CMD, timeout=30, audit=False)
+        m = dhcpmod.build(res.output)
+        if m["error"] and not res.ok:
+            m["error"] = res.output[-300:]
+        self.dhcp = m
+
+    def arp_ips(self) -> set[str]:
+        """IP, ktere router vidi v ARP (i zarizeni s pevnou IP mimo DHCP) – navrh volne IP je vynecha."""
+        return set((self.router.arp or {}).keys()) if self.router else set()
 
     def add_svc_pending(self, ap: str, cmds: list[str], info: dict) -> str:
         now = time.time()
@@ -1595,6 +1619,145 @@ async def device_services_body(request: Request, name: str):
     return render(request, "_services_body.html", ap=ap, d=_svc_data(ap))
 
 
+async def dhcp_apply(ap: str, cmds: list[str], summary: str, t) -> actions.Result:
+    """Zmena DHCP: pred prvni zmenou dne zaloha konfigurace routeru, pak uci + commit + reload dnsmasq."""
+    dev = store.ap(ap)
+    out = []
+    today = time.strftime("%Y-%m-%d")
+    if not any(time.strftime("%Y-%m-%d", time.localtime(b["ts"])) == today for b in store.backups(dev)):
+        ok, msg = await store.backup_one(dev)
+        out.append(t("dhcp.backup_done", file=msg) if ok else t("dhcp.backup_failed", err=msg))
+        if not ok and msg != "busy":
+            return actions.Result(False, "\n".join(out))
+    lock = store.ap_lock(ap)
+    async with lock:
+        r = await actions.run(store.cfg(ap), store.key, dhcpmod.apply_script(cmds, t("msg.reverted")), timeout=60, t=t,
+                              summary=f"{summary} ({ap})")
+    r.output = "\n".join([*out, r.output])
+    return r
+
+
+def _dhcp_ctx(ap: APState) -> dict:
+    m = store.dhcp or {}
+    if not m.get("hosts") and m.get("error"):
+        return {"m": m}
+    online = {x["mac"]: x["online"] for x in store.lease_list()}
+    reserved = {mac for h in m["hosts"] for mac in h["macs"]}
+    suggest = {n: dhcpmod.suggest_ip(m, n, store.arp_ips()) for n in m["_nets"]}
+    names = {x["mac"]: x["hostname"] for x in store.lease_list() if x["hostname"]}
+    leases = [{**l, "name": l["hostname"] or names.get(l["mac"], ""), "reserved": l["mac"] in reserved,
+               "left": l["expires"] - m["now"]} for l in m["leases"]]
+    pools = [p for p in m["pools"] if not p["wan"] and p["subnet"]]
+    for nd in m["no_dhcp"]:
+        size = ipaddress.ip_network(nd["subnet"]).num_addresses
+        start = 100 if size > 200 else 2
+        nd["default_start"], nd["default_limit"] = start, max(1, min(150, size - start - 2))
+    return {"m": m, "online": online, "suggest": suggest, "leases": leases, "pools": pools,
+            "nets": [n for n in m["_nets"] if not n.startswith("wan")], "tight": [p for p in pools if p["size"] and not p["ignore"] and p["free"] <= 5]}
+
+
+@app.get("/ap/{name}/dhcp", response_class=HTMLResponse)
+async def device_dhcp(request: Request, name: str):
+    ap = store.ap(name)
+    if ap.kind != "router":
+        raise HTTPException(404, "device not found")
+    fresh = store.dhcp and time.time() - store.dhcp["ts"] < SVC_FRESH
+    return render(request, "dhcp.html", page="ap:" + name, ap=ap, ready=bool(fresh), autorefresh=False,
+                  **(_dhcp_ctx(ap) if fresh else {}))
+
+
+@app.get("/ap/{name}/dhcp/body", response_class=HTMLResponse)
+async def device_dhcp_body(request: Request, name: str):
+    ap = store.ap(name)
+    if ap.kind != "router":
+        raise HTTPException(404, "device not found")
+    await store.load_dhcp(max_age=SVC_FRESH)
+    return render(request, "_dhcp_body.html", ap=ap, **_dhcp_ctx(ap))
+
+
+@app.post("/dhcp/preview", response_class=HTMLResponse)
+async def dhcp_preview(request: Request):
+    """Nahled zmeny DHCP (staticka zapujcka, rozsah). Chyby zastavi, varovani se jen ukazou."""
+    require_htmx(request)
+    t = request.state.t
+    title = t("preview.title")
+    if request.state.user["role"] != "full":
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
+    r = store.router
+    m = store.dhcp
+    if not r or not m or not m.get("hosts") and m.get("error"):
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    form = await request.form()
+    op = str(form.get("op") or "")
+    info: dict = {"op": op, "uci": "dhcp"}
+    warns: list[str] = []
+    if op in ("host_add", "host_edit"):
+        name = str(form.get("name") or "").strip()
+        raw_mac = str(form.get("mac") or "")
+        mac = dhcpmod.norm_mac(raw_mac) if raw_mac.strip() else ""
+        ip = str(form.get("ip") or "").strip()
+        dns = form.get("dns") == "1"
+        h = None
+        if op == "host_edit":
+            h = next((x for x in m["hosts"] if x["id"] == str(form.get("id") or "")), None)
+            if not h:
+                return result(request, title, actions.Result(False, t("msg.bad_request")))
+            if not raw_mac.strip():
+                mac = h["macs"][0] if h["macs"] else ""
+        if mac is None:
+            return result(request, title, actions.Result(False, t("dhcp.err_mac")))
+        errs, warns = dhcpmod.check_host(m, name, mac, ip, h["id"] if h else None, t)
+        if errs:
+            return result(request, title, actions.Result(False, "\n".join(errs)))
+        cmds = dhcpmod.host_add_cmds(name, mac, ip, dns) if op == "host_add" else dhcpmod.host_edit_cmds(h, name, mac, ip, dns)
+        if not cmds:
+            return result(request, title, actions.Result(False, t("msg.no_change")))
+        info.update(name=name, mac=mac, ip=ip, dns=dns, id=h["id"] if h else "")
+        changes = [t("dhcp.do_add", name=name, mac=mac.upper(), ip=ip) if op == "host_add" else
+                   t("dhcp.do_edit", name=h["name"], new=f"{name} · {mac.upper()} · {ip}" + (" · DNS" if dns else ""))]
+    elif op == "host_del":
+        h = next((x for x in m["hosts"] if x["id"] == str(form.get("id") or "")), None)
+        if not h:
+            return result(request, title, actions.Result(False, t("msg.bad_request")))
+        cmds = dhcpmod.host_del_cmds(h)
+        info.update(id=h["id"])
+        changes = [t("dhcp.do_del", name=h["name"] or h["id"], ip=h["ip"])]
+    elif op == "pool":
+        iface = str(form.get("iface") or "")
+        if not dhcpmod.NET_RE.match(iface):
+            return result(request, title, actions.Result(False, t("msg.bad_request")))
+        p = next((x for x in m["pools"] if x["iface"] == iface), None)
+        try:
+            start, limit = int(form.get("start") or 0), int(form.get("limit") or 0)
+        except ValueError:
+            return result(request, title, actions.Result(False, t("dhcp.err_range", max="?")))
+        leasetime = str(form.get("leasetime") or "").strip()
+        enabled = form.get("enabled") == "1"
+        errs = dhcpmod.check_pool(m, iface, start, limit, leasetime, t)
+        if errs:
+            return result(request, title, actions.Result(False, "\n".join(errs)))
+        cmds = dhcpmod.pool_cmds(p, iface, start, limit, leasetime, enabled)
+        if not cmds:
+            return result(request, title, actions.Result(False, t("msg.no_change")))
+        reserved_out = [h for h in m["hosts"] if h["net"] == iface]
+        n = m["_nets"][iface]["net"]
+        rng = dhcpmod.pool_range(n, start, limit)
+        if rng:
+            inside = [h["name"] for h in reserved_out if dhcpmod._in(h["ip"], int(rng[0]), int(rng[1]))]
+            if inside:
+                warns.append(t("dhcp.warn_pool_res", n=len(inside)))
+        if p and not enabled and not p["ignore"]:
+            warns.append(t("dhcp.warn_disable", net=iface))
+        info.update(iface=iface, sid=p["id"] if p else iface, start=start, limit=limit, leasetime=leasetime, enabled=enabled)
+        changes = [t("dhcp.do_pool", net=iface, first=str(rng[0]) if rng else "?", last=str(rng[1]) if rng else "?",
+                     lt=leasetime) + ("" if enabled else " · " + t("dhcp.disabled"))]
+    else:
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    token = store.add_svc_pending(r.name, cmds, {**info, "changes": changes})
+    return render(request, "_svc_preview.html", ap=r.name, cmds=[*cmds, "uci commit dhcp", "/etc/init.d/dnsmasq reload"],
+                  changes=changes, token=token, note=t("dhcp.note"), warns=warns)
+
+
 def _svc_plan(t, form) -> tuple[str, list[str], dict, list[str]] | str:
     """Z formulare akce -> (zarizeni, prikazy, info pro log/demo, popis zmeny) nebo chybovy klic."""
     ap, op = str(form.get("ap") or ""), str(form.get("op") or "")
@@ -1677,8 +1840,13 @@ async def services_apply(request: Request, token: str = Form(...)):
     log.info("%s: %s na %s", who(request), summary, ap)
     if store.opts.get("demo"):
         await asyncio.sleep(0.5)
-        store.demo_svc_apply(ap, info)
+        if info.get("uci") == "dhcp":
+            dhcpmod.demo_apply(store.dhcp_demo, info)
+        else:
+            store.demo_svc_apply(ap, info)
         r = actions.Result(True, f"{ap}: OK (demo)")
+    elif info.get("uci") == "dhcp":
+        r = await dhcp_apply(ap, cmds, summary, t)
     else:
         lock = store.ap_lock(ap)
         if lock.locked():
@@ -1686,6 +1854,17 @@ async def services_apply(request: Request, token: str = Form(...)):
         async with lock:
             r = await actions.run(store.cfg(ap), store.key, " && ".join(cmds) + " && echo OK", timeout=90, t=t,
                                   summary=f"{summary} ({ap})")
+    if info.get("uci") == "dhcp":
+        await store.load_dhcp(force=True)
+        if r.ok and not store.opts.get("demo"):
+            async def repoll():  # jmena a rezervace i na ostatnich strankach
+                await asyncio.sleep(3)
+                await store.poll()
+            asyncio.create_task(repoll())
+        resp = result(request, title, r)
+        if r.ok:
+            resp.headers["HX-Refresh"] = "true"
+        return resp
     await store.load_services(only=ap, force=True)
     resp = result(request, title, r)
     if r.ok:

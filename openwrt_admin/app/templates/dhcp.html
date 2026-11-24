@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h1><span class="dot {{ 'on' if ap.online else 'off' }}"></span> {{ ap.name }} <span class="tag">{{ t("router.kind") }}</span> <span class="muted">{{ ap.host }}</span></h1>
+{% set devtab = "dhcp" %}{% include "_devtabs.html" %}
+{% if ready %}{% include "_dhcp_body.html" %}
+{% else %}
+<div id="dhcp-body" hx-get="{{ base }}/ap/{{ ap.name | urlencode }}/dhcp/body" hx-trigger="load" hx-swap="outerHTML">
+  <p class="muted"><span class="spinner"></span> {{ t("dhcp.loading") }}</p>
+</div>
+{% endif %}
+{% endblock %}
