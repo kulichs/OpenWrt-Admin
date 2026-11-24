@@ -171,3 +171,107 @@ def demo_lookup(model: dict, name: str) -> str:
     lines.append("Name:\t" + target)
     lines += [f"Address: {ip}" for ip in dict.fromkeys(ips)]
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------- nadrazene servery
+
+PRESETS = [
+    ("CZ.NIC ODVR", ["193.17.47.1", "185.43.135.1"]),
+    ("Cloudflare", ["1.1.1.1", "1.0.0.1"]),
+    ("Quad9", ["9.9.9.9", "149.112.112.112"]),
+    ("Google", ["8.8.8.8", "8.8.4.4"]),
+]
+CHECK_NAME = "nic.cz"
+
+
+def split_list(raw: str) -> list[str]:
+    return [x for x in re.split(r"[\s,;]+", raw or "") if x]
+
+
+def norm_server(s: str) -> str | None:
+    """'1.1.1.1', '2606:4700::1111', '127.0.0.1#5053' -> normalizovany zapis, jinak None."""
+    s = (s or "").strip()
+    addr, _, port = s.partition("#")
+    a = norm_addr(addr)
+    if not a:
+        return None
+    if port:
+        if not port.isdigit() or not 1 <= int(port) <= 65535:
+            return None
+        return f"{a}#{port}"
+    return a
+
+
+def norm_forward(domain: str, server: str) -> str | None:
+    d = norm_name((domain or "").strip().strip("/"))
+    srv = norm_server(server)
+    return f"/{d}/{srv}" if d and srv else None
+
+
+def test_cmd(servers: list[str]) -> str:
+    """Router se zepta kazdeho serveru (jen cteni). Vystup: '<server> ok|fail'."""
+    parts = []
+    for srv in servers:
+        if "#" in srv:  # vlastni port (lokalni DoH/DoT proxy) – BusyBox nslookup port neumi, netestuje se
+            continue
+        target = srv
+        parts.append(f"if nslookup {CHECK_NAME} {q(target)} >/dev/null 2>&1; then echo {q(srv)} ok; "
+                     f"else echo {q(srv)} fail; fi")
+    return "; ".join(parts) or "true"
+
+
+def parse_test(out: str) -> dict[str, bool]:
+    res = {}
+    for line in (out or "").splitlines():
+        p = line.strip().rsplit(" ", 1)
+        if len(p) == 2 and p[1] in ("ok", "fail"):
+            res[p[0]] = p[1] == "ok"
+    return res
+
+
+def _list_cmds(path: str, values: list[str]) -> list[str]:
+    cmds = [f"{{ uci -q delete {path} || true; }}"]
+    cmds += [f"uci add_list {path}={q(v)}" for v in values]
+    return cmds
+
+
+def dnsmasq_servers_cmds(dm_id: str, servers: list[str], forwards: list[str]) -> list[str]:
+    """Servery a presmerovane domeny v dnsmasq; noresolv=1, kdyz jsou vlastni servery (jinak zpet na WAN)."""
+    cmds = _list_cmds(f"dhcp.{dm_id}.server", servers + forwards)
+    cmds.append(f"uci set dhcp.{dm_id}.noresolv=1" if servers else f"{{ uci -q delete dhcp.{dm_id}.noresolv || true; }}")
+    return cmds
+
+
+def wan_dns_cmds(proto: str, servers: list[str]) -> list[str]:
+    cmds = _list_cmds("network.wan.dns", servers)
+    if proto != "static":  # u DHCP/PPPoE jinak prednost dostanou servery poskytovatele
+        cmds.append("uci set network.wan.peerdns=0" if servers else "{ uci -q delete network.wan.peerdns || true; }")
+    return cmds
+
+
+def checked_script(cmds: list[str], rollback: list[str], pkg: str, reload: str, wait: int, msg_ok: str,
+                   msg_rolled: str, msg_failed: str) -> str:
+    """Zapis s pojistkou: po reloadu router zkusi prelozit nic.cz pres sebe; kdyz to nejde, vrati puvodni
+    nastaveni (rollback + commit + reload) a skonci chybou."""
+    chk = (f"ok=0; for i in 1 2 3 4 5; do sleep {wait}; if nslookup {CHECK_NAME} 127.0.0.1 >/dev/null 2>&1; "
+           f"then ok=1; break; fi; done")
+    return (f"{{ {' && '.join(cmds)} && uci commit {pkg} && {reload}; }} || {{ uci revert {pkg}; echo {q(msg_failed)}; exit 1; }}; "
+            f"{chk}; if [ $ok = 1 ]; then echo {q(msg_ok)}; else {' && '.join(rollback)} && uci commit {pkg} && {reload}; "
+            f"echo {q(msg_rolled)}; exit 1; fi")
+
+
+def dnsmasq_rollback(dm: dict) -> list[str]:
+    cmds = _list_cmds(f"dhcp.{dm['id']}.server", dm["servers"] + dm["forwards"])
+    cmds.append(f"uci set dhcp.{dm['id']}.noresolv=1" if dm["noresolv"] else f"{{ uci -q delete dhcp.{dm['id']}.noresolv || true; }}")
+    return cmds
+
+
+def wan_rollback(wan: dict) -> list[str]:
+    cmds = _list_cmds("network.wan.dns", wan["dns"])
+    cmds.append("{ uci -q delete network.wan.peerdns || true; }" if wan["peerdns"] else "uci set network.wan.peerdns=0")
+    return cmds
+
+
+def detached(script: str, log: str = "/tmp/owadmin-dns.log") -> str:
+    """Skript bezi na routeru na pozadi (preziji odpojeni SSH pri reloadu site), SSH ceka na vysledek."""
+    return (f"( {script} ) > {log} 2>&1 </dev/null & pid=$!; wait $pid; rc=$?; cat {log}; exit $rc")

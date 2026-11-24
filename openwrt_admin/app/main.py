@@ -146,6 +146,7 @@ class Store:
         self.svc_demo: dict[str, dict] = {}            # demo: stav adblocku/banIP po akcich
         self.dhcp: dict | None = None                  # DHCP routeru (dhcp.build) – nacita se se zalozkou DHCP
         self.dhcp_demo: dict = {k: dict(v) for k, v in dhcpmod.DEMO_UCI.items()}
+        self.dhcp_demo_wan: list[str] = []            # demo: DNS na WAN
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -613,7 +614,7 @@ class Store:
         if not r or (not force and self.dhcp and time.time() - self.dhcp["ts"] < max_age):
             return
         if self.opts.get("demo"):
-            self.dhcp = dhcpmod.build(dhcpmod.demo_text(self.dhcp_demo, self.leases))
+            self.dhcp = dhcpmod.build(dhcpmod.demo_text(self.dhcp_demo, self.leases, self.dhcp_demo_wan))
             return
         if not r.online:
             self.dhcp = {"ts": time.time(), "error": r.error or "offline"}
@@ -1619,7 +1620,7 @@ async def device_services_body(request: Request, name: str):
     return render(request, "_services_body.html", ap=ap, d=_svc_data(ap))
 
 
-async def dhcp_apply(ap: str, cmds: list[str], summary: str, t) -> actions.Result:
+async def dhcp_apply(ap: str, cmds: list[str], summary: str, t, script: str | None = None) -> actions.Result:
     """Zmena DHCP: pred prvni zmenou dne zaloha konfigurace routeru, pak uci + commit + reload dnsmasq."""
     dev = store.ap(ap)
     out = []
@@ -1631,8 +1632,8 @@ async def dhcp_apply(ap: str, cmds: list[str], summary: str, t) -> actions.Resul
             return actions.Result(False, "\n".join(out))
     lock = store.ap_lock(ap)
     async with lock:
-        r = await actions.run(store.cfg(ap), store.key, dhcpmod.apply_script(cmds, t("msg.reverted")), timeout=60, t=t,
-                              summary=f"{summary} ({ap})")
+        r = await actions.run(store.cfg(ap), store.key, script or dhcpmod.apply_script(cmds, t("msg.reverted")),
+                              timeout=120 if script else 60, t=t, summary=f"{summary} ({ap})")
     r.output = "\n".join([*out, r.output])
     return r
 
@@ -1685,7 +1686,7 @@ def _dns_ctx(ap: APState) -> dict:
         return {"m": m}
     dom = m["dnsmasq"].get("domain") or ""
     hostnames = sorted({h["name"] for h in m["hosts"] if h["name"] and h["dns"]}, key=str.lower)
-    return {"m": m, "dm": m["dnsmasq"], "dom": dom, "hostnames": hostnames,
+    return {"m": m, "dm": m["dnsmasq"], "wan": m["wan"], "dom": dom, "hostnames": hostnames, "presets": dnsmod.PRESETS,
             "known": sorted(dnsmod.local_names(m))}
 
 
@@ -1723,6 +1724,86 @@ async def dns_lookup(request: Request, name: str = Form("")):
         out, ok = r.output, r.ok
     res = dnsmod.parse_lookup(out)
     return render(request, "_dns_lookup.html", qname=n, res=res, out=out, ok=ok)
+
+
+async def _upstream_tests(servers: list[str], t) -> dict[str, bool]:
+    """Router se zepta kazdeho noveho serveru (jen cteni). Demo: 192.0.2.x a 198.51.100.x neodpovi."""
+    if not servers:
+        return {}
+    if store.opts.get("demo"):
+        return {x: not x.startswith(("192.0.2.", "198.51.100.")) for x in servers if "#" not in x}
+    r = await actions.run(store.cfg(store.router.name), store.key, dnsmod.test_cmd(servers), timeout=40, t=t, audit=False)
+    return dnsmod.parse_test(r.output)
+
+
+async def _upstream_plan(t, form, m: dict, op: str):
+    """Nadrazene DNS: v dnsmasq (dns_up, fwd_add, fwd_del) nebo na WAN (wan_dns). Vraci
+    (prikazy, co ukazat v nahledu, zmeny, varovani, info) nebo chybovou zpravu."""
+    dm, wan = m["dnsmasq"], m["wan"]
+    warns: list[str] = []
+    servers, forwards = list(dm["servers"]), list(dm["forwards"])
+    if op in ("dns_up", "wan_dns"):
+        raw = dnsmod.split_list(str(form.get("servers") or ""))
+        servers = []
+        for x in raw:
+            v = dnsmod.norm_server(x)
+            if not v:
+                return t("dns.err_server", s=x)
+            if v not in servers:
+                servers.append(v)
+        if len(servers) > 8:
+            return t("dns.err_too_many")
+    elif op == "fwd_add":
+        v = dnsmod.norm_forward(str(form.get("domain") or ""), str(form.get("server") or ""))
+        if not v:
+            return t("dns.err_forward")
+        if v in forwards:
+            return t("msg.no_change")
+        forwards.append(v)
+    elif op == "fwd_del":
+        v = str(form.get("value") or "")
+        if v not in forwards:
+            return t("msg.bad_request")
+        forwards.remove(v)
+    if op == "wan_dns":
+        if not wan["exists"]:
+            return t("dns.err_no_wan")
+        if servers == wan["dns"]:
+            return t("msg.no_change")
+    elif servers == dm["servers"] and forwards == dm["forwards"]:
+        return t("msg.no_change")
+    new = [x for x in servers if x not in (wan["dns"] if op == "wan_dns" else dm["servers"])]
+    if op == "fwd_add":
+        new = [forwards[-1].rsplit("/", 1)[-1]]
+    tests = await _upstream_tests(new, t)
+    bad = [x for x, ok in tests.items() if not ok]
+    if bad:
+        warns.append(t("dns.warn_noanswer", s=", ".join(bad)))
+    if servers and op in ("dns_up", "wan_dns") and tests and all(not v for v in tests.values()) \
+            and len(tests) == len([x for x in servers if "#" not in x]):
+        return t("dns.err_none_answer")
+    if any("#" in x for x in servers):
+        warns.append(t("dns.warn_port"))
+    if op == "wan_dns":
+        cmds = dnsmod.wan_dns_cmds(wan["proto"], servers)
+        script = dnsmod.detached(dnsmod.checked_script(cmds, dnsmod.wan_rollback(wan), "network", "/etc/init.d/network reload",
+                                                       3, t("dns.applied_ok"), t("dns.rolled_back"), t("msg.reverted")))
+        if dm["noresolv"] and dm["servers"]:
+            warns.append(t("dns.warn_wan_unused"))
+        shown = [*cmds, "uci commit network", "/etc/init.d/network reload", t("dns.shown_check")]
+        changes = [t("dns.do_wan", s=", ".join(servers) or t("dns.provider"))]
+        return cmds, shown, changes, warns, {"script": script, "servers": servers}
+    cmds = dnsmod.dnsmasq_servers_cmds(dm["id"], servers, forwards)
+    script = dnsmod.checked_script(cmds, dnsmod.dnsmasq_rollback(dm), "dhcp", "/etc/init.d/dnsmasq reload", 1,
+                                   t("dns.applied_ok"), t("dns.rolled_back"), t("msg.reverted"))
+    shown = [*cmds, "uci commit dhcp", "/etc/init.d/dnsmasq reload", t("dns.shown_check")]
+    if op == "dns_up":
+        changes = [t("dns.do_up", s=", ".join(servers)) if servers else t("dns.do_up_wan")]
+    elif op == "fwd_add":
+        changes = [t("dns.do_fwd", v=forwards[-1])]
+    else:
+        changes = [t("dns.do_fwd_del", v=str(form.get("value")))]
+    return cmds, shown, changes, warns, {"script": script, "servers": servers, "forwards": forwards}
 
 
 @app.post("/dhcp/preview", response_class=HTMLResponse)
@@ -1844,6 +1925,16 @@ async def dhcp_preview(request: Request):
         info.update(id=sid)
         changes = [t("dns.do_del", name=it["name"], ip=it["ip"]) if op == "dom_del" else
                    t("dns.do_cname_del", cname=it["cname"], target=it["target"])]
+    elif op in ("dns_up", "fwd_add", "fwd_del", "wan_dns"):
+        plan = await _upstream_plan(t, form, m, op)
+        if isinstance(plan, str):
+            return result(request, title, actions.Result(False, plan))
+        cmds, shown, changes, warns, extra = plan
+        info.update(extra)
+        token = store.add_svc_pending(r.name, cmds, {**info, "changes": changes})
+        return render(request, "_svc_preview.html", ap=r.name, cmds=shown, changes=changes, token=token,
+                      note=t("dns.note_wan" if op == "wan_dns" else "dns.note_up"), warns=warns,
+                      danger=op == "wan_dns")
     else:
         return result(request, title, actions.Result(False, t("msg.bad_request")))
     token = store.add_svc_pending(r.name, cmds, {**info, "changes": changes})
@@ -1934,13 +2025,15 @@ async def services_apply(request: Request, token: str = Form(...)):
     log.info("%s: %s na %s", who(request), summary, ap)
     if store.opts.get("demo"):
         await asyncio.sleep(0.5)
-        if info.get("uci") == "dhcp":
+        if info.get("op") == "wan_dns":
+            store.dhcp_demo_wan = list(info["servers"])
+        elif info.get("uci") == "dhcp":
             dhcpmod.demo_apply(store.dhcp_demo, info)
         else:
             store.demo_svc_apply(ap, info)
         r = actions.Result(True, f"{ap}: OK (demo)")
     elif info.get("uci") == "dhcp":
-        r = await dhcp_apply(ap, cmds, summary, t)
+        r = await dhcp_apply(ap, cmds, summary, t, info.get("script"))
     else:
         lock = store.ap_lock(ap)
         if lock.locked():

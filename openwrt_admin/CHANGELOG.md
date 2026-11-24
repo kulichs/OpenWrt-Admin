@@ -2,6 +2,19 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.20.1
+- DNS tab – **upstream servers** can now be changed in two ways:
+  - **In dnsmasq (recommended)**: `server` list with `noresolv=1`, takes precedence over the WAN servers, changed with a dnsmasq reload only (no internet outage); empty = back to the WAN servers. Presets CZ.NIC ODVR, Cloudflare, Quad9, Google. **Forwarded domains** (`server=/domain/ip`) can be added and removed.
+  - **On the WAN interface** (`network.wan.dns`, `peerdns=0` for DHCP/PPPoE) – in a red section with a warning: a network reload, the internet may drop for a few seconds. The script runs in the background on the router so that a dropped SSH session cannot interrupt it.
+  - Before saving the router asks every new server (`nslookup nic.cz <server>`); non-answering servers are flagged, and if none answers the change is refused. After saving the router resolves `nic.cz` through itself; if that fails it **restores the previous settings** (servers, `noresolv`, `peerdns`) on its own.
+- Verified: script syntax, the success and rollback path simulated with fake uci/nslookup, demo cs + en (presets, dnsmasq, forwards, WAN, back to WAN, non-answering server, read-only user). Not yet on the real network.
+---
+- Záložka DNS – **nadřazené servery** jde nově měnit dvěma způsoby:
+  - **V dnsmasq (doporučeno)**: seznam `server` s `noresolv=1`, má přednost před servery z WAN, mění se jen reloadem dnsmasq (bez výpadku internetu); prázdné = zpět na servery z WAN. Předvolby CZ.NIC ODVR, Cloudflare, Quad9, Google. **Přesměrované domény** (`server=/doména/ip`) jde přidat a smazat.
+  - **Na rozhraní WAN** (`network.wan.dns`, u DHCP/PPPoE `peerdns=0`) – v červené sekci s upozorněním: reload sítě, internet může na pár sekund vypadnout. Skript běží na routeru na pozadí, aby ho nepřerušilo případné odpojení SSH.
+  - Před uložením se router zeptá každého nového serveru (`nslookup nic.cz <server>`); neodpovídající označí, a když neodpoví žádný, změnu nepovolí. Po uložení router přeloží `nic.cz` přes sebe; když to nejde, sám **vrátí původní nastavení** (servery, `noresolv`, `peerdns`).
+- Ověřeno: syntaxe skriptů, cesta úspěchu i návratu nasimulovaná s falešným uci/nslookup, demo cs + en (předvolby, dnsmasq, přesměrování, WAN, zpět na WAN, neodpovídající server, uživatel jen pro čtení). Na skutečné síti zatím ne.
+
 ## 0.20.0
 - New **DNS** tab on the router page (Overview | Services | DHCP | DNS), dnsmasq:
   - **Lookup test**: asks dnsmasq on the router (`nslookup <name> 127.0.0.1`) like clients do – shows the address, the alias chain (alias → target → IP), "blocked" for 0.0.0.0 (adblock) or NXDOMAIN; raw output on click. Read-only, allowed for read-only users.

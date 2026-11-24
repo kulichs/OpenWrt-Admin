@@ -1,4 +1,4 @@
-<div class="result preview">
+<div class="result preview{{ ' danger' if danger }}">
   <strong>{{ t("preview.title") }} · {{ ap }}</strong>
   <p>{% for c in changes %}{{ c }}<br>{% endfor %}</p>
   {% if warns %}<ul class="warnlist">{% for w in warns %}<li>⚠ {{ w }}</li>{% endfor %}</ul>{% endif %}
@@ -6,7 +6,7 @@
   {% if note %}<p class="muted small">{{ note }}</p>{% endif %}
   <form hx-post="{{ base }}/services/apply" hx-target="closest .cmd-out" hx-disabled-elt="find button">
     <input type="hidden" name="token" value="{{ token }}">
-    <button type="submit" class="warnbtn">{{ t("svc.apply", ap=ap) }}</button>
+    <button type="submit" class="{{ 'danger' if danger else 'warnbtn' }}">{{ t("svc.apply", ap=ap) }}</button>
     <span class="htmx-indicator muted">{{ t("preview.writing") }}</span>
   </form>
 </div>

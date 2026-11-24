@@ -144,8 +144,10 @@ Proč je co tak, jak je – čti, než něco „zjednodušíš“:
   Návrh volné IP pod dynamickým rozsahem, bere v úvahu i ARP routeru (zařízení s pevnou IP mimo DHCP).
   Skutečná jména/MAC/IP z konfigurace uživatele nepatří do dema ani testů v repu.
 - **DNS (`app/dns.py`):** data z `dhcp.READ_CMD` (stejný soubor), zápis přes `/dhcp/preview` + `dhcp_apply`.
-  CNAME funguje jen na cíl, který dnsmasq zná (místní jméno, zápůjčka) – proto varování. Nadřazené DNS jen čtení
-  (network.wan.dns → restart WAN). V `render()` nepoužívat klíč `name` (koliduje s parametrem) → `qname`.
+  CNAME funguje jen na cíl, který dnsmasq zná (místní jméno, zápůjčka) – proto varování. Nadřazené DNS: v dnsmasq
+  (`server` + `noresolv`) nebo na WAN (`network.wan.dns`, `network reload`). Obojí `dns.checked_script`: po reloadu
+  `nslookup nic.cz 127.0.0.1`, při selhání rollback přesně na původní stav (i noresolv/peerdns); WAN přes
+  `dns.detached` (na pozadí, přežije odpojení SSH). Rollback testovat falešným uci/nslookup v PATH. V `render()` nepoužívat klíč `name` (koliduje s parametrem) → `qname`.
 
 ## Struktura
 

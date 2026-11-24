@@ -16,6 +16,7 @@ echo @@net; uci -q show network | grep -E '^network\.[A-Za-z0-9_]+(=interface|\.
 echo @@leases; cat /tmp/dhcp.leases 2>/dev/null
 echo @@apknew; ls /etc/config/*.apk-new /etc/config/*-opkg 2>/dev/null
 echo @@resolv; cat /tmp/resolv.conf.d/resolv.conf.auto /tmp/resolv.conf.auto 2>/dev/null
+echo @@wan; uci -q show network.wan
 echo @@now; date +%s
 echo @@end
 """
@@ -201,6 +202,10 @@ def build(text: str) -> dict:
         if len(p_) >= 2 and p_[0] == "nameserver" and p_[1] not in upstream:
             upstream.append(p_[1])
     rebind_ok = dm.get("rebind_domain") or []
+    wan = parse_uci("\n".join(sec.get("wan", [])), "network").get("wan", {})
+    wdns = wan.get("dns") or []
+    wan_info = {"exists": bool(wan), "proto": _first(wan.get("proto")), "dns": wdns if isinstance(wdns, list) else [wdns],
+                "peerdns": str(wan.get("peerdns", "1")) != "0"}
     dnsmasq = {"id": next((sid for sid, o in uci.items() if o is dm), ""), "domain": _first(dm.get("domain")),
                "local": _first(dm.get("local")), "noresolv": str(dm.get("noresolv", "")) == "1",
                "servers": [x for x in servers if not x.startswith("/")],
@@ -215,7 +220,7 @@ def build(text: str) -> dict:
     return {"ts": time.time(), "now": now, "uci": uci, "nets": {k: {"subnet": str(v["net"]), "ip": str(v["ip"]),
                                                                        "proto": v["proto"]} for k, v in nets.items()},
             "_nets": nets, "hosts": hosts, "pools": pools, "no_dhcp": no_dhcp, "leases": leases, "served": served,
-            "domains": domains, "cnames": cnames, "dnsmasq": dnsmasq,
+            "domains": domains, "cnames": cnames, "dnsmasq": dnsmasq, "wan": wan_info,
             "apknew": [x.strip() for x in sec.get("apknew", []) if x.strip()], "error": "" if "end" in sec else "incomplete"}
 
 
@@ -411,16 +416,20 @@ def to_uci(model: dict[str, dict]) -> str:
         out.append(f"dhcp.{sid}={o['_type']}")
         for k, v in o.items():
             if not k.startswith("_"):
-                out.append(f"dhcp.{sid}.{k}='{v}'")
+                vals = v if isinstance(v, list) else [v]
+                out.append(f"dhcp.{sid}.{k}=" + " ".join(f"'{x}'" for x in vals))
     return "\n".join(out)
 
 
-def demo_text(model: dict[str, dict], leases: dict[str, dict]) -> str:
+def demo_text(model: dict[str, dict], leases: dict[str, dict], wan_dns: list[str] | None = None) -> str:
     now = int(time.time())
     ls = "\n".join(f"{now + 3600 + i * 60} {mac} {l['ip']} {l.get('hostname') or '*'} 01:{mac}"
                    for i, (mac, l) in enumerate(leases.items()) if l.get("ip"))
     return (f"@@uci\n{to_uci(model)}\n@@net\n{DEMO_NET}\n@@leases\n{ls}\n@@apknew\n/etc/config/dhcp.apk-new\n/etc/config/luci.apk-new\n/etc/config/uhttpd.apk-new\n"
-            f"@@resolv\nnameserver 203.0.113.53\nnameserver 198.51.100.53\n@@now\n{now}\n@@end\n")
+            f"@@resolv\n" + "\n".join(f"nameserver {x}" for x in (wan_dns or ["203.0.113.53"])) +
+            "\n@@wan\nnetwork.wan=interface\nnetwork.wan.proto='dhcp'\n" +
+            (("network.wan.peerdns='0'\nnetwork.wan.dns=" + " ".join(f"'{x}'" for x in wan_dns) + "\n") if wan_dns else "") +
+            f"@@now\n{now}\n@@end\n")
 
 
 def demo_apply(model: dict[str, dict], info: dict):
@@ -442,6 +451,16 @@ def demo_apply(model: dict[str, dict], info: dict):
         model[f"cfg{len(model) + 0x200:06x}"] = {"_type": "domain", "name": info["name"], "ip": info["ip"]}
     elif op == "dom_edit" and info["id"] in model:
         model[info["id"]].update(name=info["name"], ip=info["ip"])
+    elif op in ("dns_up", "fwd_add", "fwd_del"):
+        dm = next(o for o in model.values() if o["_type"] == "dnsmasq")
+        if info["servers"] or info["forwards"]:
+            dm["server"] = info["servers"] + info["forwards"]
+        else:
+            dm.pop("server", None)
+        if info["servers"]:
+            dm["noresolv"] = "1"
+        else:
+            dm.pop("noresolv", None)
     elif op == "cname_add":
         model[f"cfg{len(model) + 0x300:06x}"] = {"_type": "cname", "cname": info["cname"], "target": info["target"]}
     elif op == "cname_edit" and info["id"] in model:
