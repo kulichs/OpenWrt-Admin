@@ -129,7 +129,7 @@ Proč je co tak, jak je – čti, než něco „zjednodušíš“:
   V šablonách nepoužívat proměnnou `r` z kontextu – `base.html` si ji přepisuje (`set r = store.router`).
   Sken okolí (`iwinfo <if> scan`) jen na tlačítko, jen s `radio_scan` a plným přístupem – rádio při skenu
   odskakuje z kanálu. Na jednom AP rádia postupně (`ap_lock`), AP navzájem paralelně. 149–165 nenavrhovat (EU SRD).
-- **Služby (`app/services.py`):** čte se jen při otevření stránky (`actions.run(..., audit=False)` – čtení do syslogu
+- **Služby (`app/services.py`):** záložka u zařízení (`/ap/{name}/services`, `_devtabs.html`), čte se jen při otevření (`actions.run(..., audit=False)` – čtení do syslogu
   nepatří). Chráněné služby (`PROTECTED`: dropbear, network…) jen restart na pozadí, jinak se aplikace odřízne.
   Příkaz na pozadí v řetězu `&&` musí být v `{ … & }`, jinak syntaktická chyba. adblock 4.5: `query` → `search`
   (zjišťuje se z nápovědy init skriptu); stav „neblokuje“ = zapnutý, ale `adb_list.overall` prázdný (suspend ho

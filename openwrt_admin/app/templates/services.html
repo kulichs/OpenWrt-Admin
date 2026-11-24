@@ -14,12 +14,14 @@
 </table>
 {%- endmacro %}
 {% block content %}
-<h1>{{ t("svc.title") }}</h1>
+<h1><span class="dot {{ 'on' if ap.online else 'off' }}"></span> {{ ap.name }}{% if ap.kind == 'router' %} <span class="tag">{{ t("router.kind") }}</span>{% endif %} <span class="muted">{{ ap.host }}</span></h1>
+{% set devtab = "services" %}{% include "_devtabs.html" %}
 <p class="muted">{{ t("svc.intro") if can_edit else t("svc.readonly") }}</p>
+{% if d.error %}<p class="err">{{ d.error }}</p>{% endif %}
 
-{% for d in devs if d.adblock %}{% set a = d.adblock %}
+{% if d.adblock %}{% set a = d.adblock %}
 <div class="panel">
-  <h2>adblock <span class="tag">{{ d.name }}</span>
+  <h2>adblock
     <span class="tag svc-{{ a.state }}">{{ t("adb.state_" ~ a.state) }}</span>
     {% if a.version %}<span class="muted small">{{ a.version }}</span>{% endif %}</h2>
   {% if a.state == "empty" %}<p class="warnlist">⚠ {{ t("adb.warn_empty") }}</p>{% endif %}
@@ -62,11 +64,11 @@
   </div>
   <p class="muted small">{{ t("adb.hint") }}</p>
 </div>
-{% endfor %}
+{% endif %}
 
-{% for d in devs if d.banip %}{% set b = d.banip %}
+{% if d.banip %}{% set b = d.banip %}
 <div class="panel">
-  <h2>banIP <span class="tag">{{ d.name }}</span>
+  <h2>banIP
     <span class="tag svc-{{ b.state }}">{{ t("ban.state_" ~ b.state) }}</span>
     {% if b.version %}<span class="muted small">{{ b.version }}</span>{% endif %}</h2>
   {% if b.state == "disabled" %}<p class="muted">{{ t("ban.disabled") }}</p>
@@ -98,17 +100,15 @@
   </div>
   <p class="muted small">{{ t("ban.hint") }}</p>
 </div>
-{% endfor %}
+{% endif %}
 
-<h2>{{ t("svc.services") }}</h2>
-{% for d in devs %}
-<details class="panel" {{ 'open' if d.kind == 'router' or loop.first }}>
-  <summary><b>{{ d.name }}</b>
+<div class="panel">
+  <h2>{{ t("svc.services") }}
     {% if d.services %}{% set bad = d.services | selectattr("state", "equalto", "failed") | list %}
     <span class="muted small">{{ t("svc.count", n=(d.services | selectattr("state", "equalto", "running") | list | length), total=(d.services | length)) }}</span>
     {% if bad %}<span class="tag svc-failed">{{ t("svc.failed_n", n=(bad | length)) }}</span>{% endif %}
     {% endif %}
-    {% if d.error %}<span class="err small">{{ d.error }}</span>{% endif %}</summary>
+  </h2>
   <div class="cmd-out"></div>
   {% if d.services %}
   <table class="list">
@@ -132,7 +132,6 @@
     {% endfor %}
   </table>
   {% endif %}
-</details>
-{% endfor %}
+</div>
 <p class="muted small">{{ t("svc.footer") }}</p>
 {% endblock %}

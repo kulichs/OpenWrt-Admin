@@ -1,0 +1,6 @@
+{# zalozky zarizeni pod nadpisem: Prehled | Sluzby (jen OpenWrt zarizeni, ne switch) #}
+{% set dev_url = base ~ "/ap/" ~ (ap.name | urlencode) %}
+<nav class="subtabs">
+  <a href="{{ dev_url }}" class="{{ 'active' if devtab == 'overview' }}">{{ t("dev.tab_overview") }}</a>
+  <a href="{{ dev_url }}/services" class="{{ 'active' if devtab == 'services' }}">{{ t("dev.tab_services") }}</a>
+</nav>

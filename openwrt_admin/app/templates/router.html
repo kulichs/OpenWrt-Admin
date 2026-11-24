@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1><span class="dot {{ 'on' if ap.online else 'off' }}"></span> {{ ap.name }} <span class="tag">{{ t("router.kind") }}</span> <span class="muted">{{ ap.host }}</span></h1>
+{% set devtab = "overview" %}{% include "_devtabs.html" %}
 {% set act = base ~ "/ap/" ~ (ap.name | urlencode) %}
 {% if can_edit %}
 <div class="panel actions">

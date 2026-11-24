@@ -510,11 +510,9 @@
   "setup.user_note": "OpenWrt (dropbear) reads the keys of every UID 0 user from the same file /etc/dropbear/authorized_keys, so the key stays there. /etc/passwd and /etc/shadow survive a normal sysupgrade; after sysupgrade -n add them again (or put them in a first-boot script).",
   "setup.audit_title": "Who did what",
   "setup.audit_text": "Every action (reboot, SSID, radios, apk, backup, scan, client disconnect) is also written to the device syslog with the tag openwrt-admin and the name of the Home Assistant user who started it. Passwords are never logged. On the device:",
-  "nav.services": "Services",
-  "svc.title": "Services and extensions",
-  "svc.intro": "Service status on the router and APs, adblock and banIP. Every action shows a command preview and runs only after Apply; it is written to the device log with the user's name.",
-  "svc.readonly": "Read only – you can see the status and search why a domain or IP is blocked. Only users with full access can change things.",
-  "svc.services": "Services on devices",
+  "svc.intro": "Services of this device and extensions (adblock, banIP) when installed. Every action shows a command preview and runs only after Apply; it is written to the device log with the user's name.",
+  "svc.readonly": "Read only – you can see the service status and search why a domain or IP is blocked. Only users with full access can change things.",
+  "svc.services": "Services",
   "svc.count": "{n} of {total} running",
   "svc.failed_n": "failed: {n}",
   "svc.col_name": "Service",
@@ -597,5 +595,7 @@
   "list.add_block": "add {v} to blocked",
   "list.del_allow": "remove {v} from allowed",
   "list.del_block": "remove {v} from blocked",
-  "svc.st_static": "no process"
+  "svc.st_static": "no process",
+  "dev.tab_overview": "Overview",
+  "dev.tab_services": "Services"
 }

@@ -12,6 +12,7 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
+from urllib.parse import quote
 
 import asyncssh
 from fastapi import FastAPI, Form, HTTPException, Request
@@ -580,14 +581,14 @@ class Store:
         """Zarizeni s OpenWrt (router + AP), switche ne."""
         return [d for d in [self.router, *self.aps] if d is not None and d.kind != "switch"]
 
-    async def load_services(self, max_age: float = 15.0, only: str | None = None):
-        """Nacte sluzby z online zarizeni (paralelne). Jen cteni – do syslogu zarizeni se nic nezapisuje."""
+    async def load_services(self, only: str | None = None, max_age: float = 15.0, force: bool = False):
+        """Nacte sluzby zarizeni (only = jen jedno). Jen cteni – do syslogu zarizeni se nic nezapisuje."""
         now = time.time()
 
         async def one(d: APState):
             if only and d.name != only:
                 return
-            if not only and now - (self.svc.get(d.name) or {}).get("ts", 0) < max_age:
+            if not force and now - (self.svc.get(d.name) or {}).get("ts", 0) < max_age:
                 return
             if self.opts.get("demo"):
                 text = svcmod.demo_text(d.name, d.kind == "router", self.svc_demo.get(d.name))
@@ -1559,14 +1560,22 @@ async def radios_scan(request: Request, ap: str = Form(""), radio: str = Form(""
     return resp
 
 
-@app.get("/services", response_class=HTMLResponse)
-async def services_page(request: Request):
-    await store.load_services()
-    devs = []
-    for d in store.svc_devices():
-        sv = store.svc.get(d.name) or {}
-        devs.append({"name": d.name, "kind": d.kind, "online": d.online, **sv})
-    return render(request, "services.html", page="services", devs=devs, autorefresh=False)
+@app.get("/services")
+async def services_redirect(request: Request):
+    """Stara adresa (0.18.0) – sluzby jsou ted zalozka u kazdeho zarizeni."""
+    devs = store.svc_devices()
+    base = request.headers.get("X-Ingress-Path", "").rstrip("/")
+    return RedirectResponse(f"{base}/ap/{quote(devs[0].name)}/services" if devs else f"{base}/", status_code=303)
+
+
+@app.get("/ap/{name}/services", response_class=HTMLResponse)
+async def device_services(request: Request, name: str):
+    ap = store.ap(name)
+    if ap.kind == "switch":
+        raise HTTPException(404, "device not found")
+    await store.load_services(only=name)
+    d = {"name": ap.name, "kind": ap.kind, "online": ap.online, **(store.svc.get(ap.name) or {})}
+    return render(request, "services.html", page="ap:" + name, ap=ap, d=d, autorefresh=False)
 
 
 def _svc_plan(t, form) -> tuple[str, list[str], dict, list[str]] | str:
@@ -1660,7 +1669,7 @@ async def services_apply(request: Request, token: str = Form(...)):
         async with lock:
             r = await actions.run(store.cfg(ap), store.key, " && ".join(cmds) + " && echo OK", timeout=90, t=t,
                                   summary=f"{summary} ({ap})")
-    await store.load_services(only=ap)
+    await store.load_services(only=ap, force=True)
     resp = result(request, title, r)
     if r.ok:
         resp.headers["HX-Refresh"] = "true"
@@ -1672,6 +1681,8 @@ async def services_search(request: Request, ap: str = Form(""), kind: str = Form
     """Proc je domena / IP blokovana – jen cteni, smi i uzivatel s pristupem jen pro cteni."""
     require_htmx(request)
     t = request.state.t
+    if ap not in store.svc and any(d.name == ap for d in store.svc_devices()):
+        await store.load_services(only=ap)
     sv = store.svc.get(ap) or {}
     data = sv.get(kind) if kind in ("adblock", "banip") else None
     if not data:

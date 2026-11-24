@@ -227,3 +227,6 @@ td.btns button { margin-right: .2rem; }
 .small-tiles .stat { flex: 0 1 auto; min-width: 140px; padding: .45rem .8rem; text-align: left; }
 .small-tiles .stat .lbl { display: block; }
 .cmd-out:not(:empty) { margin-bottom: .6rem; }
+/* zalozky zarizeni (0.18.1) */
+nav.subtabs { display: flex; gap: 1.4rem; border-bottom: 1px solid var(--line); margin: -.4rem 0 1rem; }
+nav.subtabs a { margin: 0; padding: .35rem 0; }

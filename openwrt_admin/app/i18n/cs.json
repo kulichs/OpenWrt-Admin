@@ -518,11 +518,9 @@
   "setup.user_note": "OpenWrt (dropbear) bere klíče pro všechny uživatele s UID 0 ze stejného souboru /etc/dropbear/authorized_keys, klíč tedy zůstává tam. /etc/passwd a /etc/shadow přežijí běžný sysupgrade; po sysupgrade -n je přidej znovu (nebo do first-boot skriptu).",
   "setup.audit_title": "Kdo co dělal",
   "setup.audit_text": "Každou akci (restart, SSID, rádia, apk, záloha, sken, odpojení klienta) aplikace zapíše i do syslogu zařízení s tagem openwrt-admin a jménem uživatele Home Assistantu, který ji spustil. Hesla se nezapisují. Na zařízení:",
-  "nav.services": "Služby",
-  "svc.title": "Služby a rozšíření",
-  "svc.intro": "Stav služeb na routeru a AP, adblock a banIP. Každá akce ukáže náhled příkazů a provede se až po Použít; zapíše se do logu zařízení se jménem uživatele.",
-  "svc.readonly": "Jen čtení – vidíš stav a můžeš hledat, proč je doména nebo IP blokovaná. Měnit může jen uživatel s plným přístupem.",
-  "svc.services": "Služby na zařízeních",
+  "svc.intro": "Služby tohoto zařízení a rozšíření (adblock, banIP), pokud jsou nainstalovaná. Každá akce ukáže náhled příkazů a provede se až po Použít; zapíše se do logu zařízení se jménem uživatele.",
+  "svc.readonly": "Jen čtení – vidíš stav služeb a můžeš hledat, proč je doména nebo IP blokovaná. Měnit může jen uživatel s plným přístupem.",
+  "svc.services": "Služby",
   "svc.count": "běží {n} z {total}",
   "svc.failed_n": "selhalo: {n}",
   "svc.col_name": "Služba",
@@ -605,5 +603,7 @@
   "list.add_block": "přidat {v} na blokované",
   "list.del_allow": "odebrat {v} z povolených",
   "list.del_block": "odebrat {v} z blokovaných",
-  "svc.st_static": "bez procesu"
+  "svc.st_static": "bez procesu",
+  "dev.tab_overview": "Přehled",
+  "dev.tab_services": "Služby"
 }
