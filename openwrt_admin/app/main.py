@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, dhcp as dhcpmod, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
@@ -1679,6 +1679,52 @@ async def device_dhcp_body(request: Request, name: str):
     return render(request, "_dhcp_body.html", ap=ap, **_dhcp_ctx(ap))
 
 
+def _dns_ctx(ap: APState) -> dict:
+    m = store.dhcp or {}
+    if not m.get("dnsmasq") and m.get("error"):
+        return {"m": m}
+    dom = m["dnsmasq"].get("domain") or ""
+    hostnames = sorted({h["name"] for h in m["hosts"] if h["name"] and h["dns"]}, key=str.lower)
+    return {"m": m, "dm": m["dnsmasq"], "dom": dom, "hostnames": hostnames,
+            "known": sorted(dnsmod.local_names(m))}
+
+
+@app.get("/ap/{name}/dns", response_class=HTMLResponse)
+async def device_dns(request: Request, name: str):
+    ap = store.ap(name)
+    if ap.kind != "router":
+        raise HTTPException(404, "device not found")
+    fresh = store.dhcp and time.time() - store.dhcp["ts"] < SVC_FRESH
+    return render(request, "dns.html", page="ap:" + name, ap=ap, ready=bool(fresh), autorefresh=False,
+                  **(_dns_ctx(ap) if fresh else {}))
+
+
+@app.get("/ap/{name}/dns/body", response_class=HTMLResponse)
+async def device_dns_body(request: Request, name: str):
+    ap = store.ap(name)
+    if ap.kind != "router":
+        raise HTTPException(404, "device not found")
+    await store.load_dhcp(max_age=SVC_FRESH)
+    return render(request, "_dns_body.html", ap=ap, **_dns_ctx(ap))
+
+
+@app.post("/dns/lookup", response_class=HTMLResponse)
+async def dns_lookup(request: Request, name: str = Form("")):
+    """Test prekladu pres dnsmasq na routeru – jen cteni, smi i uzivatel jen pro cteni."""
+    require_htmx(request)
+    t = request.state.t
+    n = dnsmod.norm_name(name)
+    if not n or not store.router:
+        return result(request, t("dns.lookup"), actions.Result(False, t("dns.err_name")))
+    if store.opts.get("demo"):
+        out, ok = dnsmod.demo_lookup(store.dhcp or {}, n), True
+    else:
+        r = await actions.run(store.cfg(store.router.name), store.key, dnsmod.lookup_cmd(n), timeout=20, t=t, audit=False)
+        out, ok = r.output, r.ok
+    res = dnsmod.parse_lookup(out)
+    return render(request, "_dns_lookup.html", qname=n, res=res, out=out, ok=ok)
+
+
 @app.post("/dhcp/preview", response_class=HTMLResponse)
 async def dhcp_preview(request: Request):
     """Nahled zmeny DHCP (staticka zapujcka, rozsah). Chyby zastavi, varovani se jen ukazou."""
@@ -1755,11 +1801,55 @@ async def dhcp_preview(request: Request):
         info.update(iface=iface, sid=p["id"] if p else iface, start=start, limit=limit, leasetime=leasetime, enabled=enabled)
         changes = [t("dhcp.do_pool", net=iface, first=str(rng[0]) if rng else "?", last=str(rng[1]) if rng else "?",
                      lt=leasetime) + ("" if enabled else " · " + t("dhcp.disabled"))]
+    elif op in ("dom_add", "dom_edit"):
+        name = (str(form.get("name") or "").strip()).rstrip(".")
+        ip = str(form.get("ip") or "").strip()
+        d = None
+        if op == "dom_edit":
+            d = next((x for x in m["domains"] if x["id"] == str(form.get("id") or "")), None)
+            if not d:
+                return result(request, title, actions.Result(False, t("msg.bad_request")))
+        errs, warns = dnsmod.check_domain(m, name, ip, d["id"] if d else None, t)
+        if errs:
+            return result(request, title, actions.Result(False, "\n".join(errs)))
+        ip = dnsmod.norm_addr(ip)
+        cmds = dnsmod.domain_add_cmds(name, ip) if not d else dnsmod.domain_edit_cmds(d, name, ip)
+        if not cmds:
+            return result(request, title, actions.Result(False, t("msg.no_change")))
+        info.update(name=name, ip=ip, id=d["id"] if d else "")
+        changes = [t("dns.do_add", name=name, ip=ip) if not d else t("dns.do_edit", old=d["name"], name=name, ip=ip)]
+    elif op in ("cname_add", "cname_edit"):
+        cname = (str(form.get("cname") or "").strip()).rstrip(".")
+        target = (str(form.get("target") or "").strip()).rstrip(".")
+        c = None
+        if op == "cname_edit":
+            c = next((x for x in m["cnames"] if x["id"] == str(form.get("id") or "")), None)
+            if not c:
+                return result(request, title, actions.Result(False, t("msg.bad_request")))
+        errs, warns = dnsmod.check_cname(m, cname, target, c["id"] if c else None, t)
+        if errs:
+            return result(request, title, actions.Result(False, "\n".join(errs)))
+        cmds = dnsmod.cname_add_cmds(cname, target) if not c else dnsmod.cname_edit_cmds(c, cname, target)
+        if not cmds:
+            return result(request, title, actions.Result(False, t("msg.no_change")))
+        info.update(cname=cname, target=target, id=c["id"] if c else "")
+        changes = [t("dns.do_cname", cname=cname, target=target) if not c else
+                   t("dns.do_cname_edit", old=c["cname"], cname=cname, target=target)]
+    elif op in ("dom_del", "cname_del"):
+        sid = str(form.get("id") or "")
+        it = next((x for x in (m["domains"] if op == "dom_del" else m["cnames"]) if x["id"] == sid), None)
+        if not it:
+            return result(request, title, actions.Result(False, t("msg.bad_request")))
+        cmds = dnsmod.del_cmds(sid)
+        info.update(id=sid)
+        changes = [t("dns.do_del", name=it["name"], ip=it["ip"]) if op == "dom_del" else
+                   t("dns.do_cname_del", cname=it["cname"], target=it["target"])]
     else:
         return result(request, title, actions.Result(False, t("msg.bad_request")))
     token = store.add_svc_pending(r.name, cmds, {**info, "changes": changes})
     return render(request, "_svc_preview.html", ap=r.name, cmds=[*cmds, "uci commit dhcp", "/etc/init.d/dnsmasq reload"],
-                  changes=changes, token=token, note=t("dhcp.note"), warns=warns)
+                  changes=changes, token=token, note=t("dns.note" if op[:3] in ("dom", "cna") else "dhcp.note"),
+                  warns=warns)
 
 
 def _svc_plan(t, form) -> tuple[str, list[str], dict, list[str]] | str:

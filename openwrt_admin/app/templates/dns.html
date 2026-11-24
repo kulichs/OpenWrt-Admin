@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h1><span class="dot {{ 'on' if ap.online else 'off' }}"></span> {{ ap.name }} <span class="tag">{{ t("router.kind") }}</span> <span class="muted">{{ ap.host }}</span></h1>
+{% set devtab = "dns" %}{% include "_devtabs.html" %}
+{% if ready %}{% include "_dns_body.html" %}
+{% else %}
+<div id="dns-body" hx-get="{{ base }}/ap/{{ ap.name | urlencode }}/dns/body" hx-trigger="load" hx-swap="outerHTML">
+  <p class="muted"><span class="spinner"></span> {{ t("dns.loading") }}</p>
+</div>
+{% endif %}
+{% endblock %}

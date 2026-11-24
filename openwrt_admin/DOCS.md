@@ -134,6 +134,7 @@ logread -e dropbear          # logins (with a dedicated user you see "owadmin" i
 | Unblock / block an IP or network (banIP) | router page → Services → banIP | line in `/etc/banip/banip.allowlist` / `banip.blocklist`, then `banip reload` (only when enabled) |
 | Static DHCP lease: add / edit / delete | router page → DHCP | `uci add dhcp host` / `uci set dhcp.<cfg…>.name/mac/ip/dns` / `uci delete dhcp.<cfg…>` → `uci commit dhcp`, `dnsmasq reload` (`uci revert` on error) |
 | DHCP range, lease time, on/off | router page → DHCP | `uci set dhcp.<net>.start/limit/leasetime/ignore` → commit, `dnsmasq reload` |
+| Local name / alias: add / edit / delete | router page → DNS | `uci add dhcp domain` / `uci add dhcp cname`, `uci set …`, `uci delete …` → `uci commit dhcp`, `dnsmasq reload` |
 
 - **Adding an SSID:** name, password (8–63 characters), encryption WPA2 (`psk2`), WPA2/WPA3 (`sae-mixed`) or WPA3 (`sae`; both SAE variants also set `ieee80211w`), network (interface on the AP, e.g. `lan` or a VLAN network) and hidden; tick the radios (AP + band). The network must exist on each selected AP and the same SSID must not already be on that radio. WPA3 needs wpad with SAE (wpad-basic-mbedtls and newer).
 - Editing SSIDs changes **existing** SSIDs (`wifi-iface` sections). Tick the APs/radios (bands) the change applies to. A preview of the `uci` commands is shown first; the change is written only after confirming. The password is never shown.
@@ -214,6 +215,17 @@ The **DHCP** tab on the router page (Overview | Services | DHCP) works with dnsm
 Every change: preview of the `uci` commands → **Apply** → `uci commit dhcp` and `/etc/init.d/dnsmasq reload` (DNS and DHCP keep running); on error `uci revert dhcp`. Before the first change of the day the app makes a configuration backup of the router (as the Backup button does). Anonymous sections are read with `uci -X` (names like `cfg0a1b2c`), so an edit targets the right lease even if another one was added in the meantime. A new static IP applies once the device renews its lease. IPv6 (odhcpd) is not changed.
 
 The tab also warns about an unmerged `/etc/config/dhcp.apk-new` (or `dhcp-opkg`) – the default configuration left after a package upgrade; compare it with `diff -u` and delete it. Other such files (luci, uhttpd…) are listed in one collapsed line – they are harmless, apk never overwrites your modified configuration.
+
+### DNS (router)
+
+The **DNS** tab on the router page (Overview | Services | DHCP | DNS) works with the same dnsmasq configuration (`/etc/config/dhcp`):
+
+- **Lookup test** – runs `nslookup <name> 127.0.0.1` on the router, i.e. asks dnsmasq exactly like clients do. It shows the address(es), the alias chain (alias → target → IP), **blocked** when the answer is `0.0.0.0` (adblock) and **NXDOMAIN** when the name does not exist; the raw output is in a collapsible line. Read only, available to read-only users.
+- **Local names** (`dhcp.@domain`, "Hostnames" in LuCI) – name → IPv4/IPv6 address; add, edit, delete, search. A bare name (`grafana`) also resolves as `grafana.<local domain>`; a name in your own domain (`server.home`) or a public domain pointed to an internal address at home (split DNS, e.g. your web server in the DMZ) works too. Errors: invalid name or address, the same name with the same address twice, a name that is already an alias. Warnings: the name already has another address (it will have two), the address is outside the router networks.
+- **Aliases** (`dhcp.@cname`) – alias → target name; add, edit, delete. dnsmasq answers an alias only when it knows the target itself (local name, static or current lease) – otherwise the preview warns and the list shows "?".
+- **DNS settings** (read only) – upstream servers (`/tmp/resolv.conf.d/resolv.conf.auto` and dnsmasq `server`), forwarded domains (`server=/domain/ip`), local domain, how many static leases put their name into DNS (`dns=1`), rebind protection and its exceptions. Upstream servers belong to the WAN interface (`network.wan.dns`); changing them restarts WAN, so that stays in LuCI.
+
+Changes work exactly like DHCP: preview → **Apply** → `uci commit dhcp` + `/etc/init.d/dnsmasq reload`, `uci revert dhcp` on error, a configuration backup before the first change of the day, a syslog entry with the HA user. Clients may cache an old answer for a while; the lookup test shows the router's answer immediately.
 
 ### Statistics
 
@@ -379,7 +391,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | radios: real channel, width, power, noise; channel utilisation | `iwinfo`, `iw dev <if> survey dump` |
 | neighbouring networks (only on Scan, `radio_scan`) | `iwinfo <if> scan` |
 | services, adblock, banIP (only when the Services tab opens) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, allow/block list files |
-| DHCP (only when the DHCP tab opens) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `ls /etc/config/*.apk-new` |
+| DHCP and DNS (only when the DHCP or DNS tab opens; lookup test: `nslookup <name> 127.0.0.1`) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `resolv.conf.auto`, `ls /etc/config/*.apk-new` |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
 
@@ -548,6 +560,7 @@ logread -e dropbear          # přihlášení (s vlastním uživatelem uvidíš 
 | Odblokovat / zablokovat IP nebo síť (banIP) | stránka routeru → Služby → banIP | řádek v `/etc/banip/banip.allowlist` / `banip.blocklist`, pak `banip reload` (jen když je zapnutý) |
 | Statická DHCP zápůjčka: přidat / upravit / smazat | stránka routeru → DHCP | `uci add dhcp host` / `uci set dhcp.<cfg…>.name/mac/ip/dns` / `uci delete dhcp.<cfg…>` → `uci commit dhcp`, `dnsmasq reload` (při chybě `uci revert`) |
 | Rozsah DHCP, doba zápůjčky, zapnutí/vypnutí | stránka routeru → DHCP | `uci set dhcp.<síť>.start/limit/leasetime/ignore` → commit, `dnsmasq reload` |
+| Místní jméno / alias: přidat / upravit / smazat | stránka routeru → DNS | `uci add dhcp domain` / `uci add dhcp cname`, `uci set …`, `uci delete …` → `uci commit dhcp`, `dnsmasq reload` |
 
 - **Přidání SSID:** název, heslo (8–63 znaků), šifrování WPA2 (`psk2`), WPA2/WPA3 (`sae-mixed`) nebo WPA3 (`sae`; u obou SAE se nastaví i `ieee80211w`), síť (rozhraní na AP, např. `lan` nebo VLAN síť) a skrytí; zaškrtnou se rádia (AP + pásmo). Síť musí na každém vybraném AP existovat a stejné SSID na tom rádiu ještě nesmí být. WPA3 potřebuje wpad s SAE (wpad-basic-mbedtls a novější).
 - Úprava SSID mění **existující** SSID (sekce `wifi-iface`). Zaškrtnutím se vybírají AP a rádia (pásma), kterých se změna týká. Nejdřív se zobrazí náhled příkazů `uci`, zapíše se až po potvrzení. Heslo se nikde nezobrazuje.
@@ -628,6 +641,17 @@ Záložka **DHCP** na stránce routeru (Přehled | Služby | DHCP) pracuje s dns
 Každá změna: náhled příkazů `uci` → **Použít** → `uci commit dhcp` a `/etc/init.d/dnsmasq reload` (DNS i DHCP běží dál); při chybě `uci revert dhcp`. Před první změnou dne aplikace udělá zálohu konfigurace routeru (stejně jako tlačítko Záloha). Anonymní sekce se čtou přes `uci -X` (jména jako `cfg0a1b2c`), takže úprava trefí správnou zápůjčku, i když mezitím přibyla jiná. Nová statická IP platí, až si zařízení obnoví zápůjčku. IPv6 (odhcpd) se nemění.
 
 Záložka také upozorní na nesloučený `/etc/config/dhcp.apk-new` (nebo `dhcp-opkg`) – výchozí konfiguraci, která zůstala po aktualizaci balíčku; porovnej ji přes `diff -u` a smaž. Ostatní takové soubory (luci, uhttpd…) jsou v jednom sbaleném řádku – jsou neškodné, apk tvoji upravenou konfiguraci nikdy nepřepíše.
+
+### DNS (router)
+
+Záložka **DNS** na stránce routeru (Přehled | Služby | DHCP | DNS) pracuje se stejnou konfigurací dnsmasq (`/etc/config/dhcp`):
+
+- **Test překladu** – spustí na routeru `nslookup <jméno> 127.0.0.1`, tedy se zeptá dnsmasq stejně jako klienti. Ukáže adresu (adresy), řetěz aliasu (alias → cíl → IP), **blokováno**, když je odpověď `0.0.0.0` (adblock), a **NXDOMAIN**, když jméno neexistuje; celý výstup je ve sbaleném řádku. Jen čtení, smí i uživatel jen pro čtení.
+- **Místní jména** (`dhcp.@domain`, v LuCI „Hostnames“) – jméno → IPv4/IPv6 adresa; přidat, upravit, smazat, hledat. Jméno bez domény (`grafana`) se přeloží i jako `grafana.<místní doména>`; funguje i jméno ve vlastní doméně (`server.home`) nebo veřejná doména, kterou chceš doma posílat na vnitřní adresu (split DNS, např. web server v DMZ). Chyby: neplatné jméno nebo adresa, stejné jméno se stejnou adresou dvakrát, jméno, které už je alias. Varování: jméno už má jinou adresu (bude mít dvě), adresa je mimo sítě routeru.
+- **Aliasy** (`dhcp.@cname`) – alias → cílové jméno; přidat, upravit, smazat. dnsmasq alias vrátí jen tehdy, když cíl zná sám (místní jméno, statická nebo aktuální zápůjčka) – jinak náhled varuje a v seznamu je „?“.
+- **Nastavení DNS** (jen čtení) – nadřazené servery (`/tmp/resolv.conf.d/resolv.conf.auto` a `server` v dnsmasq), přesměrované domény (`server=/doména/ip`), místní doména, kolik statických zápůjček dává jméno do DNS (`dns=1`), ochrana proti rebind a její výjimky. Nadřazené servery patří k rozhraní WAN (`network.wan.dns`); jejich změna restartuje WAN, proto zůstává v LuCI.
+
+Změny fungují stejně jako u DHCP: náhled → **Použít** → `uci commit dhcp` + `/etc/init.d/dnsmasq reload`, při chybě `uci revert dhcp`, záloha konfigurace před první změnou dne, záznam do syslogu se jménem uživatele HA. Klienti můžou mít starou odpověď chvíli v mezipaměti; test překladu ukáže odpověď routeru hned.
 
 ### Statistiky
 
@@ -793,7 +817,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | rádia: skutečný kanál, šířka, výkon, šum; vytížení kanálu | `iwinfo`, `iw dev <if> survey dump` |
 | okolní sítě (jen po Skenovat, `radio_scan`) | `iwinfo <if> scan` |
 | služby, adblock, banIP (jen při otevření záložky Služby) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, soubory povolených/blokovaných |
-| DHCP (jen při otevření záložky DHCP) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `ls /etc/config/*.apk-new` |
+| DHCP a DNS (jen při otevření záložky DHCP nebo DNS; test překladu: `nslookup <jméno> 127.0.0.1`) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `resolv.conf.auto`, `ls /etc/config/*.apk-new` |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).
 

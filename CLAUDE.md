@@ -143,6 +143,9 @@ Proč je co tak, jak je – čti, než něco „zjednodušíš“:
   záloha routeru (`dhcp_apply`). `uci -q delete … || true` v řetězu `&&` jen v `{ …; }`, jinak zamaskuje chybu.
   Návrh volné IP pod dynamickým rozsahem, bere v úvahu i ARP routeru (zařízení s pevnou IP mimo DHCP).
   Skutečná jména/MAC/IP z konfigurace uživatele nepatří do dema ani testů v repu.
+- **DNS (`app/dns.py`):** data z `dhcp.READ_CMD` (stejný soubor), zápis přes `/dhcp/preview` + `dhcp_apply`.
+  CNAME funguje jen na cíl, který dnsmasq zná (místní jméno, zápůjčka) – proto varování. Nadřazené DNS jen čtení
+  (network.wan.dns → restart WAN). V `render()` nepoužívat klíč `name` (koliduje s parametrem) → `qname`.
 
 ## Struktura
 
@@ -169,6 +172,7 @@ openwrt_admin/
     radios.py                # radia: iwinfo, iw survey, sken, upozorneni, mapa kanalu, navrh, uci prikazy
     services.py              # sluzby (procd/init.d), adblock, banIP: cteni, parsery, prikazy akci, demo
     dhcp.py                  # DHCP routeru: uci parser, site a rozsahy, staticke zapujcky, validace, uci prikazy, demo
+    dns.py                   # DNS routeru: mistni jmena, CNAME, validace, nslookup (test prekladu), demo
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/

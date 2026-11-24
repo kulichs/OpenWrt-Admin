@@ -2,6 +2,23 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.20.0
+- New **DNS** tab on the router page (Overview | Services | DHCP | DNS), dnsmasq:
+  - **Lookup test**: asks dnsmasq on the router (`nslookup <name> 127.0.0.1`) like clients do – shows the address, the alias chain (alias → target → IP), "blocked" for 0.0.0.0 (adblock) or NXDOMAIN; raw output on click. Read-only, allowed for read-only users.
+  - **Local names** (`dhcp.@domain`, "Hostnames" in LuCI): add, edit, delete, search. Bare names, own domains (`server.home`) and public domains pointed to an internal address are all allowed. Checks: valid name and IPv4/IPv6, the same name+IP twice, a name that is already an alias; warnings for a second address of the same name and an address outside the router networks.
+  - **Aliases** (`dhcp.@cname`): add, edit, delete; warning (and "?" in the list) when dnsmasq does not know the target – an alias only works to a local name or a lease.
+  - **DNS settings** read-only: upstream servers (`resolv.conf.auto`, `server`), forwarded domains (`server=/…/`), local domain, names from static leases, rebind protection. Changing upstream DNS restarts WAN, so it stays in LuCI.
+  - Changes go the same way as DHCP: preview → Apply → `uci commit dhcp` + `dnsmasq reload`, `uci revert` on error, backup before the first change of the day, syslog entry with the HA user.
+- Verified: parser and checks on a real router configuration (14 local names, duplicate detection), lookup parser on real BusyBox output, shell syntax, demo cs + en (lookup incl. alias and adblock, add/edit/delete, read-only user). Not yet on the real network.
+---
+- Nová záložka **DNS** na stránce routeru (Přehled | Služby | DHCP | DNS), dnsmasq:
+  - **Test překladu**: zeptá se dnsmasq na routeru (`nslookup <jméno> 127.0.0.1`) stejně jako klienti – ukáže adresu, řetěz aliasu (alias → cíl → IP), „blokováno“ u 0.0.0.0 (adblock) nebo NXDOMAIN; po kliknutí celý výstup. Jen čtení, smí i uživatel jen pro čtení.
+  - **Místní jména** (`dhcp.@domain`, v LuCI „Hostnames“): přidat, upravit, smazat, hledat. Jména bez domény, vlastní domény (`server.home`) i veřejné domény přesměrované na vnitřní adresu. Kontroly: platné jméno a IPv4/IPv6, stejné jméno+IP dvakrát, jméno, které už je alias; varování u druhé adresy stejného jména a u adresy mimo sítě routeru.
+  - **Aliasy** (`dhcp.@cname`): přidat, upravit, smazat; varování (a „?“ v seznamu), když dnsmasq cíl nezná – alias funguje jen na místní jméno nebo zápůjčku.
+  - **Nastavení DNS** jen pro čtení: nadřazené servery (`resolv.conf.auto`, `server`), přesměrované domény (`server=/…/`), místní doména, jména ze statických zápůjček, ochrana proti rebind. Změna nadřazeného DNS restartuje WAN, proto zůstává v LuCI.
+  - Změny jdou stejně jako u DHCP: náhled → Použít → `uci commit dhcp` + `dnsmasq reload`, při chybě `uci revert`, záloha před první změnou dne, záznam do syslogu se jménem uživatele HA.
+- Ověřeno: parser a kontroly na skutečné konfiguraci routeru (14 místních jmen, odhalení duplicity), parser překladu na skutečném výstupu BusyBox, syntaxe v shellu, demo cs + en (překlad vč. aliasu a adblocku, přidání/úprava/smazání, uživatel jen pro čtení). Na skutečné síti zatím ne.
+
 ## 0.19.1
 - DHCP tab: only `dhcp.apk-new` is shown as a warning; other unmerged `*.apk-new` files (luci, uhttpd, adblock…) are in one collapsed line with an explanation (harmless – apk keeps your configuration) and the commands to compare and delete them.
 ---

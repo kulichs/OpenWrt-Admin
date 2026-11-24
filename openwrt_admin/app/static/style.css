@@ -242,3 +242,6 @@ details.inline-edit[open] { display: block; }
 details.inline-edit form { margin-top: .4rem; }
 details.apk-other { margin: 0 0 1rem; }
 details.apk-other summary { cursor: pointer; }
+/* DNS (0.20.0) */
+table.kv th { text-align: left; color: var(--muted); font-weight: 500; padding: .35rem 1rem .35rem 0; vertical-align: top; white-space: nowrap; }
+table.kv td { padding: .35rem 0; }

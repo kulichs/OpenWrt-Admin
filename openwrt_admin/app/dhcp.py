@@ -15,6 +15,7 @@ READ_CMD = r"""echo @@uci; uci -X -q show dhcp
 echo @@net; uci -q show network | grep -E '^network\.[A-Za-z0-9_]+(=interface|\.(proto|ipaddr|netmask|device)=)'
 echo @@leases; cat /tmp/dhcp.leases 2>/dev/null
 echo @@apknew; ls /etc/config/*.apk-new /etc/config/*-opkg 2>/dev/null
+echo @@resolv; cat /tmp/resolv.conf.d/resolv.conf.auto /tmp/resolv.conf.auto 2>/dev/null
 echo @@now; date +%s
 echo @@end
 """
@@ -191,13 +192,30 @@ def build(text: str) -> dict:
                for sid, o in sorted(uci.items(), key=lambda kv: kv[1]["_order"]) if o["_type"] == "domain"]
     cnames = [{"id": sid, "cname": _first(o.get("cname")), "target": _first(o.get("target"))}
               for sid, o in sorted(uci.items(), key=lambda kv: kv[1]["_order"]) if o["_type"] == "cname"]
+    dm = next((o for _, o in sorted(uci.items(), key=lambda kv: kv[1]["_order"]) if o["_type"] == "dnsmasq"), {})
+    servers = dm.get("server") or []
+    servers = servers if isinstance(servers, list) else [servers]
+    upstream = []
+    for line in sec.get("resolv", []):
+        p_ = line.split()
+        if len(p_) >= 2 and p_[0] == "nameserver" and p_[1] not in upstream:
+            upstream.append(p_[1])
+    rebind_ok = dm.get("rebind_domain") or []
+    dnsmasq = {"id": next((sid for sid, o in uci.items() if o is dm), ""), "domain": _first(dm.get("domain")),
+               "local": _first(dm.get("local")), "noresolv": str(dm.get("noresolv", "")) == "1",
+               "servers": [x for x in servers if not x.startswith("/")],
+               "forwards": [x for x in servers if x.startswith("/")],
+               "rebind": str(dm.get("rebind_protection", "1")) == "1",
+               "rebind_ok": rebind_ok if isinstance(rebind_ok, list) else [rebind_ok],
+               "expandhosts": str(dm.get("expandhosts", "")) == "1", "localservice": str(dm.get("localservice", "")) == "1",
+               "upstream": upstream}
     for h in hosts:
         p = next((x for x in pools if x["iface"] == h["net"] and x["first"]), None)
         h["in_pool"] = bool(p and _in(h["ip"], int(ipaddress.ip_address(p["first"])), int(ipaddress.ip_address(p["last"]))))
     return {"ts": time.time(), "now": now, "uci": uci, "nets": {k: {"subnet": str(v["net"]), "ip": str(v["ip"]),
                                                                        "proto": v["proto"]} for k, v in nets.items()},
             "_nets": nets, "hosts": hosts, "pools": pools, "no_dhcp": no_dhcp, "leases": leases, "served": served,
-            "domains": domains, "cnames": cnames,
+            "domains": domains, "cnames": cnames, "dnsmasq": dnsmasq,
             "apknew": [x.strip() for x in sec.get("apknew", []) if x.strip()], "error": "" if "end" in sec else "incomplete"}
 
 
@@ -353,7 +371,8 @@ def apply_script(cmds: list[str], reverted: str) -> str:
 # ---------------------------------------------------------------- demo
 
 DEMO_UCI = {
-    "cfg01411c": {"_type": "dnsmasq", "domain": "lan", "local": "/lan/"},
+    "cfg01411c": {"_type": "dnsmasq", "domain": "lan", "local": "/lan/", "rebind_protection": "1", "expandhosts": "1",
+                  "localservice": "1", "server": "/firma.example/10.8.0.1"},
     "lan": {"_type": "dhcp", "interface": "lan", "start": "100", "limit": "150", "leasetime": "12h"},
     "wan": {"_type": "dhcp", "interface": "wan", "ignore": "1"},
     "guest": {"_type": "dhcp", "interface": "guest", "start": "100", "limit": "50", "leasetime": "1h"},
@@ -364,6 +383,8 @@ DEMO_UCI = {
     "cfg0a1b04": {"_type": "host", "name": "esp-teplomer", "mac": "02:00:00:00:20:04", "ip": "192.168.10.20"},
     "cfg0c0d01": {"_type": "domain", "name": "nas.home", "ip": "192.168.1.10"},
     "cfg0c0d02": {"_type": "domain", "name": "grafana", "ip": "192.168.1.10"},
+    "cfg0c0d03": {"_type": "domain", "name": "web.example.org", "ip": "192.168.100.7"},
+    "cfg0e0f01": {"_type": "cname", "cname": "jellyfin.lan", "target": "nas.lan"},
 }
 DEMO_NET = """network.lan=interface
 network.lan.proto='static'
@@ -399,7 +420,7 @@ def demo_text(model: dict[str, dict], leases: dict[str, dict]) -> str:
     ls = "\n".join(f"{now + 3600 + i * 60} {mac} {l['ip']} {l.get('hostname') or '*'} 01:{mac}"
                    for i, (mac, l) in enumerate(leases.items()) if l.get("ip"))
     return (f"@@uci\n{to_uci(model)}\n@@net\n{DEMO_NET}\n@@leases\n{ls}\n@@apknew\n/etc/config/dhcp.apk-new\n/etc/config/luci.apk-new\n/etc/config/uhttpd.apk-new\n"
-            f"@@now\n{now}\n@@end\n")
+            f"@@resolv\nnameserver 203.0.113.53\nnameserver 198.51.100.53\n@@now\n{now}\n@@end\n")
 
 
 def demo_apply(model: dict[str, dict], info: dict):
@@ -415,8 +436,16 @@ def demo_apply(model: dict[str, dict], info: dict):
             o["dns"] = "1"
         else:
             o.pop("dns", None)
-    elif op == "host_del":
+    elif op in ("host_del", "dom_del", "cname_del"):
         model.pop(info["id"], None)
+    elif op == "dom_add":
+        model[f"cfg{len(model) + 0x200:06x}"] = {"_type": "domain", "name": info["name"], "ip": info["ip"]}
+    elif op == "dom_edit" and info["id"] in model:
+        model[info["id"]].update(name=info["name"], ip=info["ip"])
+    elif op == "cname_add":
+        model[f"cfg{len(model) + 0x300:06x}"] = {"_type": "cname", "cname": info["cname"], "target": info["target"]}
+    elif op == "cname_edit" and info["id"] in model:
+        model[info["id"]].update(cname=info["cname"], target=info["target"])
     elif op == "pool":
         o = model.setdefault(info["sid"], {"_type": "dhcp", "interface": info["iface"]})
         o.update(start=str(info["start"]), limit=str(info["limit"]), leasetime=info["leasetime"])

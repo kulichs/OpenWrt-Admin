@@ -1,0 +1,110 @@
+{# obsah zalozky DNS – vklada se primo, nebo se dotahne pres htmx (/ap/<router>/dns/body) #}
+{% macro pv(vals, label, cls="secondary small") -%}
+<button type="button" class="{{ cls }}" hx-post="{{ base }}/dhcp/preview" hx-target="previous .cmd-out"
+        hx-vals='{{ vals | tojson }}'>{{ label }}</button>
+{%- endmacro %}
+<div id="dns-body">
+{% if m.error and not m.dnsmasq %}<p class="err">{{ m.error }}</p>{% else %}
+<p class="muted">{{ t("dns.intro") if can_edit else t("dns.readonly") }}</p>
+
+<div class="panel">
+  <h2>{{ t("dns.lookup") }}</h2>
+  <form class="filters edit" hx-post="{{ base }}/dns/lookup" hx-target="next .lookup-out" hx-disabled-elt="find button">
+    <label>{{ t("dns.name") }} <input name="name" required maxlength="253" placeholder="nas.{{ dom or 'lan' }}" list="dns-known"></label>
+    <button type="submit">{{ t("dns.resolve") }}</button>
+  </form>
+  <datalist id="dns-known">{% for n in known %}<option value="{{ n }}">{% endfor %}</datalist>
+  <div class="lookup-out"></div>
+  <p class="muted small">{{ t("dns.lookup_hint") }}</p>
+</div>
+
+<div class="panel" id="names-panel">
+  <h2>{{ t("dns.names") }} <span class="muted small">{{ m.domains | length }}</span></h2>
+  <div class="cmd-out"></div>
+  {% if can_edit %}
+  <form class="filters edit" hx-post="{{ base }}/dhcp/preview" hx-target="previous .cmd-out">
+    <input type="hidden" name="op" value="dom_add">
+    <label>{{ t("dns.name") }} <input name="name" required maxlength="253" placeholder="nas.home"></label>
+    <label>IP <input name="ip" required maxlength="39" class="mono" placeholder="192.168.1.10"></label>
+    <button type="submit">{{ t("dhcp.add") }}</button>
+  </form>
+  {% endif %}
+  <div class="filters"><label>{{ t("dhcp.filter") }} <input type="search" oninput="owFilter(this, 'names-table')" placeholder="{{ t('dns.filter_ph') }}"></label></div>
+  <table class="list" id="names-table">
+    <thead><tr><th>{{ t("dns.name") }}</th><th>IP</th><th></th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    {% for d in m.domains %}
+    <tr>
+      <td class="mono"><b>{{ d.name }}</b></td><td class="mono small">{{ d.ip }}</td>
+      <td>{% if "." not in d.name and dom %}<span class="muted small">+ {{ d.name }}.{{ dom }}</span>{% endif %}</td>
+      {% if can_edit %}<td class="btns">
+        <details class="inline-edit"><summary class="small">{{ t("dhcp.edit") }}</summary>
+          <form class="filters edit" hx-post="{{ base }}/dhcp/preview" hx-target="previous .cmd-out">
+            <input type="hidden" name="op" value="dom_edit"><input type="hidden" name="id" value="{{ d.id }}">
+            <label>{{ t("dns.name") }} <input name="name" value="{{ d.name }}" maxlength="253"></label>
+            <label>IP <input name="ip" value="{{ d.ip }}" maxlength="39" class="mono"></label>
+            <button type="submit">{{ t("ssid.preview") }}</button>
+          </form>
+        </details>
+        {{ pv({"op": "dom_del", "id": d.id}, "✕") }}
+      </td>{% endif %}
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">{{ t("dns.no_names") }}</td></tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">{{ t("dns.names_hint", dom=dom or "lan") }}</p>
+</div>
+
+<div class="panel">
+  <h2>{{ t("dns.cnames") }} <span class="muted small">{{ m.cnames | length }}</span></h2>
+  <div class="cmd-out"></div>
+  {% if can_edit %}
+  <form class="filters edit" hx-post="{{ base }}/dhcp/preview" hx-target="previous .cmd-out">
+    <input type="hidden" name="op" value="cname_add">
+    <label>{{ t("dns.alias") }} <input name="cname" required maxlength="253" placeholder="jellyfin.{{ dom or 'lan' }}"></label>
+    <label>{{ t("dns.target") }} <input name="target" required maxlength="253" placeholder="nas.{{ dom or 'lan' }}" list="dns-known"></label>
+    <button type="submit">{{ t("dhcp.add") }}</button>
+  </form>
+  {% endif %}
+  <table class="list">
+    <thead><tr><th>{{ t("dns.alias") }}</th><th>{{ t("dns.target") }}</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    {% for c in m.cnames %}
+    <tr>
+      <td class="mono"><b>{{ c.cname }}</b></td>
+      <td class="mono small">{{ c.target }}{% if c.target | lower not in known %} <span class="tag tag-warn" title="{{ t('dns.warn_target', target=c.target) }}">?</span>{% endif %}</td>
+      {% if can_edit %}<td class="btns">
+        <details class="inline-edit"><summary class="small">{{ t("dhcp.edit") }}</summary>
+          <form class="filters edit" hx-post="{{ base }}/dhcp/preview" hx-target="previous .cmd-out">
+            <input type="hidden" name="op" value="cname_edit"><input type="hidden" name="id" value="{{ c.id }}">
+            <label>{{ t("dns.alias") }} <input name="cname" value="{{ c.cname }}" maxlength="253"></label>
+            <label>{{ t("dns.target") }} <input name="target" value="{{ c.target }}" maxlength="253" list="dns-known"></label>
+            <button type="submit">{{ t("ssid.preview") }}</button>
+          </form>
+        </details>
+        {{ pv({"op": "cname_del", "id": c.id}, "✕") }}
+      </td>{% endif %}
+    </tr>
+    {% else %}
+    <tr><td colspan="3" class="muted">{{ t("dns.no_cnames") }}</td></tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">{{ t("dns.cnames_hint") }}</p>
+</div>
+
+<div class="panel">
+  <h2>{{ t("dns.settings") }}</h2>
+  <table class="kv">
+    <tr><th>{{ t("dns.upstream") }}</th><td class="mono">{% if dm.noresolv %}<span class="muted">{{ t("dns.noresolv") }}</span>{% else %}{{ dm.upstream | join(", ") or "–" }}{% endif %}
+      {% if dm.servers %}<br>{{ t("dns.servers") }}: {{ dm.servers | join(", ") }}{% endif %}</td></tr>
+    <tr><th>{{ t("dns.forwards") }}</th><td class="mono">{% for f in dm.forwards %}{{ f }}<br>{% else %}–{% endfor %}</td></tr>
+    <tr><th>{{ t("dns.domain") }}</th><td class="mono">{{ dm.domain or "–" }}{% if dm.local %} <span class="muted">(local {{ dm.local }})</span>{% endif %}</td></tr>
+    <tr><th>{{ t("dns.from_dhcp") }}</th><td>{{ t("dns.from_dhcp_n", n=hostnames | length) }} <a href="{{ base }}/ap/{{ ap.name | urlencode }}/dhcp">DHCP →</a></td></tr>
+    <tr><th>{{ t("dns.rebind") }}</th><td>{{ "✓" if dm.rebind else "✗" }}{% if dm.rebind_ok %} <span class="muted small">{{ t("dns.rebind_ok") }}: {{ dm.rebind_ok | join(", ") }}</span>{% endif %}</td></tr>
+  </table>
+  <p class="muted small">{{ t("dns.settings_hint") }}</p>
+</div>
+<script>
+function owFilter(inp, id) { var q = inp.value.toLowerCase(); document.querySelectorAll('#' + id + ' tr').forEach(function (tr) { if (tr.querySelector('th')) return; tr.style.display = !q || tr.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none'; }); }
+</script>
+{% endif %}
+</div>

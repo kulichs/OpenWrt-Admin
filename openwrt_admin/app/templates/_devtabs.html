@@ -3,5 +3,6 @@
 <nav class="subtabs">
   <a href="{{ dev_url }}" class="{{ 'active' if devtab == 'overview' }}">{{ t("dev.tab_overview") }}</a>
   <a href="{{ dev_url }}/services" class="{{ 'active' if devtab == 'services' }}">{{ t("dev.tab_services") }}</a>
-  {% if ap.kind == "router" %}<a href="{{ dev_url }}/dhcp" class="{{ 'active' if devtab == 'dhcp' }}">DHCP</a>{% endif %}
+  {% if ap.kind == "router" %}<a href="{{ dev_url }}/dhcp" class="{{ 'active' if devtab == 'dhcp' }}">DHCP</a>
+  <a href="{{ dev_url }}/dns" class="{{ 'active' if devtab == 'dns' }}">DNS</a>{% endif %}
 </nav>

@@ -1,0 +1,7 @@
+<div class="result {{ 'ok' if ok and res.addrs else 'err' if not ok else '' }}">
+  <strong>{{ qname }}</strong>
+  {% if res.cname %} → <span class="mono">{{ res.cname }}</span>{% endif %}
+  {% if res.addrs %}→ {% for a in res.addrs %}<span class="mono">{{ a }}</span>{% if a in ("0.0.0.0", "::") %} <span class="tag tag-warn">{{ t("dns.blocked") }}</span>{% endif %}{{ ", " if not loop.last }}{% endfor %}
+  {% elif res.nx %}<span class="err">{{ t("dns.nx") }}</span>{% else %}<span class="muted">{{ t("dns.no_answer") }}</span>{% endif %}
+  <details class="small"><summary>nslookup</summary><pre class="small">{{ out }}</pre></details>
+</div>
