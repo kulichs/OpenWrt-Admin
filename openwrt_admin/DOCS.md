@@ -128,6 +128,10 @@ logread -e dropbear          # logins (with a dedicated user you see "owadmin" i
 | Channel, width, power, country of radios | Radios page → Edit radios | `uci set wireless.<radio>.channel/htmode/txpower/country` → commit, `wifi reload` |
 | Back up configuration | AP or router page | `sysupgrade -b /tmp/…` (archive transferred over SSH, then deleted on the device) |
 | Disconnect / block a Wi-Fi client | client tables (AP page, Clients) | `ubus call hostapd.<if> del_client '{"addr":…,"deauth":true,"ban_time":…}'` |
+| Start / stop / restart / enable / disable a service | Services page | `/etc/init.d/<service> …` (`dropbear`, `network`, `rpcd`, `log`: restart only, in the background) |
+| Pause / resume adblock, reload lists | Services page → adblock | `/etc/init.d/adblock suspend` / `resume` / `reload`; timed pause: timer on the device (`/tmp/owadmin-adb-resume`) |
+| Unblock / block a domain (adblock) | Services page → adblock | line in `/etc/adblock/adblock.allowlist` / `adblock.blocklist`, then `adblock reload` |
+| Unblock / block an IP or network (banIP) | Services page → banIP | line in `/etc/banip/banip.allowlist` / `banip.blocklist`, then `banip reload` (only when enabled) |
 
 - **Adding an SSID:** name, password (8–63 characters), encryption WPA2 (`psk2`), WPA2/WPA3 (`sae-mixed`) or WPA3 (`sae`; both SAE variants also set `ieee80211w`), network (interface on the AP, e.g. `lan` or a VLAN network) and hidden; tick the radios (AP + band). The network must exist on each selected AP and the same SSID must not already be on that radio. WPA3 needs wpad with SAE (wpad-basic-mbedtls and newer).
 - Editing SSIDs changes **existing** SSIDs (`wifi-iface` sections). Tick the APs/radios (bands) the change applies to. A preview of the `uci` commands is shown first; the change is written only after confirming. The password is never shown.
@@ -180,6 +184,20 @@ The **Radios** page lists every radio of every AP in one table and checks the se
   - warnings: strong foreign networks (≥ −70 dBm) on your channel and a less busy channel suggestion (2.4 GHz: 1/6/11; 5 GHz: blocks within 36–48 for your width – DFS and 149–165, which the EU allows only at low power, are not suggested).
 - **Edit radios** (full access): one form for all radios – channel (allowed channels from `iwinfo freqlist`, DFS marked, `auto`), width (from `iwinfo htmodelist`; older iwinfo returns nothing, then by the radio family: an 802.11n radio never gets VHT80), power (`iwinfo txpowerlist` or `auto`) and the country for all radios. Only values that differ from the current settings are changed. **Preview changes** shows the `uci` commands per AP, **Apply** writes them (`uci commit wireless && wifi reload`, on error `uci revert wireless`). Clients disconnect for a few seconds; a DFS channel stays silent for about a minute.
 - **Propose settings** pre-fills the form: your APs on different channels (radios with the most clients choose first), away from channels busy with neighbours according to the last scan (2.4 GHz 1/6/11, 5 GHz 36–48; with *allow DFS channels* also 52–144), width 20 MHz on 2.4 GHz and as wide as the radio can (max. 80 MHz) on 5 GHz, power: 5 GHz the highest allowed, 2.4 GHz 3 dB lower. Every change has a reason. Nothing is written until you preview and apply. Without a scan the proposal only separates your own APs.
+
+### Services, adblock and banIP
+
+The **Services** page lists the services of the router and every AP (`ubus call service list` and `/etc/init.d/* enabled`): running, finished (one-shot scripts such as adblock with exit code 0), stopped, failed (exit code ≠ 0 while enabled on boot), no process (init scripts without a procd service, e.g. `firewall`), and whether it starts on boot. Scripts that only set something up at boot (`boot`, `sysctl`, `led`…) are hidden. The status is read when the page opens – read only, nothing is written to the device log.
+
+With full access: start, stop, restart, start on boot / don't start. Every action shows the command first and runs after **Apply**. `dropbear`, `network`, `rpcd`, `log`, `ubus`, `system` can only be restarted, and the restart runs in the background after 2 s – without them the app could not reach the device.
+
+**adblock** (if `/etc/init.d/adblock` exists): state, blocked domains, lists, last run and DNS backend.
+- **Not blocking** = adblock is enabled but the blocklist (`adb_list.overall`) is empty – typically paused from LuCI/CLI and forgotten, or the lists were not downloaded after the router booted. Use **Resume blocking** or **Reload lists**.
+- **Pause** for 15 min, 1 h, 4 h or until resumed. A timed pause is resumed by a timer on the router (a background `sleep` checking `/tmp/owadmin-adb-resume`), so it works even if Home Assistant restarts meanwhile; a router reboot cancels the pause (adblock starts normally). The page shows when blocking resumes and warns if the time has passed and adblock is still paused.
+- **Why is it blocked?** runs `/etc/init.d/adblock search <domain>` (`query` on older versions – detected automatically): the active list and the backups of the individual lists (which list contains the domain). Allowed for read-only users too.
+- **Unblock (allow) / Block** adds the domain to `/etc/adblock/adblock.allowlist` / `adblock.blocklist` (and removes it from the other list), then `adblock reload` (tens of seconds). The allowlist matches exactly – `ads.example.com` does not allow `x.ads.example.com`. The lists below can be edited with ✕.
+
+**banIP** (if `/etc/init.d/banip` exists): state (disabled / running / not running), set elements, lists. **Why is it blocked?** runs `/etc/init.d/banip search <IP>` and shows the set (e.g. `blocklistv4`, `cinsscorev4`). **Unblock / Block** works with `/etc/banip/banip.allowlist` / `banip.blocklist` (IPv4/IPv6 address or CIDR network); the sets are reloaded only when banIP is enabled. banIP itself (feeds, countries, interfaces) is configured in LuCI.
 
 ### Statistics
 
@@ -344,6 +362,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | switch port traffic | SNMP `ifHCInOctets`, `ifHCOutOctets` |
 | radios: real channel, width, power, noise; channel utilisation | `iwinfo`, `iw dev <if> survey dump` |
 | neighbouring networks (only on Scan, `radio_scan`) | `iwinfo <if> scan` |
+| services, adblock, banIP (only when the Services page opens) | `ubus call service list`, `/etc/init.d/* enabled`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, allow/block list files |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
 
@@ -506,6 +525,10 @@ logread -e dropbear          # přihlášení (s vlastním uživatelem uvidíš 
 | Kanál, šířka, výkon, země rádií | stránka Rádia → Upravit rádia | `uci set wireless.<rádio>.channel/htmode/txpower/country` → commit, `wifi reload` |
 | Záloha konfigurace | stránka AP nebo routeru | `sysupgrade -b /tmp/…` (archiv se přenese přes SSH a na zařízení smaže) |
 | Odpojit / zablokovat Wi-Fi klienta | tabulky klientů (stránka AP, Klienti) | `ubus call hostapd.<if> del_client '{"addr":…,"deauth":true,"ban_time":…}'` |
+| Spustit / zastavit / restartovat / zapnout / vypnout službu | stránka Služby | `/etc/init.d/<služba> …` (`dropbear`, `network`, `rpcd`, `log`: jen restart, na pozadí) |
+| Pozastavit / obnovit adblock, znovu načíst seznamy | stránka Služby → adblock | `/etc/init.d/adblock suspend` / `resume` / `reload`; pozastavení na čas: časovač na zařízení (`/tmp/owadmin-adb-resume`) |
+| Odblokovat / zablokovat doménu (adblock) | stránka Služby → adblock | řádek v `/etc/adblock/adblock.allowlist` / `adblock.blocklist`, pak `adblock reload` |
+| Odblokovat / zablokovat IP nebo síť (banIP) | stránka Služby → banIP | řádek v `/etc/banip/banip.allowlist` / `banip.blocklist`, pak `banip reload` (jen když je zapnutý) |
 
 - **Přidání SSID:** název, heslo (8–63 znaků), šifrování WPA2 (`psk2`), WPA2/WPA3 (`sae-mixed`) nebo WPA3 (`sae`; u obou SAE se nastaví i `ieee80211w`), síť (rozhraní na AP, např. `lan` nebo VLAN síť) a skrytí; zaškrtnou se rádia (AP + pásmo). Síť musí na každém vybraném AP existovat a stejné SSID na tom rádiu ještě nesmí být. WPA3 potřebuje wpad s SAE (wpad-basic-mbedtls a novější).
 - Úprava SSID mění **existující** SSID (sekce `wifi-iface`). Zaškrtnutím se vybírají AP a rádia (pásma), kterých se změna týká. Nejdřív se zobrazí náhled příkazů `uci`, zapíše se až po potvrzení. Heslo se nikde nezobrazuje.
@@ -558,6 +581,20 @@ Stránka **Rádia** ukazuje všechna rádia všech AP v jedné tabulce a kontrol
   - upozornění: silné cizí sítě (≥ −70 dBm) na tvém kanálu a návrh méně obsazeného kanálu (2,4 GHz: 1/6/11; 5 GHz: bloky v 36–48 pro tvou šířku – DFS a 149–165, které EU povoluje jen s nízkým výkonem, se nenavrhují).
 - **Upravit rádia** (plný přístup): jeden formulář pro všechna rádia – kanál (povolené kanály z `iwinfo freqlist`, DFS označené, `auto`), šířka (z `iwinfo htmodelist`; starší iwinfo nevrací nic, pak podle rodiny rádia: rádio 802.11n nikdy nedostane VHT80), výkon (`iwinfo txpowerlist` nebo `auto`) a země pro všechna rádia. Změní se jen hodnoty, které se liší od současného nastavení. **Náhled změn** ukáže příkazy `uci` pro každé AP, **Použít** je zapíše (`uci commit wireless && wifi reload`, při chybě `uci revert wireless`). Klienti se na pár sekund odpojí; DFS kanál asi minutu nevysílá.
 - **Navrhnout nastavení** předvyplní formulář: tvoje AP na různých kanálech (nejdřív vybírají rádia s nejvíc klienty), mimo kanály obsazené sousedy podle posledního skenu (2,4 GHz 1/6/11, 5 GHz 36–48; s *povolit DFS kanály* i 52–144), šířka na 2,4 GHz 20 MHz a na 5 GHz co nejširší, co rádio umí (max. 80 MHz), výkon: 5 GHz nejvyšší povolený, 2,4 GHz o 3 dB méně. U každé změny je důvod. Nic se nezapíše, dokud nedáš náhled a Použít. Bez skenu návrh jen rozdělí tvoje AP navzájem.
+
+### Služby, adblock a banIP
+
+Stránka **Služby** ukazuje služby routeru a každého AP (`ubus call service list` a `/etc/init.d/* enabled`): běží, dokončeno (jednorázové skripty jako adblock s kódem 0), zastaveno, selhalo (kód ≠ 0, když se má spouštět po startu), bez procesu (init skripty bez procd služby, např. `firewall`) a jestli se spouští po startu. Skripty, které jen něco nastaví při startu (`boot`, `sysctl`, `led`…), se neukazují. Stav se čte při otevření stránky – jen čtení, do logu zařízení se nic nezapisuje.
+
+S plným přístupem: spustit, zastavit, restart, spouštět / nespouštět po startu. Každá akce nejdřív ukáže příkaz a provede se po **Použít**. `dropbear`, `network`, `rpcd`, `log`, `ubus`, `system` jdou jen restartovat, a to na pozadí za 2 s – bez nich by se aplikace na zařízení nedostala.
+
+**adblock** (když existuje `/etc/init.d/adblock`): stav, počet blokovaných domén, seznamy, poslední běh a DNS backend.
+- **Neblokuje** = adblock je zapnutý, ale blokovací seznam (`adb_list.overall`) je prázdný – typicky pozastavený z LuCI/příkazové řádky a zapomenutý, nebo se po startu routeru nestáhly seznamy. Pomůže **Obnovit blokování** nebo **Znovu načíst seznamy**.
+- **Pozastavit** na 15 min, 1 h, 4 h nebo do obnovení. Pozastavení na čas obnoví časovač přímo na routeru (`sleep` na pozadí, hlídá `/tmp/owadmin-adb-resume`), takže funguje, i když se mezitím restartuje Home Assistant; restart routeru pozastavení zruší (adblock normálně naběhne). Stránka ukazuje, kdy se blokování obnoví, a upozorní, když čas uplynul a adblock je pořád pozastavený.
+- **Proč je blokovaná?** spustí `/etc/init.d/adblock search <doména>` (ve starších verzích `query` – pozná se samo): aktivní seznam a zálohy jednotlivých seznamů (ve kterém seznamu doména je). Smí i uživatel jen pro čtení.
+- **Odblokovat (povolit) / Zablokovat** přidá doménu do `/etc/adblock/adblock.allowlist` / `adblock.blocklist` (a smaže ji ze druhého seznamu), pak `adblock reload` (desítky sekund). Povolení platí přesně – `ads.example.com` nepovolí `x.ads.example.com`. Seznamy pod tím jde upravit křížkem ✕.
+
+**banIP** (když existuje `/etc/init.d/banip`): stav (vypnuto / běží / neběží), počet prvků v sadách, seznamy. **Proč je blokovaná?** spustí `/etc/init.d/banip search <IP>` a ukáže sadu (např. `blocklistv4`, `cinsscorev4`). **Odblokovat / Zablokovat** pracuje s `/etc/banip/banip.allowlist` / `banip.blocklist` (IPv4/IPv6 adresa nebo síť CIDR); sady se znovu načtou jen když je banIP zapnutý. Samotný banIP (seznamy, země, rozhraní) se nastavuje v LuCI.
 
 ### Statistiky
 
@@ -722,6 +759,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | provoz na portech switche | SNMP `ifHCInOctets`, `ifHCOutOctets` |
 | rádia: skutečný kanál, šířka, výkon, šum; vytížení kanálu | `iwinfo`, `iw dev <if> survey dump` |
 | okolní sítě (jen po Skenovat, `radio_scan`) | `iwinfo <if> scan` |
+| služby, adblock, banIP (jen při otevření stránky Služby) | `ubus call service list`, `/etc/init.d/* enabled`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, soubory povolených/blokovaných |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).
 

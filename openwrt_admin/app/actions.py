@@ -43,8 +43,11 @@ class Result:
     output: str
 
 
-async def run(cfg: APConfig, key: asyncssh.SSHKey, cmd: str, timeout: float = 60.0, t=None) -> Result:
-    cmd = audit_prefix(cmd) + cmd
+async def run(cfg: APConfig, key: asyncssh.SSHKey, cmd: str, timeout: float = 60.0, t=None, audit: bool = True,
+              summary: str = "") -> Result:
+    """audit=False pro ciste cteni (stranka Sluzby) – do syslogu zarizeni se pise jen akce, ktera neco meni."""
+    if audit:
+        cmd = audit_prefix(summary or cmd) + cmd
     try:
         async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=10) as conn:

@@ -212,3 +212,18 @@ select.changed { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
 details.panel > summary { cursor: pointer; }
 .btns .toggle { text-decoration: none; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: .3rem .7rem; }
 .btns .toggle.on { color: var(--accent); border-color: var(--accent); }
+/* sluzby, adblock, banIP (0.18.0) */
+.tag.svc-running, .tag.svc-ok, .tag.svc-done { color: var(--good); border-color: var(--good); }
+.tag.svc-failed, .tag.svc-error, .tag.svc-empty { color: var(--bad); border-color: var(--bad); }
+.tag.svc-paused { color: var(--ok); border-color: var(--ok); }
+.tag.svc-stopped, .tag.svc-disabled { color: var(--muted); }
+.grid.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+table.list.compact td { padding: .15rem .4rem; }
+.small-tiles .stat .num { font-size: 1.05rem; }
+td.btns { white-space: nowrap; }
+td.btns button { margin-right: .2rem; }
+.tag.svc-static { color: var(--muted); }
+.stats-tiles.small-tiles { display: flex; flex-wrap: wrap; gap: .6rem; margin: .6rem 0; grid-template-columns: none; }
+.small-tiles .stat { flex: 0 1 auto; min-width: 140px; padding: .45rem .8rem; text-align: left; }
+.small-tiles .stat .lbl { display: block; }
+.cmd-out:not(:empty) { margin-bottom: .6rem; }

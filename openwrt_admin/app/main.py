@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, radios as radiomod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
@@ -138,6 +138,10 @@ class Store:
         self._bad_hosts: set[str] = set()
         self.scans: dict[tuple[str, str], dict] = {}   # (ap, radio) -> {ts, cells, error} – sken okoli
         self.pending_cmds: dict[str, tuple[float, str, dict[str, list[str]]]] = {}  # token -> (ts, druh, {ap: prikazy})
+        # sluzby, adblock, banIP – nacita se az pri otevreni stranky Sluzby (poller zustava lehky)
+        self.svc: dict[str, dict] = {}                 # zarizeni -> vysledek services.parse_all
+        self.svc_pending: dict[str, tuple[float, str, list[str], dict]] = {}  # token -> (ts, zarizeni, prikazy, info)
+        self.svc_demo: dict[str, dict] = {}            # demo: stav adblocku/banIP po akcich
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -571,6 +575,64 @@ class Store:
         token = secrets.token_urlsafe(16)
         self.pending_cmds[token] = (now, kind, plan)
         return token
+
+    def svc_devices(self) -> list[APState]:
+        """Zarizeni s OpenWrt (router + AP), switche ne."""
+        return [d for d in [self.router, *self.aps] if d is not None and d.kind != "switch"]
+
+    async def load_services(self, max_age: float = 15.0, only: str | None = None):
+        """Nacte sluzby z online zarizeni (paralelne). Jen cteni – do syslogu zarizeni se nic nezapisuje."""
+        now = time.time()
+
+        async def one(d: APState):
+            if only and d.name != only:
+                return
+            if not only and now - (self.svc.get(d.name) or {}).get("ts", 0) < max_age:
+                return
+            if self.opts.get("demo"):
+                text = svcmod.demo_text(d.name, d.kind == "router", self.svc_demo.get(d.name))
+                self.svc[d.name] = svcmod.parse_all(text)
+                return
+            if not d.online:
+                self.svc[d.name] = {"ts": now, "services": [], "adblock": None, "banip": None, "error": d.error or "offline"}
+                return
+            r = await actions.run(self.cfg(d.name), self.key, svcmod.SVC_CMD, timeout=30, audit=False)
+            res = svcmod.parse_all(r.output)
+            if res["error"] and not r.ok:
+                res["error"] = r.output[-300:]
+            self.svc[d.name] = res
+        await asyncio.gather(*(one(d) for d in self.svc_devices()))
+
+    def add_svc_pending(self, ap: str, cmds: list[str], info: dict) -> str:
+        now = time.time()
+        self.svc_pending = {k: v for k, v in self.svc_pending.items() if now - v[0] < 600}
+        token = secrets.token_urlsafe(16)
+        self.svc_pending[token] = (now, ap, cmds, info)
+        return token
+
+    def demo_svc_apply(self, ap: str, info: dict):
+        """Demo: zmena stavu po akci, aby stranka ukazala vysledek."""
+        st = self.svc_demo.setdefault(ap, {})
+        cur = self.svc.get(ap) or {}
+        adb, ban = cur.get("adblock") or {}, cur.get("banip") or {}
+        st.setdefault("adb_allow", list(adb.get("allow", []))); st.setdefault("adb_block", list(adb.get("block", [])))
+        st.setdefault("ban_allow", list(ban.get("allow", []))); st.setdefault("ban_block", list(ban.get("block", [])))
+        op = info.get("op")
+        if op == "adb_suspend":
+            m = int(info.get("minutes") or 0)
+            st["adb_paused_until"] = time.time() + m * 60 if m else -1
+        elif op in ("adb_resume", "adb_reload"):
+            st["adb_paused_until"] = 0
+        elif op in ("adb_list", "ban_list"):
+            pre = "adb" if op == "adb_list" else "ban"
+            lst, other = st[f"{pre}_{info['target']}"], st[f"{pre}_{'block' if info['target'] == 'allow' else 'allow'}"]
+            if info["action"] == "add":
+                if info["value"] not in lst:
+                    lst.append(info["value"])
+                if info["value"] in other:
+                    other.remove(info["value"])
+            elif info["value"] in lst:
+                lst.remove(info["value"])
 
     def radios_edit(self, plan: list[dict] | None) -> list[dict]:
         """Radky formulare pro upravu radii: moznosti z iwinfo a predvyplnena hodnota (navrh nebo nastaveni)."""
@@ -1495,6 +1557,134 @@ async def radios_scan(request: Request, ap: str = Form(""), radio: str = Form(""
                                                  t("radio.scan_done", n=sum(len(x["cells"]) for x in res))))
     resp.headers["HX-Refresh"] = "true"
     return resp
+
+
+@app.get("/services", response_class=HTMLResponse)
+async def services_page(request: Request):
+    await store.load_services()
+    devs = []
+    for d in store.svc_devices():
+        sv = store.svc.get(d.name) or {}
+        devs.append({"name": d.name, "kind": d.kind, "online": d.online, **sv})
+    return render(request, "services.html", page="services", devs=devs, autorefresh=False)
+
+
+def _svc_plan(t, form) -> tuple[str, list[str], dict, list[str]] | str:
+    """Z formulare akce -> (zarizeni, prikazy, info pro log/demo, popis zmeny) nebo chybovy klic."""
+    ap, op = str(form.get("ap") or ""), str(form.get("op") or "")
+    sv = store.svc.get(ap)
+    if not sv:
+        return "msg.bad_request"
+    info: dict = {"op": op}
+    if op == "svc":
+        svc = svcmod.valid_service(str(form.get("name") or ""), sv.get("services") or [])
+        action = str(form.get("action") or "")
+        cmds = svcmod.svc_cmds(svc, action) if svc else None
+        if not cmds:
+            return "svc.err_action"
+        info.update(name=svc["name"], action=action)
+        return ap, cmds, info, [t("svc.do_" + action, name=svc["name"])]
+    adb, ban = sv.get("adblock"), sv.get("banip")
+    if op.startswith("adb_") and not adb or op.startswith("ban_") and not ban:
+        return "msg.bad_request"
+    if op == "adb_suspend":
+        try:
+            m = max(0, min(int(form.get("minutes") or 0), 7 * 24 * 60))
+        except ValueError:
+            return "msg.bad_request"
+        info["minutes"] = m
+        return ap, svcmod.adb_suspend_cmds(m), info, [t("adb.do_suspend", m=m) if m else t("adb.do_suspend_forever")]
+    if op == "adb_resume":
+        return ap, svcmod.adb_resume_cmds(), info, [t("adb.do_resume")]
+    if op == "adb_reload":
+        return ap, svcmod.adb_reload_cmds(), info, [t("adb.do_reload")]
+    if op == "ban_reload":
+        return ap, ["/etc/init.d/banip reload"], info, [t("ban.do_reload")]
+    if op in ("adb_list", "ban_list"):
+        kind = "adblock" if op == "adb_list" else "banip"
+        target, action = str(form.get("target") or ""), str(form.get("action") or "add")
+        raw = str(form.get("value") or "")
+        value = svcmod.norm_domain(raw) if kind == "adblock" else svcmod.norm_ip(raw)
+        if not value:
+            return "adb.err_domain" if kind == "adblock" else "ban.err_ip"
+        cmds = svcmod.list_cmds(kind, target, action, value, reload=kind == "adblock" or bool(ban and ban["enabled"]))
+        if not cmds:
+            return "msg.bad_request"
+        info.update(target=target, action=action, value=value)
+        return ap, cmds, info, [t(f"list.{action}_{target}", v=value)]
+    return "msg.bad_request"
+
+
+@app.post("/services/preview", response_class=HTMLResponse)
+async def services_preview(request: Request):
+    """Nahled akce na sluzbe / adblocku / banIP – prikazy se ukazou, provedou se az po Pouzit."""
+    require_htmx(request)
+    t = request.state.t
+    title = t("preview.title")
+    if request.state.user["role"] != "full":
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
+    form = await request.form()
+    plan = _svc_plan(t, form)
+    if isinstance(plan, str):
+        return result(request, title, actions.Result(False, t(plan)))
+    ap, cmds, info, changes = plan
+    token = store.add_svc_pending(ap, cmds, {**info, "changes": changes})
+    note = t("svc.note_" + info["op"]) if info["op"] in ("adb_suspend", "adb_list", "ban_list", "svc") else ""
+    if info["op"] == "svc" and (store.svc.get(ap) or {}).get("services") and \
+            svcmod.valid_service(info["name"], store.svc[ap]["services"]).get("protected"):
+        note = t("svc.note_protected")
+    return render(request, "_svc_preview.html", ap=ap, cmds=cmds, changes=changes, token=token, note=note)
+
+
+@app.post("/services/apply", response_class=HTMLResponse)
+async def services_apply(request: Request, token: str = Form(...)):
+    require_htmx(request)
+    t = request.state.t
+    title = t("preview.apply_title")
+    if request.state.user["role"] != "full":
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
+    entry = store.svc_pending.pop(token, None)
+    if not entry or time.time() - entry[0] > 600:
+        return result(request, title, actions.Result(False, t("msg.preview_expired")))
+    _, ap, cmds, info = entry
+    summary = "; ".join(info.get("changes") or [])
+    log.info("%s: %s na %s", who(request), summary, ap)
+    if store.opts.get("demo"):
+        await asyncio.sleep(0.5)
+        store.demo_svc_apply(ap, info)
+        r = actions.Result(True, f"{ap}: OK (demo)")
+    else:
+        lock = store.ap_lock(ap)
+        if lock.locked():
+            return result(request, title, actions.Result(False, t("msg.busy")))
+        async with lock:
+            r = await actions.run(store.cfg(ap), store.key, " && ".join(cmds) + " && echo OK", timeout=90, t=t,
+                                  summary=f"{summary} ({ap})")
+    await store.load_services(only=ap)
+    resp = result(request, title, r)
+    if r.ok:
+        resp.headers["HX-Refresh"] = "true"
+    return resp
+
+
+@app.post("/services/search", response_class=HTMLResponse)
+async def services_search(request: Request, ap: str = Form(""), kind: str = Form(""), value: str = Form("")):
+    """Proc je domena / IP blokovana – jen cteni, smi i uzivatel s pristupem jen pro cteni."""
+    require_htmx(request)
+    t = request.state.t
+    sv = store.svc.get(ap) or {}
+    data = sv.get(kind) if kind in ("adblock", "banip") else None
+    if not data:
+        return result(request, t("svc.search"), actions.Result(False, t("msg.bad_request")))
+    v = svcmod.norm_domain(value) if kind == "adblock" else svcmod.norm_ip(value)
+    if not v or (kind == "banip" and "/" in v):
+        return result(request, t("svc.search"), actions.Result(False, t("adb.err_domain" if kind == "adblock" else "ban.err_ip")))
+    title = t("svc.search_title", v=v)
+    if store.opts.get("demo"):
+        return result(request, title, actions.Result(True, svcmod.demo_search(kind, v, data)))
+    r = await actions.run(store.cfg(ap), store.key, svcmod.search_cmd(kind, v, data.get("searchcmd", "search")),
+                          timeout=60, t=t, audit=False)
+    return result(request, title, r)
 
 
 @app.get("/stats", response_class=HTMLResponse)

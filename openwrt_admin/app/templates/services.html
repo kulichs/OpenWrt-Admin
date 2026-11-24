@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% macro act(ap, op, label, cls="secondary small", vals={}) -%}
+<button type="button" class="{{ cls }}" hx-post="{{ base }}/services/preview" hx-target="previous .cmd-out"
+        hx-vals='{{ dict(ap=ap, op=op, **vals) | tojson }}'>{{ label }}</button>
+{%- endmacro %}
+{% macro listbox(ap, op, target, items, empty) -%}
+<table class="list compact">
+  {% for v in items %}
+  <tr><td class="mono small">{{ v }}</td>
+    {% if can_edit %}<td class="num">{{ act(ap, op, "✕", "secondary small", {"target": target, "action": "del", "value": v}) }}</td>{% endif %}</tr>
+  {% else %}
+  <tr><td class="muted small">{{ empty }}</td></tr>
+  {% endfor %}
+</table>
+{%- endmacro %}
+{% block content %}
+<h1>{{ t("svc.title") }}</h1>
+<p class="muted">{{ t("svc.intro") if can_edit else t("svc.readonly") }}</p>
+
+{% for d in devs if d.adblock %}{% set a = d.adblock %}
+<div class="panel">
+  <h2>adblock <span class="tag">{{ d.name }}</span>
+    <span class="tag svc-{{ a.state }}">{{ t("adb.state_" ~ a.state) }}</span>
+    {% if a.version %}<span class="muted small">{{ a.version }}</span>{% endif %}</h2>
+  {% if a.state == "empty" %}<p class="warnlist">⚠ {{ t("adb.warn_empty") }}</p>{% endif %}
+  {% if a.state == "paused" and a.resume_in and a.resume_in > 0 %}<p class="warnlist">⏸ {{ t("adb.paused_until", m=((a.resume_in + 59) // 60)) }}</p>
+  {% elif a.state == "paused" and not a.resume_at %}<p class="warnlist">⏸ {{ t("adb.paused_forever") }}</p>{% endif %}
+  {% if a.state == "paused" and a.resume_at and a.resume_in is not none and a.resume_in < -120 %}<p class="warnlist err">⚠ {{ t("adb.resume_missed") }}</p>{% endif %}
+  <div class="stats-tiles small-tiles">
+    <div class="stat"><span class="num">{{ "{:,}".format(a.blocked or 0).replace(",", " ") }}</span><span class="lbl">{{ t("adb.blocked") }}</span></div>
+    <div class="stat"><span class="num">{{ a.feeds or "–" }}</span><span class="lbl">{{ t("adb.feeds") }}</span></div>
+    <div class="stat"><span class="num">{{ a.last_run or "–" }}</span><span class="lbl">{{ t("adb.last_run") }}</span></div>
+    <div class="stat"><span class="num">{{ a.dns or "–" }}</span><span class="lbl">DNS</span></div>
+  </div>
+  <div class="cmd-out"></div>
+  {% if can_edit %}
+  <div class="btns">
+    {% if a.state in ("ok",) %}
+    <span>{{ t("adb.pause") }}:</span>
+    {% for m in (15, 60, 240) %}{{ act(d.name, "adb_suspend", t("adb.pause_m", m=m) if m < 60 else t("adb.pause_h", h=m // 60), "secondary small", {"minutes": m}) }} {% endfor %}
+    {{ act(d.name, "adb_suspend", t("adb.pause_manual"), "secondary small", {"minutes": 0}) }}
+    {% endif %}
+    {% if a.state in ("paused", "empty") %}{{ act(d.name, "adb_resume", t("adb.resume"), "small") }}{% endif %}
+    {{ act(d.name, "adb_reload", t("adb.reload"), "secondary small") }}
+  </div>
+  {% endif %}
+  <form class="filters edit" hx-post="{{ base }}/services/search" hx-target="next .search-out" hx-disabled-elt="find button">
+    <input type="hidden" name="ap" value="{{ d.name }}"><input type="hidden" name="kind" value="adblock">
+    <label>{{ t("adb.domain") }} <input name="value" placeholder="doubleclick.net" required maxlength="253"></label>
+    <button type="submit" class="secondary">{{ t("adb.search") }}</button>
+    {% if can_edit %}
+    <button type="button" hx-post="{{ base }}/services/preview" hx-include="closest form" hx-target="previous .cmd-out"
+            hx-vals='{{ dict(ap=d.name, op="adb_list", target="allow", action="add") | tojson }}'>{{ t("adb.allow") }}</button>
+    <button type="button" class="danger" hx-post="{{ base }}/services/preview" hx-include="closest form" hx-target="previous .cmd-out"
+            hx-vals='{{ dict(ap=d.name, op="adb_list", target="block", action="add") | tojson }}'>{{ t("adb.block") }}</button>
+    {% endif %}
+  </form>
+  <div class="search-out"></div>
+  <div class="grid two">
+    <div><h3>{{ t("adb.allowlist") }} <span class="muted small">{{ a.allow | length }}</span></h3>{{ listbox(d.name, "adb_list", "allow", a.allow, t("list.empty")) }}</div>
+    <div><h3>{{ t("adb.blocklist") }} <span class="muted small">{{ a.block | length }}</span></h3>{{ listbox(d.name, "adb_list", "block", a.block, t("list.empty")) }}</div>
+  </div>
+  <p class="muted small">{{ t("adb.hint") }}</p>
+</div>
+{% endfor %}
+
+{% for d in devs if d.banip %}{% set b = d.banip %}
+<div class="panel">
+  <h2>banIP <span class="tag">{{ d.name }}</span>
+    <span class="tag svc-{{ b.state }}">{{ t("ban.state_" ~ b.state) }}</span>
+    {% if b.version %}<span class="muted small">{{ b.version }}</span>{% endif %}</h2>
+  {% if b.state == "disabled" %}<p class="muted">{{ t("ban.disabled") }}</p>
+  {% elif b.state == "error" %}<p class="warnlist err">⚠ {{ t("ban.error") }}</p>
+  {% else %}
+  <div class="stats-tiles small-tiles">
+    <div class="stat"><span class="num">{{ b.elements or "–" }}</span><span class="lbl">{{ t("ban.elements") }}</span></div>
+    <div class="stat"><span class="num">{{ b.feeds or "–" }}</span><span class="lbl">{{ t("adb.feeds") }}</span></div>
+    <div class="stat"><span class="num">{{ b.last_run or "–" }}</span><span class="lbl">{{ t("adb.last_run") }}</span></div>
+  </div>
+  {% endif %}
+  <div class="cmd-out"></div>
+  {% if can_edit and b.enabled %}<div class="btns">{{ act(d.name, "ban_reload", t("ban.reload"), "secondary small") }}</div>{% endif %}
+  <form class="filters edit" hx-post="{{ base }}/services/search" hx-target="next .search-out" hx-disabled-elt="find button">
+    <input type="hidden" name="ap" value="{{ d.name }}"><input type="hidden" name="kind" value="banip">
+    <label>{{ t("ban.ip") }} <input name="value" placeholder="203.0.113.7" required maxlength="64"></label>
+    <button type="submit" class="secondary">{{ t("ban.search") }}</button>
+    {% if can_edit %}
+    <button type="button" hx-post="{{ base }}/services/preview" hx-include="closest form" hx-target="previous .cmd-out"
+            hx-vals='{{ dict(ap=d.name, op="ban_list", target="allow", action="add") | tojson }}'>{{ t("ban.allow") }}</button>
+    <button type="button" class="danger" hx-post="{{ base }}/services/preview" hx-include="closest form" hx-target="previous .cmd-out"
+            hx-vals='{{ dict(ap=d.name, op="ban_list", target="block", action="add") | tojson }}'>{{ t("ban.block") }}</button>
+    {% endif %}
+  </form>
+  <div class="search-out"></div>
+  <div class="grid two">
+    <div><h3>{{ t("ban.allowlist") }} <span class="muted small">{{ b.allow | length }}</span></h3>{{ listbox(d.name, "ban_list", "allow", b.allow, t("list.empty")) }}</div>
+    <div><h3>{{ t("ban.blocklist") }} <span class="muted small">{{ b.block | length }}</span></h3>{{ listbox(d.name, "ban_list", "block", b.block, t("list.empty")) }}</div>
+  </div>
+  <p class="muted small">{{ t("ban.hint") }}</p>
+</div>
+{% endfor %}
+
+<h2>{{ t("svc.services") }}</h2>
+{% for d in devs %}
+<details class="panel" {{ 'open' if d.kind == 'router' or loop.first }}>
+  <summary><b>{{ d.name }}</b>
+    {% if d.services %}{% set bad = d.services | selectattr("state", "equalto", "failed") | list %}
+    <span class="muted small">{{ t("svc.count", n=(d.services | selectattr("state", "equalto", "running") | list | length), total=(d.services | length)) }}</span>
+    {% if bad %}<span class="tag svc-failed">{{ t("svc.failed_n", n=(bad | length)) }}</span>{% endif %}
+    {% endif %}
+    {% if d.error %}<span class="err small">{{ d.error }}</span>{% endif %}</summary>
+  <div class="cmd-out"></div>
+  {% if d.services %}
+  <table class="list">
+    <thead><tr><th>{{ t("svc.col_name") }}</th><th>{{ t("svc.col_state") }}</th><th>{{ t("svc.col_boot") }}</th>{% if can_edit %}<th></th>{% endif %}</tr></thead>
+    {% for s in d.services %}
+    <tr>
+      <td class="mono">{{ s.name }}{% if s.protected %} <span class="muted small" title="{{ t('svc.protected_title') }}">🔒</span>{% endif %}</td>
+      <td><span class="tag svc-{{ s.state }}">{{ t("svc.st_" ~ s.state) }}</span>{% if s.state == "failed" %} <span class="muted small">exit {{ s.exit_codes | join(", ") }}</span>{% endif %}</td>
+      <td>{% if s.enabled is none %}–{% elif s.enabled %}{{ t("svc.boot_on") }}{% else %}<span class="muted">{{ t("svc.boot_off") }}</span>{% endif %}</td>
+      {% if can_edit %}<td class="btns">
+        {% if s.protected %}{{ act(d.name, "svc", t("svc.restart"), "secondary small", {"name": s.name, "action": "restart"}) }}
+        {% else %}
+        {% if s.state != "running" %}{{ act(d.name, "svc", t("svc.start"), "secondary small", {"name": s.name, "action": "start"}) }}{% endif %}
+        {% if s.state == "running" %}{{ act(d.name, "svc", t("svc.stop"), "secondary small", {"name": s.name, "action": "stop"}) }}{% endif %}
+        {{ act(d.name, "svc", t("svc.restart"), "secondary small", {"name": s.name, "action": "restart"}) }}
+        {% if s.enabled %}{{ act(d.name, "svc", t("svc.disable"), "secondary small", {"name": s.name, "action": "disable"}) }}
+        {% elif s.enabled is not none %}{{ act(d.name, "svc", t("svc.enable"), "secondary small", {"name": s.name, "action": "enable"}) }}{% endif %}
+        {% endif %}
+      </td>{% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</details>
+{% endfor %}
+<p class="muted small">{{ t("svc.footer") }}</p>
+{% endblock %}

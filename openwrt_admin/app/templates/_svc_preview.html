@@ -1,0 +1,11 @@
+<div class="result preview">
+  <strong>{{ t("preview.title") }} · {{ ap }}</strong>
+  <p>{% for c in changes %}{{ c }}<br>{% endfor %}</p>
+  <pre class="small">{{ cmds | join('\n') }}</pre>
+  {% if note %}<p class="muted small">{{ note }}</p>{% endif %}
+  <form hx-post="{{ base }}/services/apply" hx-target="closest .cmd-out" hx-disabled-elt="find button">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button type="submit" class="warnbtn">{{ t("svc.apply", ap=ap) }}</button>
+    <span class="htmx-indicator muted">{{ t("preview.writing") }}</span>
+  </form>
+</div>

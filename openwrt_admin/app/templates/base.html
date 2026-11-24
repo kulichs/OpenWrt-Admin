@@ -34,6 +34,7 @@ try {
     <a href="{{ base }}/ssids" class="{{ 'active' if page == 'ssids' }}">{{ t("nav.ssid") }}</a>
     <a href="{{ base }}/map" class="{{ 'active' if page == 'map' }}">{{ t("nav.map") }}</a>
     <a href="{{ base }}/radios" class="{{ 'active' if page == 'radios' }}">{{ t("nav.radios") }}</a>
+    <a href="{{ base }}/services" class="{{ 'active' if page == 'services' }}">{{ t("nav.services") }}</a>
     {% if store.stats_on %}<a href="{{ base }}/stats" class="{{ 'active' if page == 'stats' }}">{{ t("nav.stats") }}</a>{% endif %}
     <span class="nav-sep"></span>
     {% if store.router %}{% set r = store.router %}
