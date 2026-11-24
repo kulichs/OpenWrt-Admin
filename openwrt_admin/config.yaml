@@ -1,5 +1,5 @@
 name: OpenWrt-Admin
-version: "0.17.9"
+version: "0.17.10"
 slug: openwrt_admin
 description: Manage OpenWrt access points and Wi-Fi clients over SSH (overview, SSIDs, radios, network map, statistics, switches via SNMP, updates, backups)
 arch:
@@ -83,6 +83,7 @@ schema:
     - name: str
       host: str
       port: port?
+      user: str?
       type: list(ap|router)?
   switches:
     - name: str

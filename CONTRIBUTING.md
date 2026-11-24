@@ -1,6 +1,6 @@
 # Jak na projektu pracovat (pro vývojáře)
 
-Tenhle dokument je pro toho, kdo si repozitář stáhne a chce add-on upravovat nebo rozšiřovat.
+Tenhle dokument je pro toho, kdo si repozitář stáhne a chce aplikaci upravovat nebo rozšiřovat.
 Uživatelská dokumentace je v [`openwrt_admin/DOCS.md`](openwrt_admin/DOCS.md), článek o projektu na
 [tadyk.info](https://tadyk.info/openwrt-admin-sprava-domaci-openwrt-site-z-home-assistantu.html).
 
@@ -13,7 +13,7 @@ Uživatelská dokumentace je v [`openwrt_admin/DOCS.md`](openwrt_admin/DOCS.md),
 
 ## 1. Co to je a jak je to poskládané
 
-Home Assistant add-on (FastAPI + Jinja2 + HTMX), který přes SSH čte a spravuje OpenWrt AP a router
+Aplikace pro Home Assistant (FastAPI + Jinja2 + HTMX), která přes SSH čte a spravuje OpenWrt AP a router
 a přes SNMP čte spravované switche. Data sbírá `Store.poll()` v `app/main.py` každých `poll_interval`
 sekund, údržba (aktualizace, zálohy) běží zvlášť jednou za 10 min. Podrobná struktura je v `CLAUDE.md`.
 
@@ -43,7 +43,7 @@ cd openwrt_admin
 OWADMIN_DATA=/tmp/owdemo ../.venv/bin/uvicorn app.main:app --port 8089
 ```
 
-Mimo Ingress add-on pouští jen požadavky z lokální adresy; uživatele nasimuluj hlavičkou
+Mimo Ingress aplikace pouští jen požadavky z lokální adresy; uživatele nasimuluj hlavičkou
 `X-Remote-User-Name: admin` (např. rozšířením prohlížeče nebo v testech).
 
 ## 4. Ověření změny
@@ -74,7 +74,7 @@ V CHANGELOGu poctivě uveď, co běželo naostro a co jen v demu nebo simulaci.
 | Všechny porty ze `swconfig show` | falešné porty (UniFi AP LR, port 6 AR8327 „10M HD“) | jen porty ze `switch_vlan` |
 | ARP routeru celé | brána poskytovatele z WAN jako klient | filtr `is_l2_iface` |
 | `hx-select` zděděný z autorefreshe | výsledek akce zmizí nebo se vloží celá stránka | `hx-disinherit="*"`, `hx-preserve` |
-| Chybí `python-multipart` | add-on nenaběhne (`Form data requires python-multipart`) | testovat v čistém venv |
+| Chybí `python-multipart` | aplikace nenaběhne (`Form data requires python-multipart`) | testovat v čistém venv |
 | `: ` v popisu v `translations/*.yaml` | neplatný YAML, HA volby nezobrazí | popisy v uvozovkách |
 | `from __future__` až za jiným importem | `SyntaxError` | vždy první řádek |
 | Výstup pingů na pozadí v jednom příkazu | míchá se do jiných sekcí výstupu routeru | pingy do souborů v `/tmp`, vypsat po `wait` |
@@ -93,7 +93,7 @@ V CHANGELOGu poctivě uveď, co běželo naostro a co jen v demu nebo simulaci.
    git commit -m "X.Y.Z: co se zmenilo"
    git push
    ```
-5. V Home Assistantu `ha store reload` → u add-onu **Aktualizovat**.
+5. V Home Assistantu `ha store reload` → u aplikace **Aktualizovat**.
 
 ## 7. Otevřené body
 

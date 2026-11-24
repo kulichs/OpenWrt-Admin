@@ -2,6 +2,15 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.17.10
+- **Dedicated SSH user:** documentation and Settings page show how to create a user (e.g. `owadmin`) with root rights (UID 0, no password, nothing installed) instead of logging in as `root`; new per-device option `user` in `aps` (overrides `ssh_user`).
+- **Who did what:** every action started from the app (reboot, SSID, new SSID, radios, `apk`, backup, scan, client disconnect/block) is written to the device syslog with the tag `openwrt-admin` and the Home Assistant user name (`logread -e openwrt-admin`); passwords are masked.
+- Wording: Home Assistant renamed add-ons to **apps** (2026.2) – documentation, UI and option descriptions now say "app" (technical names like `/addons`, slug and `ha store` stay).
+---
+- **Vlastní SSH uživatel:** dokumentace a stránka Nastavení ukazují, jak vytvořit uživatele (např. `owadmin`) s právy root (UID 0, bez hesla, nic se neinstaluje) místo přihlašování jako `root`; nová volba `user` u každého zařízení v `aps` (přebije `ssh_user`).
+- **Kdo co dělal:** každá akce spuštěná z aplikace (restart, SSID, nové SSID, rádia, `apk`, záloha, sken, odpojení/blokace klienta) se zapíše do syslogu zařízení s tagem `openwrt-admin` a jménem uživatele Home Assistantu (`logread -e openwrt-admin`); hesla jsou skrytá.
+- Názvosloví: Home Assistant přejmenoval add-ony na **aplikace** (2026.2) – dokumentace, UI a popisy voleb teď říkají „aplikace“ (technické názvy jako `/addons`, slug a `ha store` zůstávají).
+
 ## 0.17.9
 - **Edit radios** on the Radios page (full access): channel, width, transmit power for each radio and the country for all, with options from `iwinfo freqlist`/`txpowerlist`/`htmodelist` (DFS marked; old iwinfo without htmodelist: widths by the radio family). Preview of the `uci` commands per AP → **Apply** (`uci commit wireless && wifi reload`, `uci revert` on error).
 - **Propose settings**: pre-fills the form with a channel plan for all APs (own APs on different channels, away from neighbours from the last scan, optionally DFS), the widest sensible width and power balance (5 GHz max, 2.4 GHz 3 dB lower) – each change with a reason.

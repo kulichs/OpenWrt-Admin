@@ -1,7 +1,7 @@
 configuration:
   ssh_user:
     name: SSH user
-    description: "User the add-on logs in as on the access points and the router (usually root)."
+    description: "User the app logs in as on the access points and the router. A dedicated user with root rights (e.g. owadmin, see Settings) is recommended, so the device log shows what the app did."
   poll_interval:
     name: Poll interval (s)
     description: "How often data is collected from the access points, 10–600 seconds."
@@ -34,7 +34,7 @@ configuration:
     description: "Own names for devices by MAC (mac: aa:bb:cc:dd:ee:ff, name: …). They take precedence over all other sources."
   notify_new_devices:
     name: Notify about new devices
-    description: "When a device (MAC) the add-on has never seen appears on the network, send a notification to Home Assistant (bell). On the first start all devices are taken as known."
+    description: "When a device (MAC) the app has never seen appears on the network, send a notification to Home Assistant (bell). On the first start all devices are taken as known."
   notify_service:
     name: Notification service
     description: "Optionally also a notify service, e.g. notify.mobile_app_phone (to your phone). Empty = Home Assistant notification only."
@@ -52,13 +52,13 @@ configuration:
     description: "How often the packages to update (apk/opkg update) and a new OpenWrt release are checked on each device. 0 = off."
   backup_interval_days:
     name: Automatic backup (days)
-    description: "How often a configuration backup (sysupgrade -b) of each device is stored in the add-on's /data (also part of HA backups). 0 = off."
+    description: "How often a configuration backup (sysupgrade -b) of each device is stored in the app's /data (also part of HA backups). 0 = off."
   backup_keep:
     name: Backups to keep
     description: "How many of the latest backups are kept per device."
   aps:
     name: Devices
-    description: "All managed OpenWrt devices – only these are used. Each has name, host, optional SSH port and type ap (default) or router. The router (one) is shown with interfaces and DHCP leases and provides client names and IPs."
+    description: "All managed OpenWrt devices – only these are used. Each has name, host, optional SSH port, user (SSH user for this device only) and type ap (default) or router. The router (one) is shown with interfaces and DHCP leases and provides client names and IPs."
   switches:
     name: Switches (SNMP)
     description: "Optional managed switches (Netgear, TP-Link, Cisco SG…), read over SNMP v2c, read-only: ports, speeds, VLANs and MAC addresses on ports – shown on the map with everything plugged into them. Each has a name, address, community (default public) and optionally a port (default 161)."

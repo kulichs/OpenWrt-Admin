@@ -144,7 +144,9 @@ async def backup(cfg: APConfig, key, root: Path, device: str, keep: int, timeout
     try:
         async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=10) as conn:
-            r = await asyncio.wait_for(conn.run(BACKUP_CMD, check=False, encoding=None), timeout)
+            from .actions import audit_prefix  # zaznam do syslogu, kdyz zalohu spustil uzivatel (Zalohovat ted)
+            r = await asyncio.wait_for(conn.run(audit_prefix("sysupgrade -b (backup)") + BACKUP_CMD, check=False,
+                                                encoding=None), timeout)
     except (OSError, asyncssh.Error, asyncio.TimeoutError) as e:
         return False, f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
     data = r.stdout or b""

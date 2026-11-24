@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import shlex
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 import asyncssh
@@ -16,6 +17,25 @@ log = logging.getLogger("openwrt_admin.actions")
 
 SECTION_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
+# Kdo akci spustil (uzivatel HA) – nastavuje middleware pro kazdy pozadavek. Akce s vyplnenym ACTOR se zapisou
+# i do syslogu zarizeni (logread -e openwrt-admin), takze je na AP/routeru dohledatelne, kdo co delal.
+ACTOR: ContextVar[str] = ContextVar("owadmin_actor", default="")
+AUDIT_TAG = "openwrt-admin"
+
+
+def mask_all(cmd: str) -> str:
+    """Hesla (uci ...key=...) nahradit hvezdickami kdekoli v prikazu."""
+    return re.sub(r"(\.key=)('[^']*'|\S+)", r"\1********", cmd)
+
+
+def audit_prefix(summary: str) -> str:
+    """'logger -t openwrt-admin ...; ' pro akci spustenou uzivatelem HA, jinak ''. BusyBox logger je v OpenWrt vzdy."""
+    actor = ACTOR.get()
+    if not actor:
+        return ""
+    text = " ".join(mask_all(summary).split())[:300]
+    return f"logger -t {AUDIT_TAG} -p user.notice -- {shlex.quote(f'HA user {actor}: {text}')} 2>/dev/null; "
+
 
 @dataclass
 class Result:
@@ -24,6 +44,7 @@ class Result:
 
 
 async def run(cfg: APConfig, key: asyncssh.SSHKey, cmd: str, timeout: float = 60.0, t=None) -> Result:
+    cmd = audit_prefix(cmd) + cmd
     try:
         async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=10) as conn:

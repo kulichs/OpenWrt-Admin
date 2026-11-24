@@ -13,7 +13,7 @@ Související: [`CONTRIBUTING.md`](CONTRIBUTING.md) (jak začít, spustit demo, 
 Pracuj jako seniorní vývojář v Pythonu se zkušenostmi s:
 
 - OpenWrt (25.12, 24.10, starší s `opkg`): `ubus`, `uci`, `hostapd`, `swconfig` i DSA, BusyBox `ash`,
-- Home Assistant add-ony (Supervisor, Ingress, `config.yaml`, překlady voleb, websocket API),
+- aplikacemi pro Home Assistant, dříve add-ony (Supervisor, Ingress, `config.yaml`, překlady voleb, websocket API),
 - asyncio, FastAPI, Jinja2, HTMX, `asyncssh`,
 - sítěmi: VLAN, bridge, ARP, tabulky MAC adres switchů, SNMP (IF-MIB, BRIDGE-MIB, Q-BRIDGE-MIB).
 
@@ -21,10 +21,10 @@ Komunikuj česky. Názvy příkazů, funkcí, proměnných a technické termíny
 
 ## Co to je
 
-Home Assistant add-on pro centrální správu domácí sítě s OpenWrt: přístupové body, router a volitelně
+Aplikace (dříve add-on) pro Home Assistant na centrální správu domácí sítě s OpenWrt: přístupové body, router a volitelně
 spravované switche. Webové rozhraní běží přes Ingress v panelu Home Assistantu.
 
-- **AP a router** se spravují přes **SSH** (klíč add-onu v `/data`). Čte se jen to, co OpenWrt nabízí
+- **AP a router** se spravují přes **SSH** (klíč aplikace v `/data`). Čte se jen to, co OpenWrt nabízí
   (`ubus`, `uci`, `swconfig`, `/proc/net/arp`), **na zařízeních se nic neinstaluje**.
 - **Switche** se čtou přes **SNMP v2c, jen pro čtení** (vlastní klient `app/snmp.py`, bez knihovny).
 - **Akce** (restart, SSID, `apk`, zálohy, odpojení klienta) jen pro uživatele s plným přístupem.
@@ -33,15 +33,15 @@ spravované switche. Webové rozhraní běží přes Ingress v panelu Home Assis
 Licence: [MIT](LICENSE) (htmx 0BSD). Cizí kód jen s kompatibilní licencí a zápisem do `LICENSE`.
 Repozitář: [GitHub `kulichs/OpenWrt-Admin`](https://github.com/kulichs/OpenWrt-Admin) (zrcadlo hlavního repozitáře správce).
 Článek o projektu: [tadyk.info](https://tadyk.info/openwrt-admin-sprava-domaci-openwrt-site-z-home-assistantu.html).
-Home Assistant si add-on stahuje z repozitáře (`ha store reload` → Aktualizovat).
+Home Assistant si aplikaci stahuje z repozitáře (`ha store reload` → Aktualizovat).
 
 ## Cílová platforma
 
-- **Add-on:** `python:3.12-alpine`, závislosti připnuté v `requirements.txt`. Novou závislost přidávej jen
+- **Aplikace:** `python:3.12-alpine`, závislosti připnuté v `requirements.txt`. Novou závislost přidávej jen
   s důvodem (malý image, žádné nativní kompilace); jednoduché věci napiš sám (SNMP klient je vzor).
 - **OpenWrt:** příkazy musí fungovat v BusyBox `ash` (žádný bash, žádné GNU přepínače). Počítej s `apk`
   (25.12+) i `opkg` (starší), se `swconfig` i DSA, se zařízeními s 8 MB flash (bez LuCI).
-- **Home Assistant:** volby add-onu = `config.yaml` (`options` + `schema`) + `translations/{en,cs}.yaml`
+- **Home Assistant:** volby aplikace = `config.yaml` (`options` + `schema`) + `translations/{en,cs}.yaml`
   + výchozí hodnota v `load_options()` v `app/main.py`. Starý config bez nového klíče musí fungovat.
 
 ## Pravidla práce
@@ -71,6 +71,9 @@ Home Assistant si add-on stahuje z repozitáře (`ha store reload` → Aktualizo
 - **Bez výslovného souhlasu uživatele nic neměň na skutečných zařízeních** (restart, `uci set`, `wifi`,
   `apk upgrade`, `sysupgrade`, blokace klientů). Čtecí příkazy (`ubus call … status`, `uci show`,
   `swconfig … get`, `snmpwalk`) jsou v pořádku. Pozor: zařízení může být zrovna vypnuté nebo v provozu.
+- **Audit:** akce spuštěné uživatelem (kontextová proměnná `actions.ACTOR`, nastavuje middleware) se na zařízení
+  zapíšou přes `logger -t openwrt-admin` (`actions.audit_prefix`, hesla maskovaná). Čtení dat (poll, statistiky)
+  se nezapisuje. SSH uživatel: `user` u zařízení, jinak `ssh_user`; doporučený je vlastní uživatel s UID 0.
 - **Neskenuj síť** (žádné sweepy ani port scany). Ping z routeru jen pro známé IP z ARP (`wake_cmd`)
   a pro cíle statistik (`ping_targets`, brána WAN, AP a switche z konfigurace; adresy přes `stats.valid_host`).
 - **Vstupy do příkazů na zařízení** vždy validuj (regex pro MAC, ifname, IP) a escapuj (`shlex.quote`).
@@ -130,12 +133,12 @@ Proč je co tak, jak je – čti, než něco „zjednodušíš“:
 ## Struktura
 
 ```
-repository.yaml              # Home Assistant repozitar add-onu
+repository.yaml              # Home Assistant repozitar aplikace
 README.md                    # predstaveni repozitare (EN + CZ)
 CLAUDE.md, CONTRIBUTING.md   # pravidla a navod pro vyvojare
 docs/audit-prompt.md         # zadani technickeho auditu (vystupy do audit/)
 openwrt_admin/
-  config.yaml                # verze, volby a schema add-onu
+  config.yaml                # verze, volby a schema aplikace
   translations/{en,cs}.yaml  # popisy voleb v HA
   DOCS.md, CHANGELOG.md      # dokumentace a zmeny (EN + CZ)
   Dockerfile, requirements.txt

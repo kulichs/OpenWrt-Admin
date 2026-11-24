@@ -6,11 +6,11 @@
 
 ## English
 
-Manage OpenWrt access points from Home Assistant: AP status (uptime, load, RAM, free overlay space), radios, SSIDs and all connected Wi-Fi clients with names and IPs from the router's DHCP. Reboot APs, update packages and change SSIDs on several APs at once. Nothing is installed on the APs, everything goes over SSH (`ubus`, `uci`).
+A Home Assistant app (apps were called *add-ons* before HA 2026.2) to manage OpenWrt access points: AP status (uptime, load, RAM, free overlay space), radios, SSIDs and all connected Wi-Fi clients with names and IPs from the router's DHCP. Reboot APs, update packages and change SSIDs on several APs at once. Nothing is installed on the APs, everything goes over SSH (`ubus`, `uci`).
 
 The web UI is available in English and Czech (see [Languages](#languages)).
 
-Blog post about the add-on with screenshots (in Czech): [OpenWrt-Admin – správa domácí OpenWrt sítě z Home Assistantu](https://tadyk.info/openwrt-admin-sprava-domaci-openwrt-site-z-home-assistantu.html).
+Blog post about the app with screenshots (in Czech): [OpenWrt-Admin – správa domácí OpenWrt sítě z Home Assistantu](https://tadyk.info/openwrt-admin-sprava-domaci-openwrt-site-z-home-assistantu.html).
 
 ### Installation
 
@@ -19,11 +19,11 @@ Blog post about the add-on with screenshots (in Czech): [OpenWrt-Admin – sprá
 1. **Settings → Apps (Add-ons) → store → ⋮ → Repositories**, add the repository URL, e.g. `https://git.example.com/you/OpenWrt-Admin`.
    - Or in the HA terminal: `ha store add <URL>` (gives a more precise error message).
    - Private repository: `https://user:TOKEN@git.example.com/you/OpenWrt-Admin` (read-only token).
-   - Do **not** use *Settings → Marketplace → Add from link*: since HA 2026.11 it only accepts public GitHub/HACS repositories and cannot install add-ons ("Unable to load GitHub repository").
+   - Do **not** use *Settings → Marketplace → Add from link*: since HA 2026.11 it only accepts public GitHub/HACS repositories and cannot install apps ("Unable to load GitHub repository").
 2. **⋮ → Check for updates**, install **OpenWrt-Admin** (the image is built on your device, a few minutes).
 3. Set up the **Configuration** tab (below), **Start**, enable **Show in sidebar**.
 
-**As a local add-on:** copy the `openwrt_admin` folder to `/addons/` (Samba share or SSH), then **⋮ → Check for updates**, it appears under **Local add-ons**. Updates: copy again and **Rebuild**.
+**As a local app:** copy the `openwrt_admin` folder to `/addons/` (Samba share or SSH), then **⋮ → Check for updates**, it appears under **Local apps**. Updates: copy again and **Rebuild**.
 
 ### Configuration
 
@@ -49,7 +49,7 @@ radio_scan: false            # true = Scan button on the Radios page (neighbouri
 update_check_hours: 12       # h, 0 = off: check packages to update and new OpenWrt releases
 backup_interval_days: 7      # days, 0 = off: automatic configuration backup of every device
 backup_keep: 10              # backups kept per device
-aps:                         # all managed devices – the add-on uses only these
+aps:                         # all managed devices – the app uses only these
   - name: Router
     host: 192.168.1.1
     type: router             # one router: interfaces, DHCP leases, client names/IPs
@@ -81,7 +81,7 @@ ha_sensors_interval: 30      # s, 10–600
 
 ### SSH key
 
-On first start the add-on generates an `ed25519` key (stored in `/data`, included in HA backups). The public key is shown in the add-on on the **Settings** page. Add it to every AP and to the router:
+On first start the app generates an `ed25519` key (stored in `/data`, included in HA backups). The public key is shown in the app on the **Settings** page. Add it to every AP and to the router:
 
 ```sh
 echo 'ssh-ed25519 AAAA… ha-openwrt-admin' >> /etc/dropbear/authorized_keys
@@ -90,7 +90,31 @@ chmod 600 /etc/dropbear/authorized_keys
 
 `/etc/dropbear/authorized_keys` survives a normal `sysupgrade`; after `sysupgrade -n` add it again or put it in a first-boot script (uci-defaults).
 
-> The key logs in as `root` and the add-on can reboot APs and change their configuration. Anyone with access to the add-on's `/data` (HA backups) has root on your APs. **Encrypt your HA backups.**
+> The key gives root rights on the devices and the app can reboot APs and change their configuration. Anyone with access to the app's `/data` (HA backups) has root on your APs. **Encrypt your HA backups.**
+
+#### Recommended: a dedicated user instead of `root`
+
+So that the device logs show what the app did and what you did yourself, let the app log in as its own user, e.g. `owadmin`, with root rights (UID 0). Nothing is installed; on every AP and the router:
+
+```sh
+grep -q '^owadmin:' /etc/passwd || echo 'owadmin:x:0:0:OpenWrt-Admin:/root:/bin/ash' >> /etc/passwd
+grep -q '^owadmin:' /etc/shadow || echo 'owadmin:*:0:0:99999:7:::' >> /etc/shadow
+```
+
+Then set `ssh_user: owadmin` in the app configuration (or `user: owadmin` for a single device in `aps`). The Settings page shows the commands with your user name.
+
+- The user has no password (`*`), it can only log in with the key.
+- OpenWrt's dropbear reads the keys of **every UID 0 user** from `/etc/dropbear/authorized_keys`, so the app key stays there (a `~/.ssh` would be ignored). The same key would therefore still work for `root` too – the benefit is the clear trace in the log, not a technical restriction. A user without root rights would need `sudo` installed on every device and would run every command through it, which this app deliberately avoids.
+- `/etc/passwd` and `/etc/shadow` survive a normal `sysupgrade`; after `sysupgrade -n` add the lines again (first-boot script).
+
+#### Who did what (device syslog)
+
+Every action started from the app (reboot, SSID changes, new SSID, radio settings, `apk`, backup, scan, client disconnect/block) is also written to the device syslog, with the tag `openwrt-admin` and the name of the Home Assistant user who started it; passwords are replaced with `********`. Regular data reading (every few seconds) is not logged. On the device:
+
+```sh
+logread -e openwrt-admin     # what was done and by which HA user
+logread -e dropbear          # logins (with a dedicated user you see "owadmin" instead of "root")
+```
 
 ### What it can do
 
@@ -150,7 +174,7 @@ The **Radios** page lists every radio of every AP in one table and checks the se
 - **Channel map** for each band: which channels every AP occupies with its width; channels 1/6/11 and DFS channels are highlighted.
 - The AP page shows the real channel, width, power and channel utilisation in its radio table.
 - With `ha_sensors` each radio also gets `sensor.openwrt_admin_<ap>_<radio>_channel_utilization` (%).
-- **Neighbour scan** (option `radio_scan`, off by default, full access only): **Scan** button for each radio or for all of them. It runs `iwinfo <if> scan`; the radio hops between channels for a few seconds, so connected clients may notice a short drop. Results stay in memory until the add-on restarts:
+- **Neighbour scan** (option `radio_scan`, off by default, full access only): **Scan** button for each radio or for all of them. It runs `iwinfo <if> scan`; the radio hops between channels for a few seconds, so connected clients may notice a short drop. Results stay in memory until the app restarts:
   - a list of neighbouring networks per radio (SSID, BSSID, channel, width incl. secondary channel, signal, encryption); your own APs are recognised by BSSID (from `iwinfo`) or SSID and marked,
   - channel occupancy bars under the channel map (number of foreign networks per channel, height by signal strength),
   - warnings: strong foreign networks (≥ −70 dBm) on your channel and a less busy channel suggestion (2.4 GHz: 1/6/11; 5 GHz: blocks within 36–48 for your width – DFS and 149–165, which the EU allows only at low power, are not suggested).
@@ -165,7 +189,7 @@ The **Statistics** page (option `stats`, on by default) shows what the network i
 |---|---|
 | WAN download/upload, interfaces (WAN, LAN, every VLAN, tunnels): RX/TX, packets/s, peak, chart of the last hour | router `/proc/net/dev` |
 | router CPU temperature and load | `/sys/class/thermal/thermal_zone*/temp`, `/proc/loadavg` |
-| ping: internet targets (`ping_targets`), ISP gateway, APs and switches – last/average response, loss, history strip | `ping -c 1 -W 1` on the router; the router itself = SSH response time from the add-on |
+| ping: internet targets (`ping_targets`), ISP gateway, APs and switches – last/average response, loss, history strip | `ping -c 1 -W 1` on the router; the router itself = SSH response time from the app |
 | who uses the internet most (top `top_clients`) | **nlbwmon** (`nlbw -c json -g mac,ip`) when it runs on the router, otherwise **conntrack** (`/proc/net/nf_conntrack`) |
 | current traffic of Wi-Fi clients | difference of hostapd `bytes` between two AP readings |
 | busiest switch ports – also traffic between devices inside the network (e.g. laptop ↔ server) that does not pass the router | SNMP IF-MIB `ifHCInOctets`/`ifHCOutOctets` (fallback 32-bit `ifInOctets`/`ifOutOctets`) |
@@ -175,13 +199,13 @@ The **Statistics** page (option `stats`, on by default) shows what the network i
   - **nlbwmon** refreshes its data every `refresh_interval` (default 30 s), so the speed is an average over ~90 s. It also gives the total for the current accounting period.
   - **conntrack** needs `net.netfilter.nf_conntrack_acct=1` (OpenWrt default; check with `cat /proc/sys/net/netfilter/nf_conntrack_acct`). Only IPv4 traffic between LAN/VLANs and the internet is counted, including port forwards. With **flow offloading** packets bypass conntrack and part of the traffic is missing.
 - Ping targets must be an IP address or a hostname; nothing else is pinged (no scanning).
-- The history (1 hour) is kept only in memory and is lost when the add-on restarts. For long-term history turn on `ha_sensors`.
+- The history (1 hour) is kept only in memory and is lost when the app restarts. For long-term history turn on `ha_sensors`.
 - **Map:** lines to APs and switches show the current traffic on their link (`↓` towards the device / `↑` from it) from the switch port counters, the line from the internet shows WAN traffic, wired devices on switch ports show their port traffic. Over half of the port speed is red and thick.
 - The **switch page** has a *Traffic* column in the port table, the **router page** shows RX/TX now for every interface, the **Clients** tables have a *Now ↓/↑* column and the overview has *Internet* and *WAN* tiles.
 
 #### Sensors in Home Assistant
 
-With `ha_sensors: true` the add-on writes the statistics every `ha_sensors_interval` seconds to Home Assistant through its REST API (`homeassistant_api`, no MQTT needed):
+With `ha_sensors: true` the app writes the statistics every `ha_sensors_interval` seconds to Home Assistant through its REST API (`homeassistant_api`, no MQTT needed):
 
 | Entity | State |
 |---|---|
@@ -198,7 +222,7 @@ The entities are created on the first write. They have no `unique_id`, so they c
 
 ### New devices on the network
 
-When a device (MAC address) the add-on has never seen appears on the network – on Wi-Fi, on an AP port or in the router's ARP table – a notification is sent to Home Assistant (the bell, `persistent_notification`). It shows the name (if known), MAC, IP, network/VLAN and where the device is (AP + SSID, AP port, router). With `notify_service` (e.g. `notify.mobile_app_phone`) it also goes to that service.
+When a device (MAC address) the app has never seen appears on the network – on Wi-Fi, on an AP port or in the router's ARP table – a notification is sent to Home Assistant (the bell, `persistent_notification`). It shows the name (if known), MAC, IP, network/VLAN and where the device is (AP + SSID, AP port, router). With `notify_service` (e.g. `notify.mobile_app_phone`) it also goes to that service.
 
 - On the **first start** all devices currently on the network are taken as known – no flood of notifications. The list is in `/data/known_devices.json` (delete the file to start over).
 - Devices seen for the first time in the last `new_device_hours` hours (default 24, 0 = off) have a **new** tag in the client tables and on the router page.
@@ -207,16 +231,16 @@ When a device (MAC address) the add-on has never seen appears on the network –
 
 ### Updates
 
-Every `update_check_hours` (default 12) the add-on runs `apk update` + `apk list --upgradable` (older devices `opkg update` + `opkg list-upgradable`) on each device, one after another. The overview shows the number of packages to update (tile and on every card), the device page lists them with the installed and new version. The **Check for updates** button refreshes the list right away; after **Upgrade packages** it is checked again.
+Every `update_check_hours` (default 12) the app runs `apk update` + `apk list --upgradable` (older devices `opkg update` + `opkg list-upgradable`) on each device, one after another. The overview shows the number of packages to update (tile and on every card), the device page lists them with the installed and new version. The **Check for updates** button refreshes the list right away; after **Upgrade packages** it is checked again.
 
-A new **OpenWrt release** is looked up in `https://downloads.openwrt.org/.versions.json` (needs internet from HA): a newer release of the same series (e.g. 25.12.2 → 25.12.3) has priority, otherwise a newer stable series. The firmware itself is not upgraded by the add-on – use firmware-selector and `sysupgrade`.
+A new **OpenWrt release** is looked up in `https://downloads.openwrt.org/.versions.json` (needs internet from HA): a newer release of the same series (e.g. 25.12.2 → 25.12.3) has priority, otherwise a newer stable series. The firmware itself is not upgraded by the app – use firmware-selector and `sysupgrade`.
 
 ### Configuration backups
 
-The **Back up now** button on an AP or router page (full access) and, every `backup_interval_days` (default 7), an automatic backup run `sysupgrade -b` on the device. The archive is transferred over SSH and stored in the add-on's `/data/backups/<device>/<device>-YYYY-mm-dd_HHMMSS.tar.gz`; the last `backup_keep` (default 10) are kept. `/data` is part of Home Assistant backups, so the AP configurations are backed up with HA.
+The **Back up now** button on an AP or router page (full access) and, every `backup_interval_days` (default 7), an automatic backup run `sysupgrade -b` on the device. The archive is transferred over SSH and stored in the app's `/data/backups/<device>/<device>-YYYY-mm-dd_HHMMSS.tar.gz`; the last `backup_keep` (default 10) are kept. `/data` is part of Home Assistant backups, so the AP configurations are backed up with HA.
 
 - The archive contains **Wi-Fi passwords and keys** – only users with full access can download it (link in the backup list).
-- **Restore:** upload the file to the device (e.g. `scp file.tar.gz root@ap:/tmp/`) and run `sysupgrade -r /tmp/file.tar.gz && reboot`, or use LuCI → System → Backup / Flash Firmware → Restore. The add-on does not restore by itself.
+- **Restore:** upload the file to the device (e.g. `scp file.tar.gz root@ap:/tmp/`) and run `sysupgrade -r /tmp/file.tar.gz && reboot`, or use LuCI → System → Backup / Flash Firmware → Restore. The app does not restore by itself.
 - Which files are included is set on the device in `/etc/sysupgrade.conf` (same as for `sysupgrade`).
 
 ### Disconnecting and blocking Wi-Fi clients
@@ -225,13 +249,13 @@ In the client tables (AP page, **Clients**) users with full access have a **Disc
 - **disconnect only** – the client is disconnected (deauthentication) and usually reconnects right away; useful to make it roam to a closer AP or to reconnect a stuck device,
 - **+ block 10 min / 1 h / 24 h** – disconnected and refused for that time on **all APs broadcasting the same SSID** (otherwise it would just join another AP).
 
-The block is kept in `hostapd` memory: a Wi-Fi restart (`wifi reload`, SSID change) or an AP reboot clears it. A permanent block is a MAC filter (`macfilter`/`maclist`) in the SSID configuration – not done by the add-on.
+The block is kept in `hostapd` memory: a Wi-Fi restart (`wifi reload`, SSID change) or an AP reboot clears it. A permanent block is a MAC filter (`macfilter`/`maclist`) in the SSID configuration – not done by the app.
 
-Blocked clients are listed above the client table (Clients page, AP page) with the APs and the remaining time; **Unblock** lifts the block on all APs with that SSID (`del_client` with `ban_time: 0`). The list comes from `ubus call hostapd.<if> list_bans`; on older hostapd without it only blocks set from the add-on are shown.
+Blocked clients are listed above the client table (Clients page, AP page) with the APs and the remaining time; **Unblock** lifts the block on all APs with that SSID (`del_client` with `ban_time: 0`). The list comes from `ubus call hostapd.<if> list_bans`; on older hostapd without it only blocks set from the app are shown.
 
 ### Users and permissions
 
-Login is handled by Home Assistant (Ingress); the add-on has no passwords of its own. It assigns a role based on the HA user who opened the panel:
+Login is handled by Home Assistant (Ingress); the app has no passwords of its own. It assigns a role based on the HA user who opened the panel:
 
 | Role | Who | Can |
 |---|---|---|
@@ -247,10 +271,10 @@ Login is handled by Home Assistant (Ingress); the add-on has no passwords of its
 
 ### Device names
 
-Devices with a static IP (typically ESPHome) never ask the router for DHCP, so the router does not know their name. The add-on therefore combines several sources; the name is taken in this order:
+Devices with a static IP (typically ESPHome) never ask the router for DHCP, so the router does not know their name. The app therefore combines several sources; the name is taken in this order:
 
-1. **`names`** in the add-on configuration (manual, tag *manual*),
-2. **Home Assistant** – device registry by MAC (ESPHome, Shelly, …; tag *HA*). The add-on has `homeassistant_api: true` and reads `config/device_registry/list` over the Supervisor websocket every 10 minutes; switch off with `ha_names: false`,
+1. **`names`** in the app configuration (manual, tag *manual*),
+2. **Home Assistant** – device registry by MAC (ESPHome, Shelly, …; tag *HA*). The app has `homeassistant_api: true` and reads `config/device_registry/list` over the Supervisor websocket every 10 minutes; switch off with `ha_names: false`,
 3. **DHCP lease** on the router,
 4. **static DHCP reservation** on the router (`uci show dhcp`, `host` sections; tag *reservation*).
 
@@ -265,7 +289,7 @@ The router (the device with `type: router`) is a device of its own, without radi
 - the **network** of each device (LAN / VLAN and interface name, by the subnet its IP belongs to) and the number of active devices per interface,
 - the same actions as APs: reboot, check for updates, upgrade packages. Rebooting the router takes the whole network and the internet down for a moment.
 
-The add-on's SSH key must be on the router too.
+The app's SSH key must be on the router too.
 
 ARP entries on the WAN and on tunnel/VPN interfaces (WireGuard `wg*`, PPPoE, OpenVPN…) are ignored – the ISP gateway or VPN peers are not clients.
 
@@ -277,7 +301,7 @@ The **Map** page draws the network as a tree: Internet → router → access poi
 - **SSIDs without clients are hidden** by default; the **SSIDs without clients** toggle shows them.
 - **Zoom and pan:** mouse wheel zooms around the cursor, dragging moves the map, buttons **+ / − / Fit**. The position is kept when the page refreshes itself.
 - **APs working as switches:** wired devices plugged into an AP's ports are shown under that AP in a **LAN** group with the port number, and an AP plugged into another AP is drawn under it (elbow line). Source: the switch MAC table on each AP (`swconfig dev switch0 get arl_table`); the uplink is the port where the router's MAC is seen (from the AP's ARP table), the CPU port is the one tagged in all `switch_vlan`s. If the same MAC is seen on several chained APs, it belongs to the last one. Wired devices that are on no AP port stay under the router, **split by network**: **LAN / other** for the untagged LAN and one branch per VLAN (e.g. **VLAN 100 · dmz**) in that network's colour. The network is the router interface whose subnet contains the device IP. The router page shows for each DHCP lease whether it is on Wi-Fi, on an AP port, or elsewhere.
-- **Last known place:** a switch forgets a MAC after a few minutes without traffic (e.g. a TV that is switched off). The add-on remembers where each wired device was last seen (AP + port, stored in `/data/wired_seen.json`) and keeps it there, greyed out with "last seen …", while it still has a DHCP lease on the router (without a lease for 24 hours). Entries older than 30 days are deleted.
+- **Last known place:** a switch forgets a MAC after a few minutes without traffic (e.g. a TV that is switched off). The app remembers where each wired device was last seen (AP + port, stored in `/data/wired_seen.json`) and keeps it there, greyed out with "last seen …", while it still has a DHCP lease on the router (without a lease for 24 hours). Entries older than 30 days are deleted.
 - **Quiet devices:** a device that rarely sends anything (e.g. an IP phone) drops out of the switch table before it is ever seen. Once every 4 minutes the router pings wired devices whose place is unknown (one `ping -c1 -W1` each, at most 64), so the AP switch learns them again and the next refresh places them.
 - **Switch diagnostics** (collapsible section at the bottom of an AP page): every switch port with its MAC addresses and role (uplink, CPU, local), whether the AP sees the router in its ARP table, and the "last seen" memory for that AP. Use it when a device appears in the wrong place.
 - Works only where the switch can list its MAC table (swconfig chips such as Atheros/Qualcomm AR8xxx, MediaTek). Unmanaged switches in between are not visible: devices behind them appear at the nearest OpenWrt AP.
@@ -296,7 +320,7 @@ The first tile shows **devices online**: the router and all configured APs. Hove
 
 ### Page refresh
 
-Open pages reload every `refresh_interval` seconds (0 = off). Each browser can choose its own value on the add-on's **Settings** page (stored in a cookie). The SSID page never reloads by itself, so a half-filled form is not lost.
+Open pages reload every `refresh_interval` seconds (0 = off). Each browser can choose its own value on the app's **Settings** page (stored in a cookie). The SSID page never reloads by itself, so a half-filled form is not lost.
 
 ### What is read from the APs
 
@@ -329,7 +353,7 @@ Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every Op
 
 ### Languages
 
-- **Web UI:** English and Czech. The language is chosen in this order: the choice on the add-on's **Settings** page (per browser) → `language` in the configuration (if not `auto`) → the language of the Home Assistant user → the browser's language → English.
+- **Web UI:** English and Czech. The language is chosen in this order: the choice on the app's **Settings** page (per browser) → `language` in the configuration (if not `auto`) → the language of the Home Assistant user → the browser's language → English.
 - **Configuration** in Home Assistant (option names and descriptions): `translations/en.yaml`, `cs.yaml`; HA picks the language of the user's profile.
 - **Documentation:** this file is bilingual (HA shows one `DOCS.md` for all languages).
 
@@ -349,22 +373,22 @@ Missing keys fall back to English.
 | No SSIDs | Wi-Fi disabled on the AP (`ubus list 'hostapd.*'` is empty). |
 | Switch: `SnmpError: SNMP timeout` | Wrong IP or community, SNMP not enabled, or the Home Assistant address is not allowed (Management Station IP). |
 | No notification about a new device | `notify_new_devices` off, the device was already known (first start = baseline), or the call to HA failed (Settings page shows the error). |
-| Backup fails | `sysupgrade -b` missing or `/tmp` full on the device; the error is shown after **Back up now** and in the add-on log. |
+| Backup fails | `sysupgrade -b` missing or `/tmp` full on the device; the error is shown after **Back up now** and in the app log. |
 | Wired device under the router instead of its AP | Open the AP page → **Switch diagnostics**: is the uplink detected, is the MAC on a local port, is it in "last seen"? Quiet devices are found within a few minutes (router ping). |
 | "Access denied" | HA user is in neither `full_access` nor `read_access`. |
 | Everyone is read-only | Ingress sends no username (Settings shows "Přihlášen jako –"), or the name does not match the HA username. |
-| Add-on does not start, `python-multipart` | Old version 0.2.0, update. |
+| App does not start, `python-multipart` | Old version 0.2.0, update. |
 | Repository cannot be added | Wrong place (Marketplace), HA cannot reach the Git server (try the IP), wrong token. Details: Settings → System → Logs → **Supervisor**. |
 
-Logs: the add-on's **Log** tab.
+Logs: the app's **Log** tab.
 
 ---
 
 ## Česky
 
-Správa OpenWrt access pointů z Home Assistantu: stav AP (uptime, load, RAM, volné místo na overlay), rádia, SSID a všichni připojení Wi-Fi klienti se jmény a IP z DHCP na routeru. Restart AP, aktualizace balíčků a změna SSID na více AP najednou. Na AP se nic neinstaluje, vše jde přes SSH (`ubus`, `uci`).
+Aplikace pro Home Assistant (do verze HA 2026.2 se aplikacím říkalo *add-ony*) na správu OpenWrt access pointů: stav AP (uptime, load, RAM, volné místo na overlay), rádia, SSID a všichni připojení Wi-Fi klienti se jmény a IP z DHCP na routeru. Restart AP, aktualizace balíčků a změna SSID na více AP najednou. Na AP se nic neinstaluje, vše jde přes SSH (`ubus`, `uci`).
 
-Článek o add-onu se screenshoty na blogu: [OpenWrt-Admin – správa domácí OpenWrt sítě z Home Assistantu](https://tadyk.info/openwrt-admin-sprava-domaci-openwrt-site-z-home-assistantu.html).
+Článek o aplikaci se screenshoty na blogu: [OpenWrt-Admin – správa domácí OpenWrt sítě z Home Assistantu](https://tadyk.info/openwrt-admin-sprava-domaci-openwrt-site-z-home-assistantu.html).
 
 ### Instalace
 
@@ -373,11 +397,11 @@ Správa OpenWrt access pointů z Home Assistantu: stav AP (uptime, load, RAM, vo
 1. **Nastavení → Aplikace (Doplňky) → obchod → ⋮ → Repozitáře**, přidat URL repozitáře, např. `https://git.example.com/ty/OpenWrt-Admin`.
    - Nebo v terminálu HA: `ha store add <URL>` (dá přesnější chybovou hlášku).
    - Soukromé repo: `https://uzivatel:TOKEN@git.example.com/ty/OpenWrt-Admin` (token jen pro čtení).
-   - **Ne** přes *Nastavení → Marketplace → Přidat z odkazu*: od HA 2026.11 bere jen veřejné repozitáře z GitHubu/HACS a add-ony neinstaluje („Nelze načíst repozitář GitHub“).
+   - **Ne** přes *Nastavení → Marketplace → Přidat z odkazu*: od HA 2026.11 bere jen veřejné repozitáře z GitHubu/HACS a aplikace neinstaluje („Nelze načíst repozitář GitHub“).
 2. **⋮ → Zkontrolovat aktualizace**, nainstalovat **OpenWrt-Admin** (image se staví na zařízení, pár minut).
 3. Nastavit kartu **Konfigurace** (níže), **Spustit**, zapnout **Zobrazit v postranním panelu**.
 
-**Jako lokální add-on:** složku `openwrt_admin` zkopírovat do `/addons/` (Samba share nebo SSH), pak **⋮ → Zkontrolovat aktualizace**, objeví se v **Místní doplňky**. Aktualizace: znovu zkopírovat a **Přestavět**.
+**Jako lokální aplikace:** složku `openwrt_admin` zkopírovat do `/addons/` (Samba share nebo SSH), pak **⋮ → Zkontrolovat aktualizace**, objeví se v **Místní doplňky**. Aktualizace: znovu zkopírovat a **Přestavět**.
 
 ### Konfigurace
 
@@ -395,7 +419,7 @@ ha_names: true               # jména zařízení z Home Assistantu (podle MAC),
 names:                       # vlastní jména podle MAC, nejvyšší priorita
   - mac: aa:bb:cc:dd:ee:ff
     name: Rele-kotel
-notify_new_devices: true     # upozornění v HA, když se v síti objeví zařízení, které add-on ještě neviděl
+notify_new_devices: true     # upozornění v HA, když se v síti objeví zařízení, které aplikace ještě neviděla
 notify_service: ""           # volitelně, např. notify.mobile_app_telefon (i do mobilu)
 notify_random_mac: true      # false = neupozorňovat na náhodné (soukromé) MAC telefonů
 new_device_hours: 24         # h, 0 = vypnuto: jak dlouho má zařízení štítek „nové“
@@ -403,7 +427,7 @@ radio_scan: false            # true = tlačítko Skenovat na stránce Rádia (ok
 update_check_hours: 12       # h, 0 = vypnuto: kontrola balíčků k aktualizaci a nové verze OpenWrt
 backup_interval_days: 7      # dny, 0 = vypnuto: automatická záloha konfigurace každého zařízení
 backup_keep: 10              # kolik záloh se drží pro každé zařízení
-aps:                         # všechna spravovaná zařízení – add-on používá jen tato
+aps:                         # všechna spravovaná zařízení – aplikace používá jen tato
   - name: Router
     host: 192.168.1.1
     type: router             # jeden router: rozhraní, DHCP klienti, jména/IP klientů
@@ -435,7 +459,7 @@ ha_sensors_interval: 30      # s, 10–600
 
 ### SSH klíč
 
-Při prvním startu si add-on vygeneruje klíč `ed25519` (uložený v `/data`, je součástí záloh HA). Veřejnou část najdeš v add-onu na stránce **Nastavení**. Přidej ji na každý AP i na router:
+Při prvním startu si aplikace vygeneruje klíč `ed25519` (uložený v `/data`, je součástí záloh HA). Veřejnou část najdeš v aplikaci na stránce **Nastavení**. Přidej ji na každý AP i na router:
 
 ```sh
 echo 'ssh-ed25519 AAAA… ha-openwrt-admin' >> /etc/dropbear/authorized_keys
@@ -444,7 +468,31 @@ chmod 600 /etc/dropbear/authorized_keys
 
 `/etc/dropbear/authorized_keys` přežije běžný `sysupgrade`. Po `sysupgrade -n` ho přidej znovu, nebo ho dej do first-boot skriptu (uci-defaults).
 
-> Klíč se přihlašuje jako `root` a add-on umí AP restartovat a měnit jeho konfiguraci. Kdo má přístup do `/data` add-onu (zálohy HA), má root na AP. **Zálohy HA šifruj.**
+> Klíč dává na zařízeních práva root a aplikace umí AP restartovat a měnit jeho konfiguraci. Kdo má přístup do `/data` aplikace (zálohy HA), má root na AP. **Zálohy HA šifruj.**
+
+#### Doporučeno: vlastní uživatel místo `root`
+
+Aby bylo v logu zařízení vidět, co dělala aplikace a co ty, ať se aplikace přihlašuje jako vlastní uživatel, např. `owadmin`, s právy root (UID 0). Nic se neinstaluje; na každém AP a routeru:
+
+```sh
+grep -q '^owadmin:' /etc/passwd || echo 'owadmin:x:0:0:OpenWrt-Admin:/root:/bin/ash' >> /etc/passwd
+grep -q '^owadmin:' /etc/shadow || echo 'owadmin:*:0:0:99999:7:::' >> /etc/shadow
+```
+
+Pak v konfiguraci aplikace nastav `ssh_user: owadmin` (nebo `user: owadmin` jen u jednoho zařízení v `aps`). Stránka Nastavení ukáže příkazy i s tvým jménem uživatele.
+
+- Uživatel nemá heslo (`*`), přihlásit se jde jen klíčem.
+- Dropbear v OpenWrt bere klíče **všech uživatelů s UID 0** ze souboru `/etc/dropbear/authorized_keys`, klíč aplikace tedy zůstává tam (`~/.ssh` by se ignoroval). Stejný klíč by proto pořád fungoval i pro `root` – přínos je jasná stopa v logu, ne technické omezení. Uživatel bez práv root by potřeboval na každém zařízení nainstalovaný `sudo` a každý příkaz přes něj, čemuž se aplikace záměrně vyhýbá.
+- `/etc/passwd` a `/etc/shadow` přežijí běžný `sysupgrade`; po `sysupgrade -n` řádky přidej znovu (first-boot skript).
+
+#### Kdo co dělal (syslog zařízení)
+
+Každou akci spuštěnou z aplikace (restart, změna SSID, nové SSID, nastavení rádií, `apk`, záloha, sken, odpojení/blokace klienta) aplikace zapíše i do syslogu zařízení, s tagem `openwrt-admin` a jménem uživatele Home Assistantu, který ji spustil; hesla jsou nahrazená `********`. Běžné čtení dat (každých pár sekund) se nezapisuje. Na zařízení:
+
+```sh
+logread -e openwrt-admin     # co se dělalo a kterým uživatelem HA
+logread -e dropbear          # přihlášení (s vlastním uživatelem uvidíš „owadmin“ místo „root“)
+```
 
 ### Co umí
 
@@ -504,7 +552,7 @@ Stránka **Rádia** ukazuje všechna rádia všech AP v jedné tabulce a kontrol
 - **Mapa kanálů** pro každé pásmo: které kanály každé AP zabírá i se šířkou; kanály 1/6/11 a DFS kanály jsou zvýrazněné.
 - Stránka AP ukazuje v tabulce rádií skutečný kanál, šířku, výkon a vytížení kanálu.
 - S `ha_sensors` má každé rádio i senzor `sensor.openwrt_admin_<ap>_<rádio>_channel_utilization` (%).
-- **Sken okolí** (volba `radio_scan`, výchozí vypnuto, jen plný přístup): tlačítko **Skenovat** u každého rádia nebo pro všechna. Spustí `iwinfo <if> scan`; rádio na pár sekund přeskakuje po kanálech, připojení klienti můžou zaznamenat krátký výpadek. Výsledky zůstávají v paměti do restartu add-onu:
+- **Sken okolí** (volba `radio_scan`, výchozí vypnuto, jen plný přístup): tlačítko **Skenovat** u každého rádia nebo pro všechna. Spustí `iwinfo <if> scan`; rádio na pár sekund přeskakuje po kanálech, připojení klienti můžou zaznamenat krátký výpadek. Výsledky zůstávají v paměti do restartu aplikace:
   - seznam okolních sítí pro každé rádio (SSID, BSSID, kanál, šířka i se sekundárním kanálem, signál, šifrování); vlastní AP se poznají podle BSSID (z `iwinfo`) nebo SSID a jsou označené,
   - sloupce obsazenosti kanálů pod mapou kanálů (počet cizích sítí na kanálu, výška podle síly signálu),
   - upozornění: silné cizí sítě (≥ −70 dBm) na tvém kanálu a návrh méně obsazeného kanálu (2,4 GHz: 1/6/11; 5 GHz: bloky v 36–48 pro tvou šířku – DFS a 149–165, které EU povoluje jen s nízkým výkonem, se nenavrhují).
@@ -519,7 +567,7 @@ Stránka **Statistiky** (volba `stats`, ve výchozím stavu zapnutá) ukazuje, c
 |---|---|
 | stahování/odesílání WAN, rozhraní (WAN, LAN, každá VLAN, tunely): RX/TX, pakety/s, špička, graf za poslední hodinu | router `/proc/net/dev` |
 | teplota CPU a zátěž routeru | `/sys/class/thermal/thermal_zone*/temp`, `/proc/loadavg` |
-| ping: cíle v internetu (`ping_targets`), brána poskytovatele, AP a switche – poslední/průměrná odezva, ztráta, pruh historie | `ping -c 1 -W 1` na routeru; router samotný = odezva SSH z add-onu |
+| ping: cíle v internetu (`ping_targets`), brána poskytovatele, AP a switche – poslední/průměrná odezva, ztráta, pruh historie | `ping -c 1 -W 1` na routeru; router samotný = odezva SSH z aplikace |
 | kdo nejvíc vytěžuje internet (top `top_clients`) | **nlbwmon** (`nlbw -c json -g mac,ip`), když na routeru běží, jinak **conntrack** (`/proc/net/nf_conntrack`) |
 | aktuální provoz Wi-Fi klientů | rozdíl `bytes` z hostapd mezi dvěma načteními AP |
 | nejvytíženější porty switche – i provoz mezi zařízeními uvnitř sítě (např. notebook ↔ server), který neprochází routerem | SNMP IF-MIB `ifHCInOctets`/`ifHCOutOctets` (záložně 32bitové `ifInOctets`/`ifOutOctets`) |
@@ -529,13 +577,13 @@ Stránka **Statistiky** (volba `stats`, ve výchozím stavu zapnutá) ukazuje, c
   - **nlbwmon** obnovuje data po svém `refresh_interval` (výchozí 30 s), rychlost je proto průměr za ~90 s. Navíc dává součet za aktuální účetní období.
   - **conntrack** potřebuje `net.netfilter.nf_conntrack_acct=1` (výchozí v OpenWrt; ověření `cat /proc/sys/net/netfilter/nf_conntrack_acct`). Počítá se jen IPv4 provoz mezi LAN/VLAN a internetem, včetně přesměrovaných portů. Se zapnutým **flow offloadingem** jdou pakety mimo conntrack a část provozu chybí.
 - Cíle pingu musí být IP adresa nebo jméno; nic jiného se nepinguje (žádné skenování).
-- Historie (1 hodina) je jen v paměti a po restartu add-onu zmizí. Na dlouhodobou historii zapni `ha_sensors`.
+- Historie (1 hodina) je jen v paměti a po restartu aplikace zmizí. Na dlouhodobou historii zapni `ha_sensors`.
 - **Mapa:** čáry k AP a switchům ukazují aktuální provoz na jejich přívodu (`↓` k zařízení / `↑` od něj) z čítačů portů switche, čára z internetu provoz WAN, kabelová zařízení na portech switche provoz svého portu. Nad polovinou rychlosti portu červeně a silně.
 - **Stránka switche** má v tabulce portů sloupec *Provoz*, **stránka routeru** ukazuje u každého rozhraní RX/TX teď, tabulky **Klienti** mají sloupec *Teď ↓/↑* a přehled dlaždice *Internet* a *WAN*.
 
 #### Senzory v Home Assistantu
 
-S `ha_sensors: true` add-on každých `ha_sensors_interval` sekund zapisuje statistiky do Home Assistantu přes jeho REST API (`homeassistant_api`, MQTT není potřeba):
+S `ha_sensors: true` aplikace každých `ha_sensors_interval` sekund zapisuje statistiky do Home Assistantu přes jeho REST API (`homeassistant_api`, MQTT není potřeba):
 
 | Entita | Stav |
 |---|---|
@@ -552,7 +600,7 @@ Entity vzniknou při prvním zápisu. Nemají `unique_id`, takže je nejde přej
 
 ### Nová zařízení v síti
 
-Když se v síti objeví zařízení (MAC adresa), které add-on ještě nikdy neviděl – na Wi-Fi, na portu AP nebo v ARP tabulce routeru – pošle upozornění do Home Assistantu (zvoneček, `persistent_notification`). Je v něm jméno (pokud je známé), MAC, IP, síť/VLAN a kde zařízení je (AP + SSID, port AP, router). S `notify_service` (např. `notify.mobile_app_telefon`) jde upozornění i do té služby.
+Když se v síti objeví zařízení (MAC adresa), které aplikace ještě nikdy neviděla – na Wi-Fi, na portu AP nebo v ARP tabulce routeru – pošle upozornění do Home Assistantu (zvoneček, `persistent_notification`). Je v něm jméno (pokud je známé), MAC, IP, síť/VLAN a kde zařízení je (AP + SSID, port AP, router). S `notify_service` (např. `notify.mobile_app_telefon`) jde upozornění i do té služby.
 
 - Při **prvním spuštění** se všechna zařízení, která jsou zrovna v síti, berou jako známá – žádná záplava upozornění. Seznam je v `/data/known_devices.json` (smazáním souboru se začne znovu).
 - Zařízení poprvé viděná za posledních `new_device_hours` hodin (výchozí 24, 0 = vypnuto) mají v tabulkách klientů a na stránce routeru štítek **nové**.
@@ -561,16 +609,16 @@ Když se v síti objeví zařízení (MAC adresa), které add-on ještě nikdy n
 
 ### Aktualizace
 
-Každých `update_check_hours` (výchozí 12) spustí add-on na každém zařízení postupně `apk update` + `apk list --upgradable` (starší zařízení `opkg update` + `opkg list-upgradable`). Přehled ukazuje počet balíčků k aktualizaci (dlaždice a na každé kartě), stránka zařízení je vypíše s nainstalovanou a novou verzí. Tlačítko **Zkontrolovat aktualizace** seznam hned obnoví; po **Upgrade balíčků** se zkontroluje znovu.
+Každých `update_check_hours` (výchozí 12) spustí aplikace na každém zařízení postupně `apk update` + `apk list --upgradable` (starší zařízení `opkg update` + `opkg list-upgradable`). Přehled ukazuje počet balíčků k aktualizaci (dlaždice a na každé kartě), stránka zařízení je vypíše s nainstalovanou a novou verzí. Tlačítko **Zkontrolovat aktualizace** seznam hned obnoví; po **Upgrade balíčků** se zkontroluje znovu.
 
-Nová **verze OpenWrt** se zjišťuje z `https://downloads.openwrt.org/.versions.json` (HA potřebuje internet): přednost má novější verze stejné řady (např. 25.12.2 → 25.12.3), jinak novější stabilní řada. Firmware add-on neaktualizuje – na to firmware-selector a `sysupgrade`.
+Nová **verze OpenWrt** se zjišťuje z `https://downloads.openwrt.org/.versions.json` (HA potřebuje internet): přednost má novější verze stejné řady (např. 25.12.2 → 25.12.3), jinak novější stabilní řada. Firmware aplikace neaktualizuje – na to firmware-selector a `sysupgrade`.
 
 ### Zálohy konfigurace
 
-Tlačítko **Zálohovat teď** na stránce AP nebo routeru (plný přístup) a jednou za `backup_interval_days` (výchozí 7) automatická záloha spustí na zařízení `sysupgrade -b`. Archiv se přenese přes SSH a uloží do `/data/backups/<zařízení>/<zařízení>-RRRR-mm-dd_HHMMSS.tar.gz` add-onu; drží se posledních `backup_keep` (výchozí 10). `/data` je součástí záloh Home Assistantu, takže konfigurace AP se zálohují spolu s HA.
+Tlačítko **Zálohovat teď** na stránce AP nebo routeru (plný přístup) a jednou za `backup_interval_days` (výchozí 7) automatická záloha spustí na zařízení `sysupgrade -b`. Archiv se přenese přes SSH a uloží do `/data/backups/<zařízení>/<zařízení>-RRRR-mm-dd_HHMMSS.tar.gz` aplikace; drží se posledních `backup_keep` (výchozí 10). `/data` je součástí záloh Home Assistantu, takže konfigurace AP se zálohují spolu s HA.
 
 - Archiv obsahuje **hesla Wi-Fi a klíče** – stáhnout ho může jen uživatel s plným přístupem (odkaz v seznamu záloh).
-- **Obnova:** soubor nahrát na zařízení (např. `scp soubor.tar.gz root@ap:/tmp/`) a spustit `sysupgrade -r /tmp/soubor.tar.gz && reboot`, nebo LuCI → Systém → Zálohování / Flash firmware → Obnovit. Add-on sám neobnovuje.
+- **Obnova:** soubor nahrát na zařízení (např. `scp soubor.tar.gz root@ap:/tmp/`) a spustit `sysupgrade -r /tmp/soubor.tar.gz && reboot`, nebo LuCI → Systém → Zálohování / Flash firmware → Obnovit. Aplikace sama neobnovuje.
 - Které soubory se zálohují, určuje na zařízení `/etc/sysupgrade.conf` (stejně jako pro `sysupgrade`).
 
 ### Odpojení a blokace Wi-Fi klientů
@@ -579,13 +627,13 @@ V tabulkách klientů (stránka AP, **Klienti**) mají uživatelé s plným př�
 - **jen odpojit** – klient se odpojí (deautentizace) a obvykle se hned připojí znovu; hodí se, aby přešel na bližší AP nebo aby se zaseklé zařízení znovu připojilo,
 - **+ blokovat 10 min / 1 h / 24 h** – odpojí a po tu dobu nepustí zpět na **všech AP, která vysílají stejné SSID** (jinak by se připojil k jinému AP).
 
-Blokaci drží `hostapd` v paměti: restart Wi-Fi (`wifi reload`, změna SSID) nebo restart AP ji zruší. Trvalé blokování je MAC filtr (`macfilter`/`maclist`) v nastavení SSID – to add-on nedělá.
+Blokaci drží `hostapd` v paměti: restart Wi-Fi (`wifi reload`, změna SSID) nebo restart AP ji zruší. Trvalé blokování je MAC filtr (`macfilter`/`maclist`) v nastavení SSID – to aplikace nedělá.
 
-Zablokovaní klienti jsou vypsaní nad tabulkou klientů (stránka Klienti, stránka AP) s AP a zbývajícím časem; **Zrušit blokaci** ji zruší na všech AP s tím SSID (`del_client` s `ban_time: 0`). Seznam je z `ubus call hostapd.<if> list_bans`; u staršího hostapd bez této metody se ukazují jen blokace zadané z add-onu.
+Zablokovaní klienti jsou vypsaní nad tabulkou klientů (stránka Klienti, stránka AP) s AP a zbývajícím časem; **Zrušit blokaci** ji zruší na všech AP s tím SSID (`del_client` s `ban_time: 0`). Seznam je z `ubus call hostapd.<if> list_bans`; u staršího hostapd bez této metody se ukazují jen blokace zadané z aplikace.
 
 ### Uživatelé a oprávnění
 
-Přihlášení řeší Home Assistant (Ingress), add-on vlastní hesla nemá. Podle uživatele HA, který panel otevřel, přidělí roli:
+Přihlášení řeší Home Assistant (Ingress), aplikace vlastní hesla nemá. Podle uživatele HA, který panel otevřel, přidělí roli:
 
 | Role | Kdo | Co smí |
 |---|---|---|
@@ -601,10 +649,10 @@ Přihlášení řeší Home Assistant (Ingress), add-on vlastní hesla nemá. Po
 
 ### Jména zařízení
 
-Zařízení s pevnou IP (typicky ESPHome) o DHCP nežádají, takže router jejich jméno nezná. Add-on proto skládá jména z více zdrojů v tomto pořadí:
+Zařízení s pevnou IP (typicky ESPHome) o DHCP nežádají, takže router jejich jméno nezná. Aplikace proto skládá jména z více zdrojů v tomto pořadí:
 
-1. **`names`** v konfiguraci add-onu (ručně, štítek *ručně*),
-2. **Home Assistant** – registr zařízení podle MAC (ESPHome, Shelly…; štítek *HA*). Add-on má `homeassistant_api: true` a každých 10 minut čte `config/device_registry/list` přes websocket Supervisoru; vypnout jde přes `ha_names: false`,
+1. **`names`** v konfiguraci aplikace (ručně, štítek *ručně*),
+2. **Home Assistant** – registr zařízení podle MAC (ESPHome, Shelly…; štítek *HA*). Aplikace má `homeassistant_api: true` a každých 10 minut čte `config/device_registry/list` přes websocket Supervisoru; vypnout jde přes `ha_names: false`,
 3. **DHCP** na routeru,
 4. **statická rezervace DHCP** na routeru (`uci show dhcp`, sekce `host`; štítek *rezervace*).
 
@@ -619,7 +667,7 @@ Router (zařízení s `type: router`) je samostatné zařízení, bez rádií a 
 - **sítí** každého zařízení (LAN / VLAN a název rozhraní, podle podsítě, do které patří jeho IP) a počtem aktivních zařízení u každého rozhraní,
 - stejnými akcemi jako AP: restart, kontrola aktualizací, upgrade balíčků. Restart routeru na chvíli odpojí celou síť i internet.
 
-SSH klíč add-onu musí být i na routeru.
+SSH klíč aplikace musí být i na routeru.
 
 Záznamy ARP na WAN a na tunelových/VPN rozhraních (WireGuard `wg*`, PPPoE, OpenVPN…) se ignorují – brána poskytovatele ani VPN protějšky nejsou klienti.
 
@@ -631,8 +679,8 @@ Stránka **Mapa** kreslí síť jako strom: Internet → router → access point
 - **SSID bez klientů se skrývají**, přepínač **SSID bez klientů** je zobrazí.
 - **Zoom a posun:** kolečko myši přibližuje kolem kurzoru, tažením se mapa posouvá, tlačítka **+ / − / Vše**. Pozice zůstane i po automatickém obnovení stránky.
 - **AP jako switch:** zařízení zapojená kabelem do portů AP se ukážou pod tím AP ve skupině **LAN** s číslem portu a AP zapojený přes jiný AP se nakreslí pod ním (lomená čára). Zdroj: tabulka MAC adres switche na každém AP (`swconfig dev switch0 get arl_table`); uplink je port, na kterém je MAC routeru (z ARP tabulky AP), CPU port je ten tagovaný ve všech `switch_vlan`. Když stejnou MAC vidí víc AP zapojených za sebou, patří poslednímu. Kabelová zařízení, která nejsou na portu žádného AP, zůstávají u routeru **rozdělená podle sítě**: **LAN / ostatní** pro netagovanou LAN a pro každou VLAN vlastní větev (např. **VLAN 100 · dmz**) v barvě té sítě. Síť je rozhraní routeru, do jehož podsítě patří IP zařízení. Stránka routeru u každého DHCP klienta ukazuje, jestli je na Wi-Fi, na portu AP, nebo jinde.
-- **Poslední známé místo:** switch MAC po pár minutách bez provozu zapomene (např. vypnutá televize). Add-on si pamatuje, kde bylo každé kabelové zařízení naposledy vidět (AP + port, v `/data/wired_seen.json`), a nechá ho tam šedě s „naposledy viděno …“, dokud má na routeru DHCP záznam (bez záznamu 24 hodin). Záznamy starší než 30 dní se mažou.
-- **Tichá zařízení:** zařízení, které skoro nic nevysílá (např. IP telefon), vypadne z tabulky switche dřív, než ho add-on uvidí. Router proto jednou za 4 minuty pingne kabelová zařízení s neznámým místem (každé jedním `ping -c1 -W1`, nejvýš 64), switch AP se je znovu naučí a při dalším načtení se umístí.
+- **Poslední známé místo:** switch MAC po pár minutách bez provozu zapomene (např. vypnutá televize). Aplikace si pamatuje, kde bylo každé kabelové zařízení naposledy vidět (AP + port, v `/data/wired_seen.json`), a nechá ho tam šedě s „naposledy viděno …“, dokud má na routeru DHCP záznam (bez záznamu 24 hodin). Záznamy starší než 30 dní se mažou.
+- **Tichá zařízení:** zařízení, které skoro nic nevysílá (např. IP telefon), vypadne z tabulky switche dřív, než ho aplikace uvidí. Router proto jednou za 4 minuty pingne kabelová zařízení s neznámým místem (každé jedním `ping -c1 -W1`, nejvýš 64), switch AP se je znovu naučí a při dalším načtení se umístí.
 - **Diagnostika switche** (sbalená sekce dole na stránce AP): každý port switche s MAC adresami a rolí (uplink, CPU, lokální), jestli AP vidí router ve své ARP tabulce, a paměť „naposledy viděno“ pro ten AP. Hodí se, když je zařízení na mapě jinde, než má být.
 - Funguje jen tam, kde switch umí vypsat tabulku MAC adres (swconfig čipy jako Atheros/Qualcomm AR8xxx, MediaTek). Hloupé switche mezi zařízeními vidět nejsou: zařízení za nimi se ukážou u nejbližšího OpenWrt AP.
 - Čáry ke klientům na Wi-Fi jsou tečkované, kabelové plné.
@@ -650,7 +698,7 @@ První dlaždice ukazuje **zařízení online**: router a všechny nastavené AP
 
 ### Obnovování stránky
 
-Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto). Každý prohlížeč si může nastavit vlastní hodnotu na stránce **Nastavení** add-onu (uloží se do cookie). Stránka SSID se sama neobnovuje, aby se neztratil rozepsaný formulář.
+Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto). Každý prohlížeč si může nastavit vlastní hodnotu na stránce **Nastavení** aplikace (uloží se do cookie). Stránka SSID se sama neobnovuje, aby se neztratil rozepsaný formulář.
 
 ### Co se čte z AP
 
@@ -683,7 +731,7 @@ Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každ
 
 ### Jazyky
 
-- **Webové rozhraní:** angličtina a čeština. Jazyk se vybírá v tomto pořadí: volba na stránce **Nastavení** add-onu (pro daný prohlížeč) → `language` v konfiguraci (pokud není `auto`) → jazyk uživatele Home Assistantu → jazyk prohlížeče → angličtina.
+- **Webové rozhraní:** angličtina a čeština. Jazyk se vybírá v tomto pořadí: volba na stránce **Nastavení** aplikace (pro daný prohlížeč) → `language` v konfiguraci (pokud není `auto`) → jazyk uživatele Home Assistantu → jazyk prohlížeče → angličtina.
 - **Konfigurace** v Home Assistantu (názvy a popisy voleb): `translations/en.yaml`, `cs.yaml`, HA vybere jazyk podle profilu uživatele.
 - **Dokumentace:** tento soubor je dvojjazyčný (HA zobrazuje jeden `DOCS.md` pro všechny jazyky).
 
@@ -703,11 +751,11 @@ Chybějící klíče se vezmou z angličtiny.
 | Žádná SSID | Wi-Fi na AP vypnutá (`ubus list 'hostapd.*'` je prázdné). |
 | Switch: `SnmpError: SNMP timeout` | Špatná IP nebo community, SNMP není zapnuté, nebo adresa Home Assistantu není povolená (Management Station IP). |
 | Nepřišlo upozornění na nové zařízení | `notify_new_devices` vypnuté, zařízení už bylo známé (první spuštění = výchozí stav), nebo selhalo volání HA (chybu ukáže stránka Nastavení). |
-| Záloha selže | Na zařízení chybí `sysupgrade -b` nebo je plné `/tmp`; chyba se ukáže po **Zálohovat teď** a v logu add-onu. |
+| Záloha selže | Na zařízení chybí `sysupgrade -b` nebo je plné `/tmp`; chyba se ukáže po **Zálohovat teď** a v logu aplikace. |
 | Kabelové zařízení u routeru místo u svého AP | Stránka AP → **Diagnostika switche**: je poznaný uplink, je MAC na lokálním portu, je v „naposledy viděno“? Tichá zařízení se najdou do pár minut (ping z routeru). |
 | „Přístup odepřen“ | Uživatel HA není v `full_access` ani `read_access`. |
 | Všichni mají jen čtení | Ingress neposílá jméno uživatele (Nastavení ukáže „Přihlášen jako –“), nebo jméno neodpovídá uživatelskému jménu HA. |
-| Add-on nenastartuje, `python-multipart` | Stará verze 0.2.0, aktualizovat. |
+| Aplikace nenastartuje, `python-multipart` | Stará verze 0.2.0, aktualizovat. |
 | Repozitář nejde přidat | Špatné místo (Marketplace), HA nevidí Git server (zkusit IP), špatný token. Detail: Nastavení → Systém → Protokoly → **Supervisor**. |
 
-Logy: karta **Protokol** u add-onu.
+Logy: karta **Protokol** u aplikace.

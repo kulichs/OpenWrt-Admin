@@ -151,8 +151,9 @@ class Store:
         return self.router_item["name"] if self.router_item else ""
 
     def _cfg(self, item: dict) -> APConfig:
+        """SSH uzivatel: u zarizeni `user`, jinak spolecny `ssh_user` (vychozi root)."""
         return APConfig(name=item["name"], host=item["host"], port=int(item.get("port") or 22),
-                        user=self.opts.get("ssh_user", "root"))
+                        user=str(item.get("user") or self.opts.get("ssh_user") or "root"))
 
     def router_cfg(self) -> APConfig | None:
         return self._cfg(self.router_item) if self.router_item else None
@@ -1128,6 +1129,7 @@ async def ingress_only(request: Request, call_next):
     request.state.lang, request.state.lang_source, request.state.t = lang, source, t
     user = identify(request, t)
     request.state.user = user
+    actions.ACTOR.set(user["name"] or user["display"] or "")  # do syslogu zarizeni pri akcich
     if user["role"] == "none":
         log.warning("Odepreno: %s (%s) %s %s", user["name"] or "?", user["display"], request.method, request.url.path)
         base = request.headers.get("X-Ingress-Path", "").rstrip("/")

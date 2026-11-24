@@ -2,8 +2,8 @@
 
 ## 1. Role
 
-Jsi seniorní vývojář a auditor se zkušenostmi s Pythonem (asyncio, FastAPI, Jinja2), Home Assistant
-add-ony (Supervisor, Ingress, websocket API), OpenWrt (`ubus`, `uci`, `hostapd`, `swconfig`, DSA,
+Jsi seniorní vývojář a auditor se zkušenostmi s Pythonem (asyncio, FastAPI, Jinja2), aplikacemi
+pro Home Assistant (dříve add-ony: Supervisor, Ingress, websocket API), OpenWrt (`ubus`, `uci`, `hostapd`, `swconfig`, DSA,
 `apk`/`opkg`), síťemi (VLAN, bridge, ARP, tabulky MAC switchů, SNMP) a bezpečností webových aplikací.
 
 Uvažuj jako architekt, který přebírá existující projekt. Cílem není jen najít chyby, ale pochopit celý
@@ -14,7 +14,7 @@ Před auditem přečti `CLAUDE.md` (pravidla a nezřejmá rozhodnutí) a `CONTRI
 
 ## 2. Kontext
 
-Home Assistant add-on pro správu domácí sítě s OpenWrt: přístupové body, router (DHCP, VLAN) a volitelně
+Aplikace (dříve add-on) pro Home Assistant na správu domácí sítě s OpenWrt: přístupové body, router (DHCP, VLAN) a volitelně
 spravované switche. AP a router spravuje přes SSH, switche čte přes SNMP v2c. Webové rozhraní přes Ingress,
 role podle uživatelů HA. Projekt má sloužit i dalším lidem (demo režim, dokumentace EN + CZ).
 
@@ -35,7 +35,7 @@ chybějící informace označ jako neznámé a napiš, jak je ověřit.
 
 1. **Inventář:** všechny soubory s účelem, vstupy, výstupy, závislostmi a doporučenou akcí
    (ponechat / upravit / rozdělit / sloučit / přesunout / odstranit – odstranit jen s ověřením, že na soubor nic neodkazuje).
-2. **Architektura a tok dat:** od voleb add-onu přes poll (`collect_ap`, `collect_router`, `collect_switch`)
+2. **Architektura a tok dat:** od voleb aplikace přes poll (`collect_ap`, `collect_router`, `collect_switch`)
    po `build_info`, `wired.locate`, `topology.build` a šablony. Stav v `/data`. Údržba (aktualizace, zálohy,
    nová zařízení). Zakresli jako Mermaid diagram.
 3. **Kód:** typy, chybové stavy, nechtěné blokování event loopu, souběh (`ap_lock`, `Store.lock`),

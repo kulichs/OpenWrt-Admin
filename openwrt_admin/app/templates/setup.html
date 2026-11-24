@@ -9,6 +9,17 @@
   <pre>echo '{{ store.pubkey }}' &gt;&gt; /etc/dropbear/authorized_keys
 chmod 600 /etc/dropbear/authorized_keys</pre>
   <p class="muted small">{{ t("setup.key_note") }}</p>
+  {% set su = store.opts.get("ssh_user") or "root" %}{% set un = su if su != "root" else "owadmin" %}
+  <h3>{{ t("setup.user_title") }}</h3>
+  <p>{{ t("setup.user_text", user=un) }}</p>
+  <pre>grep -q '^{{ un }}:' /etc/passwd || echo '{{ un }}:x:0:0:OpenWrt-Admin:/root:/bin/ash' &gt;&gt; /etc/passwd
+grep -q '^{{ un }}:' /etc/shadow || echo '{{ un }}:*:0:0:99999:7:::' &gt;&gt; /etc/shadow</pre>
+  <p>{{ t("setup.user_config", user=un) }}{% if su != "root" %} <span class="sig good">{{ t("setup.user_active", user=su) }}</span>{% endif %}</p>
+  <p class="muted small">{{ t("setup.user_note") }}</p>
+  <h3>{{ t("setup.audit_title") }}</h3>
+  <p>{{ t("setup.audit_text") }}</p>
+  <pre>logread -e openwrt-admin
+logread -e dropbear | grep {{ un }}</pre>
 </div>
 <div class="panel">
   <h2>2. {{ t("setup.devices_title") }}</h2>
