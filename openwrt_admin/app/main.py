@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, zones as zonemod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
@@ -153,6 +153,7 @@ class Store:
         self.fw_demo: dict[str, bool] = {}             # demo: zapnuto/vypnuto pravidel a presmerovani
         self.fw_demo_blocks: dict[str, dict] = {}       # demo: blokace (sekce -> pravidlo + radky cronu)
         self.fw_demo_fwd: dict[str, dict | None] = {}   # demo: presmerovani portu (sekce -> data, None = smazano)
+        self.fw_demo_zops: list[dict] = []              # demo: zmeny mapy zon (politiky, pruchody)
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -645,7 +646,7 @@ class Store:
                           f"firewall.{sid}.dest='wan'\nfirewall.{sid}.target='REJECT'\nfirewall.{sid}.enabled='{1 if b['enabled'] else 0}'\n"
                           f"firewall.{sid}.src_mac=" + " ".join(f"'{x.upper()}'" for x in b["macs"]) + "\n")
                 cron += b["lines"]
-            text = fwdmod.demo_lines(self.fw_demo_fwd, fwmod.DEMO)
+            text = zonemod.demo_text(fwdmod.demo_lines(self.fw_demo_fwd, fwmod.DEMO), self.fw_demo_zops)
             text = text.replace("@@dispatch", extra + "@@dispatch").replace(
                 "@@end", "@@cron\n" + "\n".join(cron) + f"\n@@now\n{now}\n@@end")
             m = fwmod.build(text)
@@ -2031,6 +2032,8 @@ async def firewall_preview(request: Request, op: str = Form(""), id: str = Form(
         return await _block_preview(request, t, m)
     if op in ("fwd_add", "fwd_edit", "fwd_del"):
         return await _fwd_preview(request, t, m, op)
+    if op == "matrix":
+        return await _matrix_preview(request, t, m)
     if op != "toggle":
         return result(request, title, actions.Result(False, t("msg.bad_request")))
     it = next((x for x in m["rules"] + m["redirects"] if x["id"] == id), None)
@@ -2053,6 +2056,28 @@ async def firewall_preview(request: Request, op: str = Form(""), id: str = Form(
     shown = [*cmds, "uci commit firewall", fwmod.CHECK, *fwmod.RELOAD, t("safe.shown")]
     return render(request, "_svc_preview.html", ap=r.name, cmds=shown, changes=changes, token=token,
                   note=t("fw.note"), warns=warns, crits=crits, danger=bool(crits))
+
+
+async def _matrix_preview(request: Request, t, m: dict):
+    """Mapa zon: vic zaskrtnutych zmen najednou -> jeden nahled a jedna pojistka."""
+    title = t("preview.title")
+    form = await request.form()
+    r = store.router
+    changes = zonemod.parse_changes(form.getlist("ch"), m)
+    if changes is None:
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    if not changes:
+        return result(request, title, actions.Result(False, t("msg.no_change")))
+    try:
+        cmds = zonemod.cmds_for(changes, m)
+    except ValueError:
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    crit_k, warn_k, desc_k = zonemod.risks(changes, m)
+    lines = [t(k, **a) for k, a in desc_k]
+    token = store.add_svc_pending(r.name, cmds, {"op": "matrix", "uci": "firewall", "changes": lines})
+    return render(request, "_svc_preview.html", ap=r.name, cmds=[*cmds, "uci commit firewall", fwmod.CHECK,
+                  *fwmod.RELOAD, t("safe.shown")], changes=lines, token=token, note=t("zm.note"),
+                  warns=[t(k, **a) for k, a in warn_k], crits=[t(k, **a) for k, a in crit_k], danger=bool(crit_k))
 
 
 async def _fwd_preview(request: Request, t, m: dict, op: str):
@@ -2332,6 +2357,8 @@ async def services_apply(request: Request, token: str = Form(...)):
             store.fw_demo_blocks.pop(info["id"], None)
         elif info.get("op") in ("fwd_add", "fwd_edit"):
             store.fw_demo_fwd[info["id"]] = {**info["data"], "enabled": info["enabled"]}
+        elif info.get("op") == "matrix":
+            store.fw_demo_zops += zonemod.demo_ops(cmds)
         elif info.get("op") == "fwd_del":
             store.fw_demo_fwd[info["id"]] = None
             store.fw_demo.pop(info["id"], None)

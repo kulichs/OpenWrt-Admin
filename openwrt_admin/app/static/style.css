@@ -257,6 +257,11 @@ table.fwmatrix td.ok { color: var(--good); }
 table.fwmatrix td.no { color: var(--muted); }
 table.fwmatrix td.self { background: color-mix(in srgb, var(--line) 35%, transparent); }
 table.fwmatrix th { text-align: left; }
+table.fwmatrix td.edit { cursor: pointer; user-select: none; }
+table.fwmatrix td.edit:hover { outline: 1px solid var(--accent); outline-offset: -3px; }
+table.fwmatrix td.pending { outline: 2px dashed var(--ok); outline-offset: -3px; background: color-mix(in srgb, var(--ok) 18%, transparent); }
+form.matrix-form { margin-top: .6rem; align-items: center; }
+form.matrix-form[hidden] { display: none; }
 tr.row-bad td { background: color-mix(in srgb, var(--bad) 12%, transparent); }
 /* blokace (0.22.0) */
 .block-form { display: block; margin-top: .8rem; }

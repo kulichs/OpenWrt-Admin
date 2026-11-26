@@ -107,18 +107,30 @@
   </details>
 </div>
 
-<div class="panel">
+{% set medit = can_edit and fw.fwver == "fw4" %}
+<div class="panel" id="matrix">
   <h2>{{ t("fw.matrix") }}</h2>
-  <div class="matrix-wrap"><table class="list fwmatrix">
+  <div class="cmd-out"></div>
+  <div class="matrix-wrap"><table class="list fwmatrix{{ ' editable' if medit }}">
     <thead><tr><th>{{ t("fw.from_to") }}</th><th>{{ t("fw.router") }}</th>{% for z in fw.zones %}<th>{{ z.name }}</th>{% endfor %}</tr></thead>
     {% for row in fw.matrix %}
     <tr><th><b>{{ row.zone.name }}</b><br><span class="muted small">{{ row.zone.networks | join(", ") }}{% if row.zone.masq %} · masq{% endif %}</span></th>
       {% for c in row.cells %}
-      <td class="{{ 'ok' if c.ok else 'no' }}{{ ' self' if c.self }}" title="{{ c.policy or '' }}">{{ "✓" if c.ok else "✗" }}{% if c.rules %}<br><span class="small muted">+ {{ c.rules | length }} {{ t("fw.rules_n") }}</span>{% endif %}</td>
+      {% set ch = ('input|' ~ row.zone.name) if c.dest == 'router' else ('zfwd|' ~ row.zone.name) if c.self else ('fwd|' ~ row.zone.name ~ '|' ~ c.dest) %}
+      <td class="{{ 'ok' if c.ok else 'no' }}{{ ' self' if c.self }}{{ ' edit' if medit }}" title="{{ c.policy or '' }}{% if c.rules %} · {{ c.rules | join(', ') }}{% endif %}"
+        {% if medit %}data-ch="{{ ch }}" data-cur="{{ 1 if c.ok else 0 }}" onclick="owCell(this)"{% endif %}><span class="sym">{{ "✓" if c.ok else "✗" }}</span>{% if c.rules %}<br><span class="small muted">+ {{ c.rules | length }} {{ t("fw.rules_n") }}</span>{% endif %}</td>
       {% endfor %}</tr>
     {% endfor %}
   </table></div>
-  <p class="muted small">{{ t("fw.matrix_hint") }}</p>
+  {% if medit %}
+  <form class="filters edit matrix-form" hidden hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out">
+    <input type="hidden" name="op" value="matrix"><span class="chs"></span>
+    <span>{{ t("zm.changed") }} <b class="cnt">0</b></span>
+    <button type="submit" class="danger">{{ t("ssid.preview") }}</button>
+    <button type="button" class="secondary" onclick="owMatrixReset(this)">{{ t("zm.reset") }}</button>
+  </form>
+  {% endif %}
+  <p class="muted small">{{ t("fw.matrix_hint") }}{% if medit %} {{ t("zm.hint") }}{% endif %}</p>
 </div>
 
 <div class="panel" id="redirects">
@@ -177,6 +189,28 @@
 </div>
 {% endif %}
 <script>
+function owCell(td) {
+  var cur = td.dataset.cur === "1", now = !(td.dataset.on ? td.dataset.on === "1" : cur);
+  td.dataset.on = now ? "1" : "0";
+  td.classList.toggle("pending", now !== cur); td.classList.toggle("ok", now); td.classList.toggle("no", !now);
+  td.querySelector(".sym").textContent = now ? "✓" : "✗";
+  owMatrixSync(td.closest(".panel"));
+}
+function owMatrixSync(panel) {
+  var f = panel.querySelector("form.matrix-form"), box = f.querySelector(".chs"), n = 0;
+  box.innerHTML = "";
+  panel.querySelectorAll("td.pending").forEach(function (td) {
+    var i = document.createElement("input"); i.type = "hidden"; i.name = "ch"; i.value = td.dataset.ch + "|" + td.dataset.on;
+    box.appendChild(i); n++;
+  });
+  f.querySelector(".cnt").textContent = n; f.hidden = n === 0;
+  if (!n) { var o = f.nextElementSibling; if (o && o.classList.contains("near")) o.remove(); }
+}
+function owMatrixReset(btn) {
+  var panel = btn.closest(".panel");
+  panel.querySelectorAll("td.pending").forEach(function (td) { owCell(td); });
+  owMatrixSync(panel);
+}
 function owFilter(inp, id) { var q = inp.value.toLowerCase(); document.querySelectorAll('#' + id + ' tr').forEach(function (tr) { if (tr.querySelector('th')) return; tr.style.display = !q || tr.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none'; }); }
 </script>
 {% endif %}

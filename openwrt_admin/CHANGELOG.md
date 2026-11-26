@@ -2,6 +2,17 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.24.0
+- **Zone map editable by clicking** (Firewall tab, full access): a click switches a cell, changed cells are dashed and can be undone, "Preview changes" saves all of them at once with the safety net. Router column = zone input ACCEPT/REJECT, diagonal = forward inside the zone, other cells = `forwarding` sections (new ones named `owa_zf_<id>`, a disabled one is turned on, removing deletes the enabled ones).
+  - Red preview: opening the router, a zone or the zone itself to traffic from the internet; closing input from the zone the app connects from without a rule for its SSH port.
+  - Warnings: a whole zone gets access to another, a zone loses internet access, closing input without DHCP/DNS rules, rule exceptions that still apply, a zone mixing WAN and other networks, a zone without an interface.
+- Verified: change parsing and commands, risks on the demo and a synthetic router with WAN in a shared zone, demo cs + en (select, undo, preview, apply). Not yet on the real network.
+---
+- **Mapa zón jde upravovat klikáním** (záložka Firewall, plný přístup): kliknutí políčko přepne, změněná jsou čárkovaná a jde je vrátit, „Náhled změn“ uloží všechny najednou s pojistkou. Sloupec router = input zóny ACCEPT/REJECT, úhlopříčka = forward uvnitř zóny, ostatní políčka = sekce `forwarding` (nové pojmenované `owa_zf_<id>`, vypnutá se zapne, odebrání smaže zapnuté).
+  - Červený náhled: otevření routeru, zóny nebo zóny samotné provozu z internetu; zavření vstupu ze zóny, odkud se připojuje aplikace, bez pravidla pro její port SSH.
+  - Upozornění: celá zóna dostane přístup do jiné, zóna přijde o internet, zavření vstupu bez pravidel pro DHCP/DNS, výjimky z pravidel, které platí dál, zóna s WAN i dalšími sítěmi, zóna bez rozhraní.
+- Ověřeno: zpracování změn a příkazy, rizika na demu a na syntetickém routeru s WAN ve sdílené zóně, demo cs + en (označit, vrátit, náhled, použít). Na skutečné síti zatím ne.
+
 ## 0.23.0
 - **Port forwards** on the Firewall tab: new, edit, delete (also forwards created in LuCI). Protocol, port or range from the internet, destination IP (suggestions from DHCP), inside port, optional "Only from" (IP or CIDR). The destination zone is found from the IP; new forwards are stored in a named section `firewall.owa_fwd_<id>`.
   - Errors: invalid port/IP, IP outside the router's networks or on WAN, ranges of different size, the port already forwarded elsewhere.

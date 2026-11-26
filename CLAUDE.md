@@ -180,6 +180,7 @@ openwrt_admin/
     safeapply.py             # pojistka: zaloha + odpocet na zarizeni, zmena na pozadi, potvrzeni novym spojenim
     blocks.py                # blokovani zarizeni: pravidlo owa_blk_<id> + cron na routeru (rozvrh, docasne)
     portfwd.py               # presmerovani portu (owa_fwd_<id>, kontroly) + pojistka proti odriznuti spravy
+    zones.py                 # mapa zon klikanim: input/forward zony, forwarding (owa_zf_<id>), rizika
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/
@@ -205,3 +206,6 @@ openwrt_admin/
   při úpravě nejdřív smazat. Ochrana proti odříznutí: `@@me` = `$SSH_CLIENT` při čtení (IP klienta + port SSH
   routeru) → zóna; `lockout_rule/redirect/block` vrací rizika, náhled je pak `danger` s `crits`. Je to varování,
   ne zákaz – skutečná ochrana je pojistka (90 s). Bez `$SSH_CLIENT` se nehlásí nic.
+- **Mapa zón (`app/zones.py`):** změny z matice jako `input|zona|1`, `zfwd|zona|0`, `fwd|odkud|kam|1`, všechny v jednom
+  náhledu a jedné pojistce. JS (`owCell`) v `_firewall_body.html` jen značí políčka a skládá skryté inputy `ch`.
+  WAN zóna = `wan_zones` + `wan_zone` (i zóna, kde je WAN s dalšími sítěmi – pak `zm.w_mixed`).
