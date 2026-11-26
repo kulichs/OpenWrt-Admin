@@ -177,6 +177,7 @@ openwrt_admin/
     dns.py                   # DNS routeru: mistni jmena, CNAME, validace, nslookup (test prekladu), demo
     firewall.py              # firewall routeru (fw4): zony, pravidla, presmerovani, kontroly, co je otevrene, demo
     safeapply.py             # pojistka: zaloha + odpocet na zarizeni, zmena na pozadi, potvrzeni novym spojenim
+    blocks.py                # blokovani zarizeni: pravidlo owa_blk_<id> + cron na routeru (rozvrh, docasne)
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/
@@ -193,3 +194,7 @@ openwrt_admin/
   swconfig/DSA, staré iwinfo, adblock query/search), cesty z konfigurace (leasefile). Při testu vždy i syntetický
   případ „jiný router“ (jiná jména, chybějící nástroj, starší verze). Skutečná data autora (jména sítí, IP, MAC,
   PID, nálezy o zabezpečení jeho routeru) nikdy do repa – ani do CHANGELOGu, dema nebo testů.
+- **Blokování (`app/blocks.py`):** čas řeší cron na routeru (místní čas), ne časové volby fw4 (nejisté UTC,
+  přes půlnoc neřeší). Pravidla v pojmenovaných sekcích `owa_blk_<hex>` – anonymní `cfg…` se přečíslují a cron by
+  trefil jiné pravidlo. Řádky cronu končí `# owadmin <sekce> on|off|until`; mazání přes `sed '/# owadmin <sekce> /d'`.
+  Pojistka (`files=`) zálohuje i crontab. Testovat: `in_window` přes půlnoc, `until`-řádek nad testovacím crontabem.

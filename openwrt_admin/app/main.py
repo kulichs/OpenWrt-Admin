@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import hashlib
+import re
 import ipaddress
 import json
 import math
@@ -22,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
@@ -149,6 +151,7 @@ class Store:
         self.dhcp_demo_wan: list[str] = []            # demo: DNS na WAN
         self.fw: dict | None = None                    # firewall routeru (firewall.build)
         self.fw_demo: dict[str, bool] = {}             # demo: zapnuto/vypnuto pravidel a presmerovani
+        self.fw_demo_blocks: dict[str, dict] = {}       # demo: blokace (sekce -> pravidlo + radky cronu)
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -633,7 +636,17 @@ class Store:
         if not r or (not force and self.fw and time.time() - self.fw["ts"] < max_age):
             return
         if self.opts.get("demo"):
-            m = fwmod.build(fwmod.DEMO)
+            now = time.strftime("%Y-%m-%d %H:%M")
+            extra = ""
+            cron = []
+            for sid, b in self.fw_demo_blocks.items():
+                extra += (f"firewall.{sid}=rule\nfirewall.{sid}.name='OWA: {b['label']}'\nfirewall.{sid}.src='*'\n"
+                          f"firewall.{sid}.dest='wan'\nfirewall.{sid}.target='REJECT'\nfirewall.{sid}.enabled='{1 if b['enabled'] else 0}'\n"
+                          f"firewall.{sid}.src_mac=" + " ".join(f"'{x.upper()}'" for x in b["macs"]) + "\n")
+                cron += b["lines"]
+            text = fwmod.DEMO.replace("@@dispatch", extra + "@@dispatch").replace(
+                "@@end", "@@cron\n" + "\n".join(cron) + f"\n@@now\n{now}\n@@end")
+            m = fwmod.build(text)
             for it in m["rules"] + m["redirects"]:
                 if it["id"] in self.fw_demo:
                     it["enabled"] = self.fw_demo[it["id"]]
@@ -1830,7 +1843,7 @@ async def _upstream_plan(t, form, m: dict, op: str):
 
 
 async def safe_apply(ap: str, pkgs: list[str], cmds: list[str], reload: list[str], summary: str, t,
-                     check: str | None = None, timeout: int = 90) -> actions.Result:
+                     check: str | None = None, timeout: int = 90, files: list[str] | None = None) -> actions.Result:
     """Ulozit s pojistkou: zaloha dne, odpocet na zarizeni, zmena na pozadi, nove spojeni a potvrzeni.
     Kdyz se aplikace po zmene nepripoji, zarizeni se po `timeout` s samo vrati."""
     dev = store.ap(ap)
@@ -1844,7 +1857,7 @@ async def safe_apply(ap: str, pkgs: list[str], cmds: list[str], reload: list[str
     tok = safeapply.new_token()
     lock = store.ap_lock(ap)
     async with lock:
-        r = await actions.run(store.cfg(ap), store.key, safeapply.arm_script(tok, pkgs, cmds, reload, timeout, check=check),
+        r = await actions.run(store.cfg(ap), store.key, safeapply.arm_script(tok, pkgs, cmds, reload, timeout, check=check, files=files),
                               timeout=60, t=t, summary=f"{summary} ({ap})")
     if not r.ok or f"ARMED {tok}" not in r.output:
         return actions.Result(False, "\n".join([*out, t("safe.failed"), r.output[-400:]]))
@@ -1863,9 +1876,28 @@ async def safe_apply(ap: str, pkgs: list[str], cmds: list[str], reload: list[str
     return actions.Result(False, "\n".join(out))
 
 
-def _fw_ctx(ap: APState) -> dict:
+def _fw_ctx(ap: APState, block_mac: str = "") -> dict:
     m = store.fw or {}
-    return {"fw": m}
+    if m.get("error") and not m.get("zones"):
+        return {"fw": m}
+    devs = {}
+    for x in store.lease_list():
+        devs[x["mac"]] = {"mac": x["mac"], "name": x["hostname"] or "", "ip": x.get("ip", ""), "online": x["online"]}
+    for h in (store.dhcp or {}).get("hosts", []):
+        for mac in h["macs"]:
+            devs.setdefault(mac, {"mac": mac, "name": h["name"], "ip": h["ip"], "online": False})
+            if not devs[mac]["name"]:
+                devs[mac]["name"] = h["name"]
+    names = {k: v["name"] for k, v in devs.items()}
+    now = blockmod.parse_now(m.get("now_str", ""))
+    blocks = blockmod.collect(m, m.get("cron", []), now, names)
+    device_list = sorted(devs.values(), key=lambda d: ((d["name"] or "~").lower(), d["mac"]))
+    return {"fw": m, "blocks": blocks, "devices": device_list, "router_now": m.get("now_str", ""),
+            "block_mac": blockmod_norm_mac(block_mac), "days": blockmod.DAYS}
+
+
+def blockmod_norm_mac(s: str) -> str:
+    return dhcpmod.norm_mac(s) or "" if s else ""
 
 
 @app.get("/ap/{name}/firewall", response_class=HTMLResponse)
@@ -1874,8 +1906,9 @@ async def device_firewall(request: Request, name: str):
     if ap.kind != "router":
         raise HTTPException(404, "device not found")
     fresh = store.fw and time.time() - store.fw["ts"] < SVC_FRESH
+    block = request.query_params.get("block", "")
     return render(request, "firewall.html", page="ap:" + name, ap=ap, ready=bool(fresh), autorefresh=False,
-                  **(_fw_ctx(ap) if fresh else {}))
+                  block_q=block, **(_fw_ctx(ap, block) if fresh else {}))
 
 
 @app.get("/ap/{name}/firewall/body", response_class=HTMLResponse)
@@ -1884,7 +1917,98 @@ async def device_firewall_body(request: Request, name: str):
     if ap.kind != "router":
         raise HTTPException(404, "device not found")
     await store.load_fw(max_age=SVC_FRESH)
-    return render(request, "_firewall_body.html", ap=ap, **_fw_ctx(ap))
+    if not store.dhcp:
+        await store.load_dhcp(max_age=SVC_FRESH)  # jmena ze statickych zapujcek
+    return render(request, "_firewall_body.html", ap=ap, **_fw_ctx(ap, request.query_params.get("block", "")))
+
+
+async def _block_preview(request: Request, t, m: dict):
+    """Blokace zarizeni: nova (trvale / ted na dobu / do casu / rozvrh) nebo zruseni vlastni blokace."""
+    title = t("preview.title")
+    form = await request.form()
+    op = str(form.get("op") or "")
+    r = store.router
+    if op == "block_del":
+        sid = str(form.get("id") or "")
+        it = next((x for x in m["rules"] if x["id"] == sid), None)
+        if not it or not blockmod.SID_RE.match(sid):
+            return result(request, title, actions.Result(False, t("msg.bad_request")))
+        cmds = blockmod.delete_cmds(sid)
+        changes = [t("blk.do_del", name=it["name"][5:] if it["name"].startswith("OWA: ") else it["name"])]
+        token = store.add_svc_pending(r.name, cmds, {"op": "block_del", "uci": "firewall", "id": sid, "cron": True,
+                                                     "changes": changes})
+        return render(request, "_svc_preview.html", ap=r.name, cmds=[*cmds, "uci commit firewall", fwmod.CHECK,
+                      *blockmod.reload_cmds(True), t("safe.shown")], changes=changes, token=token, note=t("fw.note"))
+    macs = []
+    for raw in re.split(r"[\s,;]+", str(form.get("macs") or "") + " " + " ".join(form.getlist("mac"))):
+        if raw.strip():
+            mac = dhcpmod.norm_mac(raw)
+            if not mac:
+                return result(request, title, actions.Result(False, t("dhcp.err_mac")))
+            if mac not in macs:
+                macs.append(mac)
+    if not macs:
+        return result(request, title, actions.Result(False, t("blk.err_nomac")))
+    wan = m.get("wan_zone") or ""
+    if not wan:
+        return result(request, title, actions.Result(False, t("blk.err_nowan")))
+    label = re.sub(r"[^\w .:+-]", "", str(form.get("label") or "").strip())[:40]
+    names = {x["mac"]: x["hostname"] for x in store.lease_list() if x["hostname"]}
+    for h in (store.dhcp or {}).get("hosts", []):
+        for mac in h["macs"]:
+            names.setdefault(mac, h["name"])
+    if not label:
+        label = ", ".join(names.get(x) or x.upper() for x in macs)[:40]
+    now = blockmod.parse_now(m.get("now_str", "")) or datetime.datetime.now()
+    mode = str(form.get("mode") or "permanent")
+    lines: list[str] = []
+    enabled = True
+    sid = blockmod.new_sid()
+    warns = []
+    if mode == "for":
+        try:
+            minutes = int(form.get("minutes") or 0)
+        except ValueError:
+            minutes = 0
+        if not 5 <= minutes <= 14 * 24 * 60:
+            return result(request, title, actions.Result(False, t("blk.err_duration")))
+        until = now + datetime.timedelta(minutes=minutes)
+        lines = [blockmod.until_line(sid, until)]
+        when = t("blk.when_until", t=until.strftime("%d.%m. %H:%M"))
+    elif mode == "until":
+        until = blockmod.parse_until(str(form.get("until") or ""))
+        if not until or until <= now + datetime.timedelta(minutes=1) or until > now + datetime.timedelta(days=60):
+            return result(request, title, actions.Result(False, t("blk.err_until", now=now.strftime("%d.%m. %H:%M"))))
+        lines = [blockmod.until_line(sid, until)]
+        when = t("blk.when_until", t=until.strftime("%d.%m. %H:%M"))
+    elif mode == "schedule":
+        start, stop = blockmod.norm_time(str(form.get("start") or "")), blockmod.norm_time(str(form.get("stop") or ""))
+        days = [d for d in blockmod.DAYS if form.get("day_" + d) == "1"]
+        if not start or not stop or start == stop or not days:
+            return result(request, title, actions.Result(False, t("blk.err_schedule")))
+        lines = blockmod.schedule_lines(sid, start, stop, days)
+        enabled = blockmod.in_window(now, start, stop, days)
+        when = t("blk.when_schedule", start=start, stop=stop, days=", ".join(t("day." + d) for d in days))
+        warns.append(t("blk.now_on") if enabled else t("blk.now_off"))
+    elif mode == "permanent":
+        when = t("blk.when_permanent")
+    else:
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    for b in blockmod.collect(m, m.get("cron", []), now, names):
+        hit = [x for x in macs if x.upper() in [y.upper() for y in b["macs"]]]
+        if hit and b["enabled"]:
+            warns.append(t("blk.warn_already", name=b["name"]))
+    for x in macs:
+        if x[1] in "26ae":
+            warns.append(t("blk.warn_random", mac=x.upper()))
+    cmds = blockmod.create_cmds(sid, label, macs, wan, enabled, lines)
+    changes = [t("blk.do_add", name=label, when=when)]
+    token = store.add_svc_pending(r.name, cmds, {"op": "block_add", "uci": "firewall", "cron": bool(lines), "id": sid,
+                                                 "label": label, "macs": macs, "enabled": enabled, "lines": lines,
+                                                 "changes": changes})
+    return render(request, "_svc_preview.html", ap=r.name, cmds=[*cmds, "uci commit firewall", fwmod.CHECK,
+                  *blockmod.reload_cmds(bool(lines)), t("safe.shown")], changes=changes, token=token,
+                  note=t("blk.note"), warns=warns)
 
 
 @app.post("/firewall/preview", response_class=HTMLResponse)
@@ -1898,8 +2022,12 @@ async def firewall_preview(request: Request, op: str = Form(""), id: str = Form(
     r, m = store.router, store.fw
     if not r or not m or m.get("error") and not m.get("zones"):
         return result(request, title, actions.Result(False, t("msg.bad_request")))
-    if op != "toggle" or m.get("fwver", "fw4") != "fw4":
-        return result(request, title, actions.Result(False, t("fw.w_fw3") if m.get("fwver", "fw4") != "fw4" else t("msg.bad_request")))
+    if m.get("fwver", "fw4") != "fw4":
+        return result(request, title, actions.Result(False, t("fw.w_fw3")))
+    if op in ("block_add", "block_del"):
+        return await _block_preview(request, t, m)
+    if op != "toggle":
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
     it = next((x for x in m["rules"] + m["redirects"] if x["id"] == id), None)
     if not it:
         return result(request, title, actions.Result(False, t("msg.bad_request")))
@@ -2141,6 +2269,13 @@ async def services_apply(request: Request, token: str = Form(...)):
             store.dhcp_demo_wan = list(info["servers"])
         elif info.get("op") == "fw_toggle":
             store.fw_demo[info["id"]] = info["enable"]
+            if info["id"] in store.fw_demo_blocks:
+                store.fw_demo_blocks[info["id"]]["enabled"] = info["enable"]
+        elif info.get("op") == "block_add":
+            store.fw_demo_blocks[info["id"]] = {"label": info["label"], "macs": info["macs"], "enabled": info["enabled"],
+                                                "lines": info["lines"]}
+        elif info.get("op") == "block_del":
+            store.fw_demo_blocks.pop(info["id"], None)
         elif info.get("uci") == "dhcp":
             dhcpmod.demo_apply(store.dhcp_demo, info)
         else:
@@ -2149,7 +2284,9 @@ async def services_apply(request: Request, token: str = Form(...)):
     elif info.get("uci") == "dhcp":
         r = await dhcp_apply(ap, cmds, summary, t, info.get("script"))
     elif info.get("uci") == "firewall":
-        r = await safe_apply(ap, ["firewall"], cmds, fwmod.RELOAD, summary, t, check=fwmod.CHECK)
+        cron = bool(info.get("cron"))
+        r = await safe_apply(ap, ["firewall"], cmds, blockmod.reload_cmds(cron), summary, t, check=fwmod.CHECK,
+                             files=[blockmod.CRONTAB] if cron else None)
     else:
         lock = store.ap_lock(ap)
         if lock.locked():

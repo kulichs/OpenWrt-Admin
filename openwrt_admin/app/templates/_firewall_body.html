@@ -13,6 +13,64 @@
 </ul></div>
 {% endif %}
 
+<div class="panel" id="blocks">
+  <h2>{{ t("blk.title") }} <span class="muted small">{{ blocks | selectattr("enabled") | list | length }} / {{ blocks | length }}</span>
+    {% if router_now %}<span class="muted small">· {{ t("blk.router_time", t=router_now) }}</span>{% endif %}</h2>
+  <div class="cmd-out"></div>
+  <table class="list">
+    <thead><tr><th>{{ t("blk.who") }}</th><th>{{ t("blk.when") }}</th><th>{{ t("blk.state") }}</th>{% if can_edit and fw.fwver == "fw4" %}<th></th>{% endif %}</tr></thead>
+    {% for b in blocks %}
+    <tr class="{{ 'row-off' if not b.enabled and b.mode != 'schedule' }}">
+      <td><b>{{ b.name }}</b>{% if not b.own %} <span class="muted small">{{ t("blk.foreign") }}</span>{% endif %}<br>
+        <span class="small mono">{% for mac in b.macs %}{{ mac }}{% if b.devices[loop.index0] %} ({{ b.devices[loop.index0] }}){% endif %}{{ ", " if not loop.last }}{% endfor %}{% for ip in b.ips %} IP {{ ip }}{% endfor %}</span>
+        {% if b.ports %}<br><span class="small muted">{{ t("blk.only_ports", ports=b.ports, proto=b.proto | join("/")) }}</span>{% endif %}</td>
+      <td class="small">{% if b.mode == "until" %}{{ t("blk.until", t=b.until) }}{% if b.expired %} <span class="err">{{ t("blk.expired") }}</span>{% else %} <span class="muted">({{ b.left | duration }})</span>{% endif %}
+        {% elif b.mode == "schedule" %}{{ b.start }}–{{ b.stop }} · {% for d in b.days %}{{ t("day." ~ d) }}{{ ", " if not loop.last }}{% endfor %}
+        {% elif b.mode == "fwtime" %}⏱ {{ b.time.get("start_time", "") }}–{{ b.time.get("stop_time", "") }} {{ b.time.get("weekdays", "") }}
+        {% else %}{{ t("blk.permanent") }}{% endif %}</td>
+      <td>{% if b.enabled and b.mode == "fwtime" %}<span class="tag svc-paused" title="{{ t('blk.fwtime_title') }}">{{ t("blk.fwtime") }}</span>{% elif b.enabled %}<span class="tag svc-failed">{{ t("blk.blocked_now") }}</span>{% else %}<span class="tag svc-stopped">{{ t("blk.free_now") }}</span>{% endif %}</td>
+      {% if can_edit and fw.fwver == "fw4" %}<td class="btns">
+        {% if b.own %}<button type="button" class="secondary small" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out"
+            hx-vals='{{ {"op": "block_del", "id": b.id} | tojson }}'>{{ t("blk.remove") }}</button>
+        {% else %}<button type="button" class="secondary small" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out"
+            hx-vals='{{ {"op": "toggle", "id": b.id, "enable": "0" if b.enabled else "1"} | tojson }}'>{{ t("fw.disable") if b.enabled else t("fw.enable") }}</button>{% endif %}
+      </td>{% endif %}
+    </tr>
+    {% else %}<tr><td colspan="4" class="muted">{{ t("blk.none") }}</td></tr>{% endfor %}
+  </table>
+
+  {% if can_edit and fw.fwver == "fw4" %}
+  <details class="inline-edit block-form" {{ 'open' if block_mac }}><summary>{{ t("blk.new") }}</summary>
+  <form class="edit" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out">
+    <input type="hidden" name="op" value="block_add">
+    <div class="filters">
+      <label>{{ t("blk.device") }} <select name="mac" onchange="if(this.selectedOptions[0]) this.form.label.placeholder = this.selectedOptions[0].dataset.name || ''">
+        <option value="">–</option>
+        {% for d in devices %}<option value="{{ d.mac }}" data-name="{{ d.name }}" {{ 'selected' if d.mac == block_mac }}>{{ d.name or "?" }} · {{ d.mac | upper }}{% if d.ip %} · {{ d.ip }}{% endif %}{% if d.online %} ●{% endif %}</option>{% endfor %}
+      </select></label>
+      <label>{{ t("blk.more_macs") }} <input name="macs" class="mono" placeholder="aa:bb:cc:dd:ee:ff" style="min-width:14em"></label>
+      <label>{{ t("blk.label") }} <input name="label" maxlength="40" placeholder="{{ t('blk.label_ph') }}"></label>
+    </div>
+    <div class="filters block-modes">
+      <label><input type="radio" name="mode" value="for" checked> {{ t("blk.mode_for") }}</label>
+      <select name="minutes">{% for mi, lbl in [(15, "15 min"), (30, "30 min"), (60, "1 h"), (120, "2 h"), (240, "4 h"), (720, "12 h"), (1440, "24 h")] %}<option value="{{ mi }}" {{ 'selected' if mi == 60 }}>{{ lbl }}</option>{% endfor %}</select>
+      <label><input type="radio" name="mode" value="until"> {{ t("blk.mode_until") }}</label> <input type="datetime-local" name="until">
+    </div>
+    <div class="filters block-modes">
+      <label><input type="radio" name="mode" value="schedule"> {{ t("blk.mode_schedule") }}</label>
+      <input name="start" value="21:00" maxlength="5" style="width:5em" class="mono"> – <input name="stop" value="06:30" maxlength="5" style="width:5em" class="mono">
+      {% for d in days %}<label class="day"><input type="checkbox" name="day_{{ d }}" value="1" checked> {{ t("day." ~ d) }}</label>{% endfor %}
+    </div>
+    <div class="filters block-modes">
+      <label><input type="radio" name="mode" value="permanent"> {{ t("blk.mode_permanent") }}</label>
+      <button type="submit" class="danger">{{ t("ssid.preview") }}</button>
+    </div>
+  </form>
+  <p class="muted small">{{ t("blk.hint") }}</p>
+  </details>
+  {% endif %}
+</div>
+
 <div class="panel">
   <h2>{{ t("fw.from_internet") }} <span class="muted small">{{ t("fw.wan_zone", zone=fw.wan_zone) }}{% if fw.wanips %} · {{ fw.wanips | join(", ") }}{% endif %}</span></h2>
   <table class="list">

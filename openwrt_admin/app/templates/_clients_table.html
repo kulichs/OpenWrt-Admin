@@ -28,7 +28,8 @@
           <option value="0">{{ t("kick.only") }}</option><option value="600">{{ t("kick.ban", d="10 min") }}</option>
           <option value="3600">{{ t("kick.ban", d="1 h") }}</option><option value="86400">{{ t("kick.ban", d="24 h") }}</option>
         </select>
-      </form></td>{% endif %}
+      </form>
+      {% if store.router %}<a class="small blocklink" href="{{ base }}/ap/{{ store.router.name | urlencode }}/firewall?block={{ c.mac | urlencode }}#blocks" title="{{ t('blk.link_title') }}">{{ t("blk.link") }}</a>{% endif %}</td>{% endif %}
   </tr>
   {% else %}
   <tr><td colspan="12" class="empty">{{ t("clients.none") }}</td></tr>

@@ -18,6 +18,8 @@ echo @@listen; netstat -tulpn 2>/dev/null || ss -tulpn 2>/dev/null
 echo @@route; d=$(ip -4 route show default 2>/dev/null | awk '{for(i=1;i<NF;i++) if($i=="dev"){print $(i+1); exit}}'); echo "dev $d"
 echo @@wanip; [ -n "$d" ] && ip -4 -o addr show dev "$d" 2>/dev/null | awk '{print $4}' | cut -d/ -f1
 echo @@nftd; ls /etc/nftables.d/ 2>/dev/null
+echo @@cron; grep -F '# owadmin ' /etc/crontabs/root 2>/dev/null
+echo @@now; date '+%Y-%m-%d %H:%M'
 echo @@end
 """
 
@@ -262,7 +264,9 @@ def build(text: str) -> dict:
         matrix.append(row)
     if fwver != "fw4":
         warns.insert(0, {"level": "info", "key": "fw.w_fw3", "args": {}})
-    return {"ts": time.time(), "fwver": fwver, "route_dev": route_dev, "zones": zones, "forwards": forwards,
+    return {"ts": time.time(), "cron": [x for x in sec.get("cron", []) if x.strip()],
+            "now_str": "".join(sec.get("now", [])).strip(),
+            "fwver": fwver, "route_dev": route_dev, "zones": zones, "forwards": forwards,
             "rules": rules, "redirects": redirects,
             "includes": includes, "nftd": nftd, "warns": warns, "exposed": exposed, "services": services,
             "matrix": matrix, "wan_zone": eff, "wan_zones": wan_zone_names, "wanips": wanips,

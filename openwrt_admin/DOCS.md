@@ -138,6 +138,7 @@ logread -e dropbear          # logins (with a dedicated user you see "owadmin" i
 | Upstream DNS / forwarded domain in dnsmasq | router page → DNS | `uci add_list dhcp.<cfg…>.server=…`, `noresolv=1` → commit, `dnsmasq reload`, check `nslookup nic.cz 127.0.0.1`, rollback on failure |
 | Upstream DNS on WAN | router page → DNS (red section) | `uci add_list network.wan.dns=…` (`peerdns=0`) → commit, `network reload` in the background, check, rollback on failure |
 | Turn a firewall rule / port forward on or off | router page → Firewall | `uci set firewall.<cfg…>.enabled=0` / delete → commit, `fw4 check`, `firewall reload` – with the safety net (rollback after 90 s without confirmation) |
+| Block a device (now for / until / schedule / permanently), unblock | router page → Firewall → Blocked devices, "⛔ internet" at a client | `uci set firewall.owa_blk_<id>=rule …` (src_mac, REJECT to WAN), cron lines in `/etc/crontabs/root`, `cron restart`, `firewall reload` – with the safety net |
 
 - **Adding an SSID:** name, password (8–63 characters), encryption WPA2 (`psk2`), WPA2/WPA3 (`sae-mixed`) or WPA3 (`sae`; both SAE variants also set `ieee80211w`), network (interface on the AP, e.g. `lan` or a VLAN network) and hidden; tick the radios (AP + band). The network must exist on each selected AP and the same SSID must not already be on that radio. WPA3 needs wpad with SAE (wpad-basic-mbedtls and newer).
 - Editing SSIDs changes **existing** SSIDs (`wifi-iface` sections). Tick the APs/radios (bands) the change applies to. A preview of the `uci` commands is shown first; the change is written only after confirming. The password is never shown.
@@ -243,7 +244,14 @@ The **Firewall** tab on the router page reads fw4 (on fw3 – OpenWrt 21.02 and 
 - **Zone map** – rows = from, columns = to; the "router" column is input to the router itself (zone input policy), the other columns are forwardings between zones, the diagonal is the forward policy inside the zone. "+ N rules" = exceptions for specific ports or addresses.
 - **Port forwards** and **rules** in configuration order (first match wins) – zones, protocol, ports, source IP/MAC, time conditions; rules that drop traffic of specific devices are tagged "block". Custom files in `/etc/nftables.d/` are only listed.
 
-With full access, existing rules and port forwards can be **turned on and off** (turning on a port forward warns that it opens a port). More editing (blocking devices including time limits, port forwards, rules) comes next.
+With full access, existing rules and port forwards can be **turned on and off** (turning on a port forward warns that it opens a port).
+
+**Blocked devices** (top of the tab; also "⛔ internet" next to a client in the client tables, which opens the form with the device filled in) – blocks internet access by MAC; the device keeps working on the home network:
+- **now for** 15 min – 24 h, **until** a date and time (router time), **schedule** (from–to and days; when "to" is earlier than "from", the block ends the next morning), or **permanently**. One or more MACs, an optional label.
+- The app creates a firewall rule in a named section `firewall.owa_blk_<id>` (`src='*'`, `dest=<WAN zone>`, `src_mac`, `target=REJECT`) and, for timed blocks, cron lines in `/etc/crontabs/root` ending in `# owadmin <section> on|off|until`. Cron runs in the router's local time: a schedule turns the rule on and off, a temporary block deletes the rule and its own cron line at the given minute. This works while Home Assistant is off and after a router reboot (a temporary block whose end passed while the router was off is shown as "should have ended" – remove it by hand). fw4's own time options are not used because it is not certain whether they use UTC or local time and they do not handle ranges across midnight.
+- The list shows the router time, every block with its mode, the remaining time and whether it is active now. **Unblock** deletes the rule and its cron lines. Blocking rules not created by the app (DROP/REJECT with a MAC or IP) are listed as custom rules and can be turned on and off; a rule limited to certain ports says so.
+- Warnings in the preview: the device is already blocked, the MAC looks random (private) – phones may change it, a schedule starting now or later.
+- Saved with the safety net; it backs up and restores `/etc/crontabs/root` together with the firewall configuration, and `cron` is enabled and restarted when needed.
 
 **Safety net when saving.** Firewall changes (and later network and VLAN changes) are saved like LuCI's "apply with rollback": the device backs up the affected configuration to `/tmp/owadmin-rb/<token>/`, starts a 90 s countdown, applies the change in the background (so a dropped SSH session cannot interrupt it) and runs `fw4 check` – if the check fails, the backup is restored immediately. The app then opens a new SSH connection and confirms. If it cannot reconnect (the change cut it off), the device restores the backup and reloads after 90 s on its own and logs `rollback … not confirmed`. Before the first change of the day the configuration is backed up as with DHCP.
 
@@ -412,7 +420,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | neighbouring networks (only on Scan, `radio_scan`) | `iwinfo <if> scan` |
 | services, adblock, banIP (only when the Services tab opens) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, allow/block list files |
 | DHCP and DNS (only when the DHCP or DNS tab opens; lookup test: `nslookup <name> 127.0.0.1`) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `resolv.conf.auto`, `ls /etc/config/*.apk-new` |
-| firewall (only when the Firewall tab opens) | `uci -X show firewall`, `fw4 print` (zone order per interface), `netstat -tulpn` / `ss -tulpn`, `ip route` + `ip addr` (WAN), `ls /etc/nftables.d` |
+| firewall (only when the Firewall tab opens) | `uci -X show firewall`, `fw4 print` (zone order per interface), `netstat -tulpn` / `ss -tulpn`, `ip route` + `ip addr` (WAN), `ls /etc/nftables.d`, owadmin lines in `/etc/crontabs/root`, `date` |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
 
@@ -585,6 +593,7 @@ logread -e dropbear          # přihlášení (s vlastním uživatelem uvidíš 
 | Nadřazené DNS / přesměrovaná doména v dnsmasq | stránka routeru → DNS | `uci add_list dhcp.<cfg…>.server=…`, `noresolv=1` → commit, `dnsmasq reload`, kontrola `nslookup nic.cz 127.0.0.1`, při chybě návrat |
 | Nadřazené DNS na WAN | stránka routeru → DNS (červená sekce) | `uci add_list network.wan.dns=…` (`peerdns=0`) → commit, `network reload` na pozadí, kontrola, při chybě návrat |
 | Zapnout / vypnout pravidlo firewallu nebo přesměrování | stránka routeru → Firewall | `uci set firewall.<cfg…>.enabled=0` / smazat → commit, `fw4 check`, `firewall reload` – s pojistkou (návrat po 90 s bez potvrzení) |
+| Zablokovat zařízení (teď na / do / rozvrh / trvale), odblokovat | stránka routeru → Firewall → Blokovaná zařízení, „⛔ internet“ u klienta | `uci set firewall.owa_blk_<id>=rule …` (src_mac, REJECT do WAN), řádky cronu v `/etc/crontabs/root`, `cron restart`, `firewall reload` – s pojistkou |
 
 - **Přidání SSID:** název, heslo (8–63 znaků), šifrování WPA2 (`psk2`), WPA2/WPA3 (`sae-mixed`) nebo WPA3 (`sae`; u obou SAE se nastaví i `ieee80211w`), síť (rozhraní na AP, např. `lan` nebo VLAN síť) a skrytí; zaškrtnou se rádia (AP + pásmo). Síť musí na každém vybraném AP existovat a stejné SSID na tom rádiu ještě nesmí být. WPA3 potřebuje wpad s SAE (wpad-basic-mbedtls a novější).
 - Úprava SSID mění **existující** SSID (sekce `wifi-iface`). Zaškrtnutím se vybírají AP a rádia (pásma), kterých se změna týká. Nejdřív se zobrazí náhled příkazů `uci`, zapíše se až po potvrzení. Heslo se nikde nezobrazuje.
@@ -690,7 +699,14 @@ Záložka **Firewall** na stránce routeru čte fw4 (na fw3 – OpenWrt 21.02 a 
 - **Mapa zón** – řádky = odkud, sloupce = kam; sloupec „router“ je vstup na samotný router (politika input zóny), ostatní sloupce průchody mezi zónami, na diagonále politika forward uvnitř zóny. „+ N pravidel“ = výjimky pro konkrétní porty nebo adresy.
 - **Přesměrování portů** a **pravidla** v pořadí konfigurace (první shoda vyhrává) – zóny, protokol, porty, zdrojová IP/MAC, časové podmínky; pravidla, která zahazují provoz konkrétních zařízení, mají štítek „blokace“. Vlastní soubory v `/etc/nftables.d/` se jen vypíšou.
 
-S plným přístupem jde existující pravidla a přesměrování **zapnout a vypnout** (zapnutí přesměrování upozorní, že otevře port). Další úpravy (blokování zařízení i na čas, přesměrování portů, pravidla) přijdou v dalších verzích.
+S plným přístupem jde existující pravidla a přesměrování **zapnout a vypnout** (zapnutí přesměrování upozorní, že otevře port).
+
+**Blokovaná zařízení** (nahoře na záložce; také „⛔ internet“ u klienta v tabulkách klientů, které otevře formulář s vyplněným zařízením) – blokuje přístup do internetu podle MAC; v domácí síti zařízení funguje dál:
+- **teď na** 15 min – 24 h, **do** data a času (čas routeru), **rozvrh** (od–do a dny; když je „do“ dřív než „od“, blokace končí ráno dalšího dne) nebo **trvale**. Jedna i více MAC, volitelný popis.
+- Aplikace vytvoří pravidlo firewallu v pojmenované sekci `firewall.owa_blk_<id>` (`src='*'`, `dest=<zóna WAN>`, `src_mac`, `target=REJECT`) a u časových blokací řádky cronu v `/etc/crontabs/root` končící `# owadmin <sekce> on|off|until`. Cron běží v místním čase routeru: rozvrh pravidlo zapíná a vypíná, dočasná blokace v danou minutu smaže pravidlo i svůj řádek cronu. Funguje i při vypnutém Home Assistantu a po restartu routeru (dočasná blokace, jejíž konec proběhl při vypnutém routeru, se ukáže jako „mělo skončit“ – odeber ji ručně). Časové volby fw4 se nepoužívají, protože není jisté, jestli berou UTC, nebo místní čas, a rozsahy přes půlnoc neřeší.
+- Seznam ukazuje čas routeru, každou blokaci s režimem, zbývajícím časem a jestli teď platí. **Odblokovat** smaže pravidlo i jeho řádky cronu. Blokovací pravidla nevytvořená aplikací (DROP/REJECT s MAC nebo IP) jsou uvedená jako vlastní pravidla a jde je zapnout a vypnout; pravidlo omezené na některé porty to uvádí.
+- Upozornění v náhledu: zařízení už je blokované, MAC vypadá jako náhodná (soukromá) – telefony ji můžou změnit, rozvrh začíná hned nebo později.
+- Ukládá se s pojistkou; ta zálohuje a vrací i `/etc/crontabs/root` spolu s konfigurací firewallu a podle potřeby zapne a restartuje `cron`.
 
 **Pojistka při ukládání.** Změny firewallu (a později sítí a VLAN) se ukládají jako „apply with rollback“ v LuCI: zařízení si zazálohuje dotčenou konfiguraci do `/tmp/owadmin-rb/<token>/`, spustí odpočet 90 s, změnu provede na pozadí (aby ji nepřerušilo odpojení SSH) a spustí `fw4 check` – když kontrola selže, záloha se vrátí hned. Aplikace pak otevře nové SSH spojení a změnu potvrdí. Když se připojit nejde (změna ji odřízla), zařízení po 90 s samo vrátí zálohu, znovu načte a zapíše do logu `rollback … not confirmed`. Před první změnou dne se konfigurace zálohuje jako u DHCP.
 
@@ -859,7 +875,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | okolní sítě (jen po Skenovat, `radio_scan`) | `iwinfo <if> scan` |
 | služby, adblock, banIP (jen při otevření záložky Služby) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, soubory povolených/blokovaných |
 | DHCP a DNS (jen při otevření záložky DHCP nebo DNS; test překladu: `nslookup <jméno> 127.0.0.1`) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `resolv.conf.auto`, `ls /etc/config/*.apk-new` |
-| firewall (jen při otevření záložky Firewall) | `uci -X show firewall`, `fw4 print` (pořadí zón na rozhraních), `netstat -tulpn` / `ss -tulpn`, `ip route` + `ip addr` (WAN), `ls /etc/nftables.d` |
+| firewall (jen při otevření záložky Firewall) | `uci -X show firewall`, `fw4 print` (pořadí zón na rozhraních), `netstat -tulpn` / `ss -tulpn`, `ip route` + `ip addr` (WAN), `ls /etc/nftables.d`, řádky owadmin v `/etc/crontabs/root`, `date` |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).
 

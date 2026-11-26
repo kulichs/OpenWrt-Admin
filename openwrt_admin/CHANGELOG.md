@@ -2,6 +2,23 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.22.0
+- **Blocking devices** from the internet (Firewall tab → Blocked devices, or "⛔ internet" next to a client in the client tables):
+  - **now for** 15 min – 24 h, **until** a date and time, **schedule** (from–to, days of the week; across midnight the next morning) or **permanently**; one or more MACs, a label.
+  - Firewall rule in a named section `firewall.owa_blk_<id>` (`src='*'`, `dest=<WAN zone>`, `src_mac`, REJECT). Time is handled by **cron on the router** in its local time – a schedule turns the rule on and off, a temporary block deletes itself (rule and cron line) at the given minute; it keeps working while Home Assistant is off and after a router reboot. fw4's own time options are not used (UTC vs local time is unclear and ranges across midnight are not handled).
+  - List of blocks with the router time, mode, remaining time, state now; "Unblock" deletes the rule and its cron lines. Other blocking rules (by MAC/IP, not created by the app) are listed too and can be turned on/off; a port-limited rule says so.
+  - Warnings: the device is already blocked, a random (private) MAC, a temporary block whose end passed while the router was off.
+  - Saved with the safety net, which now backs up and restores the crontab too.
+- Verified: schedule and window logic incl. midnight, cron lines executed against a test crontab (a temporary block removes only its own line), safety net with crontab (existing / missing, confirmed / not confirmed), demo cs + en (client link, temporary, schedule, unblock), real router rules rendered. Not yet on the real network.
+---
+- **Blokování zařízení** do internetu (záložka Firewall → Blokovaná zařízení, nebo „⛔ internet“ u klienta v tabulkách klientů):
+  - **teď na** 15 min – 24 h, **do** data a času, **rozvrh** (od–do, dny v týdnu; přes půlnoc ráno dalšího dne) nebo **trvale**; jedna i více MAC, popis.
+  - Pravidlo firewallu v pojmenované sekci `firewall.owa_blk_<id>` (`src='*'`, `dest=<zóna WAN>`, `src_mac`, REJECT). Čas hlídá **cron na routeru** v jeho místním čase – rozvrh pravidlo zapíná a vypíná, dočasná blokace se v danou minutu sama smaže (pravidlo i řádek cronu); funguje i když je Home Assistant vypnutý a po restartu routeru. Časové volby fw4 se nepoužívají (není jisté UTC vs. místní čas a rozsahy přes půlnoc fw4 neřeší).
+  - Seznam blokací s časem routeru, režimem, zbývajícím časem a stavem teď; „Odblokovat“ smaže pravidlo i jeho řádky cronu. Ostatní blokovací pravidla (podle MAC/IP, nevytvořená aplikací) jsou v seznamu taky a jde je zapnout/vypnout; pravidlo jen na některé porty to uvádí.
+  - Upozornění: zařízení už je blokované, náhodná (soukromá) MAC, dočasná blokace, jejíž konec proběhl při vypnutém routeru.
+  - Ukládá se s pojistkou, která teď zálohuje a vrací i crontab.
+- Ověřeno: logika rozvrhu a okna vč. přes půlnoc, řádky cronu spuštěné nad testovacím crontabem (dočasná blokace smaže jen svůj řádek), pojistka s crontabem (existuje / neexistuje, potvrzeno / nepotvrzeno), demo cs + en (odkaz od klienta, dočasná, rozvrh, odblokování), vykreslení skutečných pravidel routeru. Na skutečné síti zatím ne.
+
 ## 0.21.1
 - Firewall works on other routers too: the WAN interface is found by the default route (`ip route`), so it may be called anything (`wan`, `wwan`, `pppoe-wan`…); fallback by name and by the masquerading zone. Listening services from `netstat` or `ss`. On fw3 (OpenWrt 21.02 and older) the tab shows a limited read-only overview with an explanation and does not offer changes.
 - DHCP: the lease file is taken from the dnsmasq configuration (`leasefile`), default `/tmp/dhcp.leases`.

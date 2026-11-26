@@ -4,7 +4,7 @@
 {% set devtab = "firewall" %}{% include "_devtabs.html" %}
 {% if ready %}{% include "_firewall_body.html" %}
 {% else %}
-<div id="fw-body" hx-get="{{ base }}/ap/{{ ap.name | urlencode }}/firewall/body" hx-trigger="load" hx-swap="outerHTML">
+<div id="fw-body" hx-get="{{ base }}/ap/{{ ap.name | urlencode }}/firewall/body{% if block_q %}?block={{ block_q | urlencode }}{% endif %}" hx-trigger="load" hx-swap="outerHTML">
   <p class="muted"><span class="spinner"></span> {{ t("fw.loading") }}</p>
 </div>
 {% endif %}

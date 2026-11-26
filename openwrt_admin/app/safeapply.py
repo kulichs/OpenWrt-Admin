@@ -21,13 +21,21 @@ def new_token() -> str:
 
 
 def arm_script(token: str, pkgs: list[str], cmds: list[str], reload: list[str], timeout: int = 90,
-               confdir: str = "/etc/config", base: str = BASE, check: str | None = None) -> str:
+               confdir: str = "/etc/config", base: str = BASE, check: str | None = None,
+               files: list[str] | None = None) -> str:
+    """files = dalsi soubory mimo uci (napr. /etc/crontabs/root) – zalohuji se a vraceji spolu s konfiguraci."""
     """Skript pro zarizeni: zaloha, odpocet s navratem, zmena. Konci 'ARMED <token>' nebo chybou (nic nezmeneno)."""
     assert all(PKG_RE.match(p) for p in pkgs) and re.fullmatch(r"[0-9a-f]{6,32}", token)
     d = f"{base}/{token}"
     rel = " && ".join(reload) or "true"
-    backup = " && ".join(f"cp {confdir}/{p} {d}/{p}" for p in pkgs)
-    restore = " && ".join(f"cp {d}/{p} {confdir}/{p}" for p in pkgs)
+    files = files or []
+    assert all(re.fullmatch(r"/[A-Za-z0-9_./-]{1,120}", f) and ".." not in f for f in files)
+    backup = " && ".join([f"cp {confdir}/{p} {d}/{p}" for p in pkgs] +
+                         [f"{{ if [ -f {f} ]; then cp {f} {d}/file{i}; else touch {d}/file{i}.none; fi; }}"
+                          for i, f in enumerate(files)])
+    restore = " && ".join([f"cp {d}/{p} {confdir}/{p}" for p in pkgs] +
+                          [f"{{ if [ -f {d}/file{i}.none ]; then rm -f {f}; else cp {d}/file{i} {f}; fi; }}"
+                           for i, f in enumerate(files)])
     commits = " && ".join(f"uci commit {p}" for p in pkgs)
     reverts = "; ".join(f"uci revert {p}" for p in pkgs)
     timer = (f"( sleep {int(timeout)}; if [ ! -f {d}/ok ]; then {restore}; {rel}; "

@@ -256,3 +256,8 @@ table.fwmatrix td.no { color: var(--muted); }
 table.fwmatrix td.self { background: color-mix(in srgb, var(--line) 35%, transparent); }
 table.fwmatrix th { text-align: left; }
 tr.row-bad td { background: color-mix(in srgb, var(--bad) 12%, transparent); }
+/* blokace (0.22.0) */
+.block-form { display: block; margin-top: .8rem; }
+.block-form summary { font-weight: 600; }
+.block-modes { align-items: center; }
+.block-modes label.day { margin-right: .2rem; }
