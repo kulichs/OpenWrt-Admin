@@ -60,5 +60,39 @@ try {
 {% if store.opts.demo %}<div class="banner">{{ t("banner.demo") }}</div>{% endif %}
 {% block content %}{% endblock %}
 </main>
+<script>
+/* Nahled zmen se vykresli hned pod tlacitkem / formularem / radkem tabulky, odkud prisel
+   (misto spolecneho .cmd-out panelu). Jiny otevreny nahled se pri tom zavre. */
+document.addEventListener("htmx:beforeSwap", function (e) {
+  var d = e.detail, tg = d.target, elt = d.requestConfig && d.requestConfig.elt;
+  if (!d.shouldSwap || !tg || !elt || !tg.classList || !tg.classList.contains("cmd-out")) return;
+  if (elt.closest(".cmd-out")) return;                      /* tlacitko Provest uvnitr nahledu */
+  var row = elt.closest("tr"), anchor, box;
+  if (row && !row.closest(".cmd-out")) {
+    var nx = row.nextElementSibling;
+    if (nx && nx.classList.contains("near-row")) box = nx.querySelector(".cmd-out");
+    else {
+      var tr = document.createElement("tr"), td = document.createElement("td");
+      tr.className = "near-row"; td.colSpan = row.cells.length || 1;
+      box = document.createElement("div"); box.className = "cmd-out near";
+      td.appendChild(box); tr.appendChild(td); row.after(tr);
+    }
+  } else {
+    anchor = elt.tagName === "FORM" ? elt : (elt.closest(".btns") || elt);
+    var n = anchor.nextElementSibling;
+    if (n && n.classList.contains("near")) box = n;
+    else { box = document.createElement("div"); box.className = "cmd-out near"; anchor.after(box); }
+  }
+  document.querySelectorAll(".near-row, .cmd-out.near").forEach(function (x) {
+    if (x !== box && !x.contains(box)) x.remove();
+  });
+  document.querySelectorAll(".cmd-out:not(.near)").forEach(function (x) { x.innerHTML = ""; });
+  d.target = box;
+});
+document.addEventListener("htmx:afterSwap", function (e) {
+  var b = e.detail.target;
+  if (b && b.classList && b.classList.contains("near")) b.scrollIntoView({ block: "nearest", behavior: "smooth" });
+});
+</script>
 </body>
 </html>

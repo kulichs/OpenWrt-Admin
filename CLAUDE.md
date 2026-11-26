@@ -135,7 +135,8 @@ Proč je co tak, jak je – čti, než něco „zjednodušíš“:
   (zjišťuje se z nápovědy init skriptu); stav „neblokuje“ = zapnutý, ale `adb_list.overall` prázdný (suspend ho
   vyprázdní a `adblock_status` dál hlásí enabled). Pozastavení na čas = časovač na zařízení (`/tmp/owadmin-adb-resume`),
   ne v aplikaci. Akce = náhled → token (`svc_pending`) → `/services/apply`. htmx cíl `previous .cmd-out` – `.cmd-out`
-  musí být v HTML před tlačítky. „Po startu“ z `/etc/rc.d` (S..), ne `init.d/X enabled` – 40× rc.common = sekundy.
+  musí být v HTML před tlačítky (najde se jím panel); skript v `base.html` (`htmx:beforeSwap`) pak náhled přesune do
+  `.cmd-out.near` hned pod tlačítko/formulář/řádek tabulky (`tr.near-row`) a jiné náhledy zavře. „Po startu“ z `/etc/rc.d` (S..), ne `init.d/X enabled` – 40× rc.common = sekundy.
   Záložka: čerstvá data (60 s) hned, jinak `hx-get …/services/body` s `hx-trigger=load`.
 - **DHCP (`app/dhcp.py`):** jen router, záložka `/ap/{router}/dhcp`. Čtení `uci -X show dhcp` – anonymní sekce
   se skutečnými jmény (`cfg…`), ne `@host[N]` (index se posune, když někdo mezitím přidá zápůjčku). Zápis

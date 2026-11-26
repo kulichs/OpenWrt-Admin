@@ -2,6 +2,11 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.22.1
+- The change preview opens directly below the button, form or table row it was requested from (services, DHCP, DNS, firewall, radios, SSIDs), not at the top of the panel. Opening another preview closes the previous one; the page scrolls to it if needed.
+---
+- Náhled změn se otevře hned pod tlačítkem, formulářem nebo řádkem tabulky, odkud byl vyžádán (služby, DHCP, DNS, firewall, rádia, SSID), ne nahoře v panelu. Otevření dalšího náhledu ten předchozí zavře; stránka k němu případně odroluje.
+
 ## 0.22.0
 - **Blocking devices** from the internet (Firewall tab → Blocked devices, or "⛔ internet" next to a client in the client tables):
   - **now for** 15 min – 24 h, **until** a date and time, **schedule** (from–to, days of the week; across midnight the next morning) or **permanently**; one or more MACs, a label.

@@ -396,6 +396,8 @@ The first tile shows **devices online**: the router and all configured APs. Hove
 
 Open pages reload every `refresh_interval` seconds (0 = off). Each browser can choose its own value on the app's **Settings** page (stored in a cookie). The SSID page never reloads by itself, so a half-filled form is not lost.
 
+A **change preview** opens directly below the button, form or table row it was requested from; opening another preview closes the previous one.
+
 ### What is read from the APs
 
 | Data | Command |
@@ -850,6 +852,8 @@ První dlaždice ukazuje **zařízení online**: router a všechny nastavené AP
 ### Obnovování stránky
 
 Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto). Každý prohlížeč si může nastavit vlastní hodnotu na stránce **Nastavení** aplikace (uloží se do cookie). Stránka SSID se sama neobnovuje, aby se neztratil rozepsaný formulář.
+
+**Náhled změn** se otevře hned pod tlačítkem, formulářem nebo řádkem tabulky, odkud byl vyžádán; otevření dalšího náhledu ten předchozí zavře.
 
 ### Co se čte z AP
 
