@@ -13,7 +13,7 @@ import time
 
 READ_CMD = r"""echo @@uci; uci -X -q show dhcp
 echo @@net; uci -q show network | grep -E '^network\.[A-Za-z0-9_]+(=interface|\.(proto|ipaddr|netmask|device)=)'
-echo @@leases; cat /tmp/dhcp.leases 2>/dev/null
+echo @@leases; lf=$(uci -q get dhcp.@dnsmasq[0].leasefile); cat "${lf:-/tmp/dhcp.leases}" 2>/dev/null
 echo @@apknew; ls /etc/config/*.apk-new /etc/config/*-opkg 2>/dev/null
 echo @@resolv; cat /tmp/resolv.conf.d/resolv.conf.auto /tmp/resolv.conf.auto 2>/dev/null
 echo @@wan; uci -q show network.wan

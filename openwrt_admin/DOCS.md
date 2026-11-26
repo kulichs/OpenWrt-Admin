@@ -236,7 +236,7 @@ Changes work exactly like DHCP: preview → **Apply** → `uci commit dhcp` + `/
 
 ### Firewall (router)
 
-The **Firewall** tab on the router page reads fw4: `uci show firewall`, the real zone order per interface from `fw4 print` (which zone gets traffic from an interface first) and the listening services from `netstat`.
+The **Firewall** tab on the router page reads fw4 (on fw3 – OpenWrt 21.02 and older – it shows a limited read-only overview): `uci show firewall`, the real zone order per interface from `fw4 print` (which zone gets traffic from an interface first) the listening services from `netstat` (or `ss`) and the WAN interface from the default route (`ip route`), so it works whatever the WAN interface is called.
 
 - **Checks** at the top: the WAN interface in a zone with input ACCEPT (the router is reachable from the internet except for what a rule blocks – the open services are listed), the WAN zone with forward ACCEPT, a network or an interface in several zones (only the first one applies, the rules of the others do not), WAN without masquerading, old fw3 includes (`/etc/firewall.user`) that fw4 ignores.
 - **Open from the internet** – port forwards (`redirect` from WAN), ACCEPT rules from WAN and services on the router with their state: open (nothing blocks them), allowed by a rule, blocked by a rule, port forwarded elsewhere (DNAT goes first), closed by the zone policy. The full list of listening services is in a collapsible section.
@@ -412,7 +412,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | neighbouring networks (only on Scan, `radio_scan`) | `iwinfo <if> scan` |
 | services, adblock, banIP (only when the Services tab opens) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, allow/block list files |
 | DHCP and DNS (only when the DHCP or DNS tab opens; lookup test: `nslookup <name> 127.0.0.1`) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `resolv.conf.auto`, `ls /etc/config/*.apk-new` |
-| firewall (only when the Firewall tab opens) | `uci -X show firewall`, `fw4 print` (zone order per interface), `netstat -tulpn`, `ifstatus wan`, `ls /etc/nftables.d` |
+| firewall (only when the Firewall tab opens) | `uci -X show firewall`, `fw4 print` (zone order per interface), `netstat -tulpn` / `ss -tulpn`, `ip route` + `ip addr` (WAN), `ls /etc/nftables.d` |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
 
@@ -683,7 +683,7 @@ Změny fungují stejně jako u DHCP: náhled → **Použít** → `uci commit dh
 
 ### Firewall (router)
 
-Záložka **Firewall** na stránce routeru čte fw4: `uci show firewall`, skutečné pořadí zón na rozhraních z `fw4 print` (která zóna dostane provoz z rozhraní jako první) a služby, které na routeru poslouchají, z `netstat`.
+Záložka **Firewall** na stránce routeru čte fw4 (na fw3 – OpenWrt 21.02 a starší – ukáže omezený přehled jen pro čtení): `uci show firewall`, skutečné pořadí zón na rozhraních z `fw4 print` (která zóna dostane provoz z rozhraní jako první) služby, které na routeru poslouchají, z `netstat` (nebo `ss`) a rozhraní WAN podle výchozí cesty (`ip route`), takže funguje, ať se WAN jmenuje jakkoli.
 
 - **Kontroly** nahoře: rozhraní WAN v zóně se vstupem ACCEPT (router je z internetu dostupný kromě toho, co blokuje pravidlo – otevřené služby se vypíšou), zóna WAN s průchodem ACCEPT, síť nebo rozhraní ve více zónách (platí jen první, pravidla ostatních ne), WAN bez maškarády, staré include z fw3 (`/etc/firewall.user`), které fw4 ignoruje.
 - **Co je otevřené z internetu** – přesměrování portů (`redirect` z WAN), pravidla ACCEPT z WAN a služby na routeru se stavem: otevřená (nic ji neblokuje), povolená pravidlem, blokovaná pravidlem, port přesměrovaný jinam (DNAT má přednost), zavřená politikou zóny. Celý seznam poslouchajících služeb je ve sbalené části.
@@ -859,7 +859,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | okolní sítě (jen po Skenovat, `radio_scan`) | `iwinfo <if> scan` |
 | služby, adblock, banIP (jen při otevření záložky Služby) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, soubory povolených/blokovaných |
 | DHCP a DNS (jen při otevření záložky DHCP nebo DNS; test překladu: `nslookup <jméno> 127.0.0.1`) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `resolv.conf.auto`, `ls /etc/config/*.apk-new` |
-| firewall (jen při otevření záložky Firewall) | `uci -X show firewall`, `fw4 print` (pořadí zón na rozhraních), `netstat -tulpn`, `ifstatus wan`, `ls /etc/nftables.d` |
+| firewall (jen při otevření záložky Firewall) | `uci -X show firewall`, `fw4 print` (pořadí zón na rozhraních), `netstat -tulpn` / `ss -tulpn`, `ip route` + `ip addr` (WAN), `ls /etc/nftables.d` |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).
 

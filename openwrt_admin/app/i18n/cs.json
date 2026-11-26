@@ -805,5 +805,6 @@
   "safe.armed": "Změna uložena s pojistkou ({s} s), čekám na nové spojení…",
   "safe.confirmed": "Spojení funguje – změna potvrzena.",
   "safe.not_confirmed": "Po změně se nepodařilo k zařízení znovu připojit – do {s} s od uložení se samo vrátí k původní konfiguraci.",
-  "safe.shown": "# pojistka: zaloha, odpocet 90 s, potvrzeni novym spojenim, jinak navrat"
+  "safe.shown": "# pojistka: zaloha, odpocet 90 s, potvrzeni novym spojenim, jinak navrat",
+  "fw.w_fw3": "Router používá starší firewall fw3 (OpenWrt 21.02 a starší) – přehled je omezený: bez skutečného pořadí zón na rozhraních a bez kontroly pravidel přes fw4. Pravidla a přesměrování se zobrazí, měnit je aplikace nebude."
 }

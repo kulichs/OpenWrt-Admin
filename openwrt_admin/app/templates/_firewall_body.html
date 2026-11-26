@@ -1,6 +1,6 @@
 {# obsah zalozky Firewall – vklada se primo, nebo se dotahne pres htmx (/ap/<router>/firewall/body) #}
 {% macro toggle(it) -%}
-{% if can_edit %}<button type="button" class="secondary small" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out"
+{% if can_edit and fw.fwver == "fw4" %}<button type="button" class="secondary small" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out"
   hx-vals='{{ {"op": "toggle", "id": it.id, "enable": "0" if it.enabled else "1"} | tojson }}'>{{ t("fw.disable") if it.enabled else t("fw.enable") }}</button>{% endif %}
 {%- endmacro %}
 <div id="fw-body">

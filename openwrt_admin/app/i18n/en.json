@@ -797,5 +797,6 @@
   "safe.armed": "Change saved with a safety net ({s} s), waiting for a new connection…",
   "safe.confirmed": "The connection works – change confirmed.",
   "safe.not_confirmed": "Could not reconnect to the device after the change – it reverts to the previous configuration within {s} s of saving.",
-  "safe.shown": "# safety net: backup, 90 s countdown, confirm over a new connection, otherwise rollback"
+  "safe.shown": "# safety net: backup, 90 s countdown, confirm over a new connection, otherwise rollback",
+  "fw.w_fw3": "The router uses the older fw3 firewall (OpenWrt 21.02 and older) – the overview is limited: no real zone order per interface and no fw4 checks. Rules and port forwards are shown, the app will not change them."
 }

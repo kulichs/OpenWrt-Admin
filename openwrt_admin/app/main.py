@@ -1898,8 +1898,8 @@ async def firewall_preview(request: Request, op: str = Form(""), id: str = Form(
     r, m = store.router, store.fw
     if not r or not m or m.get("error") and not m.get("zones"):
         return result(request, title, actions.Result(False, t("msg.bad_request")))
-    if op != "toggle":
-        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    if op != "toggle" or m.get("fwver", "fw4") != "fw4":
+        return result(request, title, actions.Result(False, t("fw.w_fw3") if m.get("fwver", "fw4") != "fw4" else t("msg.bad_request")))
     it = next((x for x in m["rules"] + m["redirects"] if x["id"] == id), None)
     if not it:
         return result(request, title, actions.Result(False, t("msg.bad_request")))

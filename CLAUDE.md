@@ -187,3 +187,9 @@ openwrt_admin/
   WAN v zóně s input ACCEPT). Změny přes `main.safe_apply`: `arm_script` (záloha /etc/config/<pkg> do
   /tmp/owadmin-rb/<token>, odpočet, změna + commit + kontrola, reload na pozadí) → nové SSH spojení → `confirm_cmd`.
   Bez potvrzení zařízení samo vrátí. Testovat simulací s falešným `uci` (confdir/base parametry).
+
+- **Obecnost (projekt je veřejný na GitHubu):** nic nesmí předpokládat konkrétní síť autora. Jména rozhraní
+  zjišťovat (WAN = výchozí cesta, ne `wan`), nástroje s náhradou (`netstat` → `ss`), verze OpenWrt (fw3/fw4,
+  swconfig/DSA, staré iwinfo, adblock query/search), cesty z konfigurace (leasefile). Při testu vždy i syntetický
+  případ „jiný router“ (jiná jména, chybějící nástroj, starší verze). Skutečná data autora (jména sítí, IP, MAC,
+  PID, nálezy o zabezpečení jeho routeru) nikdy do repa – ani do CHANGELOGu, dema nebo testů.

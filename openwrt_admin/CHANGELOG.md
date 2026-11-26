@@ -2,6 +2,15 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.21.1
+- Firewall works on other routers too: the WAN interface is found by the default route (`ip route`), so it may be called anything (`wan`, `wwan`, `pppoe-wan`…); fallback by name and by the masquerading zone. Listening services from `netstat` or `ss`. On fw3 (OpenWrt 21.02 and older) the tab shows a limited read-only overview with an explanation and does not offer changes.
+- DHCP: the lease file is taken from the dnsmasq configuration (`leasefile`), default `/tmp/dhcp.leases`.
+- Demo data no longer contain process IDs copied from a real router.
+---
+- Firewall funguje i na jiných routerech: rozhraní WAN se hledá podle výchozí cesty (`ip route`), takže se může jmenovat jakkoli (`wan`, `wwan`, `pppoe-wan`…); záložně podle jména a podle zóny s maškarádou. Poslouchající služby z `netstat` nebo `ss`. Na fw3 (OpenWrt 21.02 a starší) ukáže záložka omezený přehled jen pro čtení s vysvětlením a změny nenabízí.
+- DHCP: soubor se zápůjčkami se bere z konfigurace dnsmasq (`leasefile`), výchozí `/tmp/dhcp.leases`.
+- Demo data už neobsahují čísla procesů zkopírovaná ze skutečného routeru.
+
 ## 0.21.0
 - New **Firewall** tab on the router page (Overview | Services | DHCP | DNS | Firewall), fw4:
   - **Checks**: the WAN interface in a zone with input ACCEPT (lists the router services reachable from the internet), WAN zone with forward ACCEPT, a network or interface in several zones (only the first one applies – taken from the real order in `fw4 print`), WAN without masquerading, old fw3 includes that fw4 ignores.

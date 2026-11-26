@@ -11,10 +11,12 @@ import time
 
 from .dhcp import _first, parse_uci
 
-READ_CMD = r"""echo @@uci; uci -X -q show firewall
+READ_CMD = r"""echo @@fwver; command -v fw4 >/dev/null 2>&1 && echo fw4 || echo fw3
+echo @@uci; uci -X -q show firewall
 echo @@dispatch; fw4 print 2>/dev/null | grep -E 'iifname .* jump (input|forward)_'
-echo @@listen; netstat -tulpn 2>/dev/null
-echo @@wanip; ifstatus wan 2>/dev/null | jsonfilter -e '@["ipv4-address"][*].address' 2>/dev/null
+echo @@listen; netstat -tulpn 2>/dev/null || ss -tulpn 2>/dev/null
+echo @@route; d=$(ip -4 route show default 2>/dev/null | awk '{for(i=1;i<NF;i++) if($i=="dev"){print $(i+1); exit}}'); echo "dev $d"
+echo @@wanip; [ -n "$d" ] && ip -4 -o addr show dev "$d" 2>/dev/null | awk '{print $4}' | cut -d/ -f1
 echo @@nftd; ls /etc/nftables.d/ 2>/dev/null
 echo @@end
 """
@@ -47,9 +49,17 @@ def parse_dispatch(text: str) -> dict[str, dict[str, list[str]]]:
 
 
 def parse_listen(text: str) -> list[dict]:
+    """netstat -tulpn (BusyBox) nebo ss -tulpn."""
     out = []
     for line in (text or "").splitlines():
         p = line.split()
+        if len(p) >= 5 and p[0] in ("tcp", "udp") and p[1] in ("LISTEN", "UNCONN"):
+            host, _, port = p[4].rpartition(":")
+            m = re.search(r'users:\(\("([^"]+)"', line)
+            if port.isdigit():
+                out.append({"proto": p[0], "addr": host.strip("[]").split("%")[0], "port": int(port),
+                            "prog": m.group(1) if m else ""})
+            continue
         if len(p) < 4 or p[0] not in ("tcp", "udp", "tcp6", "udp6"):
             continue
         addr = p[3]
@@ -102,6 +112,8 @@ def build(text: str) -> dict:
     disp = parse_dispatch("\n".join(sec.get("dispatch", [])))
     listen = parse_listen("\n".join(sec.get("listen", [])))
     wanips = [x.strip() for x in sec.get("wanip", []) if x.strip()]
+    route_dev = next((x.split()[1] for x in sec.get("route", []) if x.startswith("dev ") and len(x.split()) > 1), "")
+    fwver = (sec.get("fwver") or ["fw4"])[0].strip() or "fw4"
 
     zones = []
     for sid, o in order:
@@ -158,8 +170,12 @@ def build(text: str) -> dict:
             warns.append({"level": "warn", "key": "fw.w_dev_multi", "args": {"dev": d, "zones": ", ".join(zs), "first": zs[0]}})
 
     # ---- WAN: ktera zona dostane provoz z internetu
-    wan_zone_names = [z["name"] for z in zones if any(n in WAN_NETS for n in z["networks"])]
-    wan_devs = [d for zn in wan_zone_names for d in zmap[zn]["devices"]] if wan_zone_names else []
+    # WAN = rozhrani s vychozi cestou (ip route), at se jmenuje jakkoli (wan, wwan, pppoe-wan…); zalozne podle jmena
+    wan_zone_names = [z["name"] for z in zones if route_dev and route_dev in z["devices"]]
+    wan_zone_names += [z["name"] for z in zones if any(n in WAN_NETS for n in z["networks"]) and z["name"] not in wan_zone_names]
+    if not wan_zone_names:  # fw3 / bez fw4 print: zona s maskaradou je skoro vzdy WAN
+        wan_zone_names = [z["name"] for z in zones if z["masq"]]
+    wan_devs = ([route_dev] if route_dev else []) + [d for zn in wan_zone_names for d in zmap[zn]["devices"]]
     eff = ""
     for d in wan_devs:
         if d in dev_zones:
@@ -167,6 +183,8 @@ def build(text: str) -> dict:
             break
     if not eff:
         eff = next((z["name"] for z in zones if "wan" in z["networks"]), "") or (wan_zone_names[0] if wan_zone_names else "")
+        if not eff and route_dev:
+            eff = next((z["name"] for z in zones if route_dev in z["devices"]), "")
     wz = zmap.get(eff)
     if wz and wz["input"] == "ACCEPT":
         warns.insert(0, {"level": "crit", "key": "fw.w_wan_input", "args": {"zone": eff, "ports": "–"}})
@@ -242,7 +260,10 @@ def build(text: str) -> dict:
                 exc = [r["name"] for r in rules if r["enabled"] and r["src"] == z["name"] and r["dest"] == d]
                 row["cells"].append({"dest": d, "ok": (z["name"], d) in fw_pairs, "rules": exc})
         matrix.append(row)
-    return {"ts": time.time(), "zones": zones, "forwards": forwards, "rules": rules, "redirects": redirects,
+    if fwver != "fw4":
+        warns.insert(0, {"level": "info", "key": "fw.w_fw3", "args": {}})
+    return {"ts": time.time(), "fwver": fwver, "route_dev": route_dev, "zones": zones, "forwards": forwards,
+            "rules": rules, "redirects": redirects,
             "includes": includes, "nftd": nftd, "warns": warns, "exposed": exposed, "services": services,
             "matrix": matrix, "wan_zone": eff, "wan_zones": wan_zone_names, "wanips": wanips,
             "error": "" if "end" in sec else "incomplete"}
@@ -250,7 +271,9 @@ def build(text: str) -> dict:
 
 # ---------------------------------------------------------------- demo
 
-DEMO = """@@uci
+DEMO = """@@fwver
+fw4
+@@uci
 firewall.cfg01e63d=defaults
 firewall.cfg01e63d.input='REJECT'
 firewall.cfg01e63d.output='ACCEPT'
@@ -381,6 +404,8 @@ tcp        0      0 0.0.0.0:1883            0.0.0.0:*               LISTEN      
 tcp        0      0 192.168.1.1:53          0.0.0.0:*               LISTEN      2400/dnsmasq
 udp        0      0 0.0.0.0:51820           0.0.0.0:*                           -
 udp        0      0 0.0.0.0:67              0.0.0.0:*                           2400/dnsmasq
+@@route
+dev eth0
 @@wanip
 203.0.113.10
 @@nftd
