@@ -2,6 +2,21 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.23.0
+- **Port forwards** on the Firewall tab: new, edit, delete (also forwards created in LuCI). Protocol, port or range from the internet, destination IP (suggestions from DHCP), inside port, optional "Only from" (IP or CIDR). The destination zone is found from the IP; new forwards are stored in a named section `firewall.owa_fwd_<id>`.
+  - Errors: invalid port/IP, IP outside the router's networks or on WAN, ranges of different size, the port already forwarded elsewhere.
+  - Warnings: the router itself listens on the port, often attacked ports without "Only from", a large range, an IP without a static lease, the router's own address.
+- **Protection against cutting off management**: the app reads where it connects from (`$SSH_CLIENT`) and shows a red preview when a change would most likely cut its SSH (turning off an ACCEPT rule for the SSH port, turning on a blocking rule, a forward on the SSH port, blocking the Home Assistant machine). The safety net still reverts the router after 90 s if the app cannot confirm.
+- The firewall read also takes the router's IPv4 addresses (`ip -4 addr`).
+- Verified: checks and commands (add, edit, delete, duplicates, ranges), lockout detection on synthetic routers (LAN input REJECT with an SSH rule, SSH on another port from another zone, an old router without `$SSH_CLIENT`), demo cs + en. Not yet on the real network.
+---
+- **Přesměrování portů** na záložce Firewall: nové, úprava, smazání (i přesměrování vytvořená v LuCI). Protokol, port nebo rozsah z internetu, cílová IP (nabídka z DHCP), port uvnitř, volitelně „Jen z adresy“ (IP nebo CIDR). Cílová zóna se určí podle IP; nová přesměrování se ukládají do pojmenované sekce `firewall.owa_fwd_<id>`.
+  - Chyby: neplatný port/IP, IP mimo sítě routeru nebo ve WAN, různě velké rozsahy, port už přesměrovaný jinam.
+  - Upozornění: na portu poslouchá router, často napadané porty bez „Jen z adresy“, velký rozsah, IP bez statické zápůjčky, adresa samotného routeru.
+- **Ochrana proti odříznutí správy**: aplikace si přečte, odkud se připojuje (`$SSH_CLIENT`), a když by změna nejspíš přerušila její SSH (vypnutí pravidla ACCEPT pro port SSH, zapnutí blokujícího pravidla, přesměrování portu SSH, blokace počítače s Home Assistantem), ukáže náhled červeně. Pojistka router dál po 90 s vrátí, když aplikace změnu nepotvrdí.
+- Čtení firewallu bere i IPv4 adresy routeru (`ip -4 addr`).
+- Ověřeno: kontroly a příkazy (nové, úprava, smazání, duplicity, rozsahy), detekce odříznutí na syntetických routerech (LAN input REJECT s pravidlem pro SSH, SSH na jiném portu z jiné zóny, starý router bez `$SSH_CLIENT`), demo cs + en. Na skutečné síti zatím ne.
+
 ## 0.22.1
 - The change preview opens directly below the button, form or table row it was requested from (services, DHCP, DNS, firewall, radios, SSIDs), not at the top of the panel. Opening another preview closes the previous one; the page scrolls to it if needed.
 ---

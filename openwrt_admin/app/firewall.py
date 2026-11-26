@@ -18,6 +18,8 @@ echo @@listen; netstat -tulpn 2>/dev/null || ss -tulpn 2>/dev/null
 echo @@route; d=$(ip -4 route show default 2>/dev/null | awk '{for(i=1;i<NF;i++) if($i=="dev"){print $(i+1); exit}}'); echo "dev $d"
 echo @@wanip; [ -n "$d" ] && ip -4 -o addr show dev "$d" 2>/dev/null | awk '{print $4}' | cut -d/ -f1
 echo @@nftd; ls /etc/nftables.d/ 2>/dev/null
+echo @@addr; ip -4 -o addr show 2>/dev/null | awk '{print $2, $4}'
+echo @@me; echo "$SSH_CLIENT"
 echo @@cron; grep -F '# owadmin ' /etc/crontabs/root 2>/dev/null
 echo @@now; date '+%Y-%m-%d %H:%M'
 echo @@end
@@ -149,6 +151,8 @@ def build(text: str) -> dict:
                               "src_dport": " ".join(_list(o.get("src_dport"))), "dest_ip": _first(o.get("dest_ip")),
                               "dest_port": " ".join(_list(o.get("dest_port"))) or " ".join(_list(o.get("src_dport"))),
                               "target": (_first(o.get("target")) or "DNAT").upper(),
+                              "src_ip": " ".join(_list(o.get("src_ip"))),
+                              "own": sid.startswith("owa_fwd_"),
                               "enabled": str(o.get("enabled", "1")) != "0"})
     includes = [{"id": sid, "path": _first(o.get("path")), "fw4": str(o.get("fw4_compatible", "")) == "1"}
                 for sid, o in order if o["_type"] == "include"]
@@ -270,7 +274,23 @@ def build(text: str) -> dict:
             "rules": rules, "redirects": redirects,
             "includes": includes, "nftd": nftd, "warns": warns, "exposed": exposed, "services": services,
             "matrix": matrix, "wan_zone": eff, "wan_zones": wan_zone_names, "wanips": wanips,
+            "addrs": _addrs(sec.get("addr", [])), "me": _me(sec.get("me", [])),
             "error": "" if "end" in sec else "incomplete"}
+
+
+def _addrs(lines: list[str]) -> list[dict]:
+    out = []
+    for x in lines:
+        p = x.split()
+        if len(p) >= 2 and "/" in p[1]:
+            out.append({"dev": p[0], "cidr": p[1]})
+    return out
+
+
+def _me(lines: list[str]) -> dict:
+    """$SSH_CLIENT: 'ip_klienta port_klienta port_serveru' – odkud se aplikace pripojuje."""
+    p = " ".join(lines).split()
+    return {"ip": p[0], "port": int(p[2])} if len(p) >= 3 and p[2].isdigit() else {}
 
 
 # ---------------------------------------------------------------- demo
@@ -415,6 +435,15 @@ dev eth0
 @@nftd
 10-custom-filter-chains.nft
 README
+@@addr
+lo 127.0.0.1/8
+br-lan 192.168.1.1/24
+br-guest 192.168.30.1/24
+br-iot 192.168.10.1/24
+br-dmz 192.168.100.1/24
+eth0 203.0.113.10/24
+@@me
+192.168.1.11 51234 22
 @@end
 """
 

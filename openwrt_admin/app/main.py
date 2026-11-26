@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
@@ -152,6 +152,7 @@ class Store:
         self.fw: dict | None = None                    # firewall routeru (firewall.build)
         self.fw_demo: dict[str, bool] = {}             # demo: zapnuto/vypnuto pravidel a presmerovani
         self.fw_demo_blocks: dict[str, dict] = {}       # demo: blokace (sekce -> pravidlo + radky cronu)
+        self.fw_demo_fwd: dict[str, dict | None] = {}   # demo: presmerovani portu (sekce -> data, None = smazano)
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -644,7 +645,8 @@ class Store:
                           f"firewall.{sid}.dest='wan'\nfirewall.{sid}.target='REJECT'\nfirewall.{sid}.enabled='{1 if b['enabled'] else 0}'\n"
                           f"firewall.{sid}.src_mac=" + " ".join(f"'{x.upper()}'" for x in b["macs"]) + "\n")
                 cron += b["lines"]
-            text = fwmod.DEMO.replace("@@dispatch", extra + "@@dispatch").replace(
+            text = fwdmod.demo_lines(self.fw_demo_fwd, fwmod.DEMO)
+            text = text.replace("@@dispatch", extra + "@@dispatch").replace(
                 "@@end", "@@cron\n" + "\n".join(cron) + f"\n@@now\n{now}\n@@end")
             m = fwmod.build(text)
             for it in m["rules"] + m["redirects"]:
@@ -2001,6 +2003,7 @@ async def _block_preview(request: Request, t, m: dict):
     for x in macs:
         if x[1] in "26ae":
             warns.append(t("blk.warn_random", mac=x.upper()))
+    crits = [t(k, **a) for k, a in fwdmod.lockout_block(m, macs, (r.arp or {}))]
     cmds = blockmod.create_cmds(sid, label, macs, wan, enabled, lines)
     changes = [t("blk.do_add", name=label, when=when)]
     token = store.add_svc_pending(r.name, cmds, {"op": "block_add", "uci": "firewall", "cron": bool(lines), "id": sid,
@@ -2008,7 +2011,7 @@ async def _block_preview(request: Request, t, m: dict):
                                                  "changes": changes})
     return render(request, "_svc_preview.html", ap=r.name, cmds=[*cmds, "uci commit firewall", fwmod.CHECK,
                   *blockmod.reload_cmds(bool(lines)), t("safe.shown")], changes=changes, token=token,
-                  note=t("blk.note"), warns=warns)
+                  note=t("blk.note"), warns=warns, crits=crits, danger=bool(crits))
 
 
 @app.post("/firewall/preview", response_class=HTMLResponse)
@@ -2026,6 +2029,8 @@ async def firewall_preview(request: Request, op: str = Form(""), id: str = Form(
         return result(request, title, actions.Result(False, t("fw.w_fw3")))
     if op in ("block_add", "block_del"):
         return await _block_preview(request, t, m)
+    if op in ("fwd_add", "fwd_edit", "fwd_del"):
+        return await _fwd_preview(request, t, m, op)
     if op != "toggle":
         return result(request, title, actions.Result(False, t("msg.bad_request")))
     it = next((x for x in m["rules"] + m["redirects"] if x["id"] == id), None)
@@ -2037,13 +2042,62 @@ async def firewall_preview(request: Request, op: str = Form(""), id: str = Form(
     cmds = fwmod.toggle_cmds(it["id"], on)
     changes = [t("fw.do_on" if on else "fw.do_off", name=it["name"])]
     warns = []
-    if it in m["redirects"] and on:
-        warns.append(t("fw.warn_open", name=it["name"], port=fwmod.fmt_ports(it["src_dport"])))
+    if it in m["redirects"]:
+        if on:
+            warns.append(t("fw.warn_open", name=it["name"], port=fwmod.fmt_ports(it["src_dport"])))
+        crits = [t(k, **a) for k, a in fwdmod.lockout_redirect(m, it)] if on else []
+    else:
+        crits = [t(k, **a) for k, a in fwdmod.lockout_rule(m, it, on)]
     token = store.add_svc_pending(r.name, cmds, {"op": "fw_toggle", "uci": "firewall", "id": it["id"], "enable": on,
                                                  "changes": changes})
     shown = [*cmds, "uci commit firewall", fwmod.CHECK, *fwmod.RELOAD, t("safe.shown")]
     return render(request, "_svc_preview.html", ap=r.name, cmds=shown, changes=changes, token=token,
-                  note=t("fw.note"), warns=warns)
+                  note=t("fw.note"), warns=warns, crits=crits, danger=bool(crits))
+
+
+async def _fwd_preview(request: Request, t, m: dict, op: str):
+    """Presmerovani portu: nove, uprava, smazani. Chyby zastavi, varovani a rizika odriznuti se ukazou."""
+    title = t("preview.title")
+    form = await request.form()
+    r = store.router
+    sid = str(form.get("id") or "")
+    old = None
+    if op in ("fwd_edit", "fwd_del"):
+        old = next((x for x in m["redirects"] if x["id"] == sid), None)
+        if not old or not fwdmod.SID_RE.match(sid):
+            return result(request, title, actions.Result(False, t("msg.bad_request")))
+    if op == "fwd_del":
+        cmds = fwdmod.delete_cmds(sid)
+        changes = [t("fwd.do_del", name=old["name"], port=old["src_dport"], to=f"{old['dest_ip'] or 'router'}:{old['dest_port']}")]
+        token = store.add_svc_pending(r.name, cmds, {"op": "fwd_del", "uci": "firewall", "id": sid, "changes": changes})
+        return render(request, "_svc_preview.html", ap=r.name, cmds=[*cmds, "uci commit firewall", fwmod.CHECK,
+                      *fwmod.RELOAD, t("safe.shown")], changes=changes, token=token, note=t("fw.note"))
+    data_in = {k: str(form.get(k) or "") for k in ("name", "proto", "src_dport", "dest_ip", "dest_port", "src_ip")}
+    static_ips = {h["ip"] for h in (store.dhcp or {}).get("hosts", []) if h.get("ip")}
+    errs, warns_k, d = fwdmod.check(m, data_in, sid if old else None, static_ips)
+    if errs:
+        return result(request, title, actions.Result(False, "\n".join(t(k, **a) for k, a in errs)))
+    if old:
+        d["src"] = old["src"] or d["src"]
+        if not fwdmod.changed(old, d):
+            return result(request, title, actions.Result(False, t("msg.no_change")))
+    else:
+        sid = fwdmod.new_sid()
+    cmds = fwdmod.set_cmds(sid, d, new=not old)
+    to = f"{d['dest_ip']}:{d['dest_port']}"
+    changes = [t("fwd.do_edit" if old else "fwd.do_add", name=d["name"], port=f"{d['src_dport']}/{'+'.join(d['proto'])}",
+                 to=to, zone=d["dest"])]
+    if d["src_ip"]:
+        changes.append(t("fwd.only_from", src=d["src_ip"]))
+    warns = [t(k, **a) for k, a in warns_k]
+    if old and not old["enabled"]:
+        warns.append(t("fwd.w_still_off"))
+    crits = [t(k, **a) for k, a in fwdmod.lockout_redirect(m, d)]
+    token = store.add_svc_pending(r.name, cmds, {"op": op, "uci": "firewall", "id": sid, "data": d,
+                                                 "enabled": old["enabled"] if old else True, "changes": changes})
+    return render(request, "_svc_preview.html", ap=r.name, cmds=[*cmds, "uci commit firewall", fwmod.CHECK,
+                  *fwmod.RELOAD, t("safe.shown")], changes=changes, token=token, note=t("fwd.note"),
+                  warns=warns, crits=crits, danger=bool(crits))
 
 
 @app.post("/dhcp/preview", response_class=HTMLResponse)
@@ -2276,6 +2330,11 @@ async def services_apply(request: Request, token: str = Form(...)):
                                                 "lines": info["lines"]}
         elif info.get("op") == "block_del":
             store.fw_demo_blocks.pop(info["id"], None)
+        elif info.get("op") in ("fwd_add", "fwd_edit"):
+            store.fw_demo_fwd[info["id"]] = {**info["data"], "enabled": info["enabled"]}
+        elif info.get("op") == "fwd_del":
+            store.fw_demo_fwd[info["id"]] = None
+            store.fw_demo.pop(info["id"], None)
         elif info.get("uci") == "dhcp":
             dhcpmod.demo_apply(store.dhcp_demo, info)
         else:

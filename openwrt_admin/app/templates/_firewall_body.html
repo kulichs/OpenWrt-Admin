@@ -3,6 +3,19 @@
 {% if can_edit and fw.fwver == "fw4" %}<button type="button" class="secondary small" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out"
   hx-vals='{{ {"op": "toggle", "id": it.id, "enable": "0" if it.enabled else "1"} | tojson }}'>{{ t("fw.disable") if it.enabled else t("fw.enable") }}</button>{% endif %}
 {%- endmacro %}
+{% macro fwdform(d=None) -%}
+<form class="filters edit fwd-form" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out">
+  <input type="hidden" name="op" value="{{ 'fwd_edit' if d else 'fwd_add' }}">{% if d %}<input type="hidden" name="id" value="{{ d.id }}">{% endif %}
+  <label>{{ t("fw.name") }} <input name="name" required maxlength="40" value="{{ d.name if d else '' }}" placeholder="{{ t('fwd.name_ph') }}"></label>
+  <label>{{ t("fwd.proto") }} <select name="proto">{% set pk = ('tcpudp' if d and d.proto | length > 1 else (d.proto | first if d else 'tcp')) %}
+    {% for k, lbl in [("tcp", "TCP"), ("udp", "UDP"), ("tcpudp", "TCP+UDP")] %}<option value="{{ k }}" {{ 'selected' if k == pk }}>{{ lbl }}</option>{% endfor %}</select></label>
+  <label>{{ t("fwd.ext_port") }} <input name="src_dport" required maxlength="11" class="mono" style="width:7em" value="{{ d.src_dport | replace(':', '-') if d else '' }}" placeholder="8443"></label>
+  <label>{{ t("fwd.dest_ip") }} <input name="dest_ip" required maxlength="15" class="mono" list="fwd-devices" value="{{ d.dest_ip if d else '' }}" placeholder="192.168.1.10"></label>
+  <label>{{ t("fwd.int_port") }} <input name="dest_port" maxlength="11" class="mono" style="width:7em" value="{{ d.dest_port | replace(':', '-') if d else '' }}" placeholder="{{ t('fwd.same') }}"></label>
+  <label>{{ t("fwd.src_ip") }} <input name="src_ip" maxlength="18" class="mono" style="width:10em" value="{{ d.src_ip if d else '' }}" placeholder="{{ t('fwd.anyone') }}"></label>
+  <button type="submit">{{ t("ssid.preview") }}</button>
+</form>
+{%- endmacro %}
 <div id="fw-body">
 {% if fw.error and not fw.zones %}<p class="err">{{ fw.error }}</p>{% else %}
 <p class="muted">{{ t("fw.intro") }}</p>
@@ -108,17 +121,27 @@
   <p class="muted small">{{ t("fw.matrix_hint") }}</p>
 </div>
 
-<div class="panel">
+<div class="panel" id="redirects">
   <h2>{{ t("fw.redirects") }} <span class="muted small">{{ fw.redirects | length }}</span></h2>
   <div class="cmd-out"></div>
   <table class="list">
     <thead><tr><th>{{ t("fw.name") }}</th><th>{{ t("fw.port") }}</th><th>{{ t("fw.goes_to") }}</th><th></th></tr></thead>
     {% for d in fw.redirects %}
-    <tr class="{{ 'row-off' if not d.enabled }}"><td>{{ d.name }}</td><td class="mono small">{{ d.src }} {{ d.src_dport | replace(' ', ', ') }}/{{ d.proto | join('/') }}</td>
+    <tr class="{{ 'row-off' if not d.enabled }}"><td>{{ d.name }}{% if d.src_ip %}<br><span class="small muted">{{ t("fwd.only_from", src=d.src_ip) }}</span>{% endif %}</td>
+      <td class="mono small">{{ d.src }} {{ d.src_dport | replace(' ', ', ') }}/{{ d.proto | join('/') }}</td>
       <td class="mono small">{{ d.dest_ip or "router" }}:{{ d.dest_port }} <span class="tag">{{ d.dest }}</span></td>
-      <td class="btns">{% if not d.enabled %}<span class="muted small">{{ t("fw.off") }}</span> {% endif %}{{ toggle(d) }}</td></tr>
+      <td class="btns">{% if not d.enabled %}<span class="muted small">{{ t("fw.off") }}</span> {% endif %}{{ toggle(d) }}
+        {% if can_edit and fw.fwver == "fw4" and d.target == "DNAT" %}
+        <details class="inline-edit"><summary class="small">{{ t("dhcp.edit") }}</summary>{{ fwdform(d) }}</details>
+        <button type="button" class="secondary small" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out"
+          hx-vals='{{ {"op": "fwd_del", "id": d.id} | tojson }}' title="{{ t('fwd.delete') }}">✕</button>{% endif %}</td></tr>
     {% else %}<tr><td colspan="4" class="muted">{{ t("list.empty") }}</td></tr>{% endfor %}
   </table>
+  {% if can_edit and fw.fwver == "fw4" %}
+  <details class="inline-edit"><summary>{{ t("fwd.new") }}</summary>{{ fwdform() }}</details>
+  <datalist id="fwd-devices">{% for x in devices if x.ip %}<option value="{{ x.ip }}">{{ x.name or x.mac | upper }}</option>{% endfor %}</datalist>
+  <p class="muted small">{{ t("fwd.hint") }}</p>
+  {% endif %}
 </div>
 
 <div class="panel">

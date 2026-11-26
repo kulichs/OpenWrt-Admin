@@ -246,6 +246,15 @@ The **Firewall** tab on the router page reads fw4 (on fw3 – OpenWrt 21.02 and 
 
 With full access, existing rules and port forwards can be **turned on and off** (turning on a port forward warns that it opens a port).
 
+**Port forwards** (full access) – **new**, **edit** and **delete** (✕) in the Port forwards panel; port forwards created in LuCI can be edited too.
+- Name, protocol (TCP, UDP, TCP+UDP), port from the internet (one port or a range `5000-5010`), destination IP (suggestions from DHCP leases and static leases), inside port (empty = the same; a range must have the same size) and optionally **Only from** – one IP or network (CIDR) allowed to use the forward.
+- The source zone is the WAN zone, the destination zone is found from the IP (`ip -4 addr` + the interface zone from `fw4 print`). New forwards get a named section `firewall.owa_fwd_<id>` (`target=DNAT`).
+- Errors stop the preview: invalid port or IP, IP not in any of the router's networks or on WAN, ranges of different size, the same port already forwarded elsewhere (only the first forward would work).
+- Warnings: a service the router itself listens on that port (it will no longer be reachable from the internet), often attacked ports (SSH, RDP, SMB, databases, MQTT…) without "Only from", a large range, an IP that is not a static DHCP lease (it may change), the router's own address.
+- Saved with the safety net.
+
+**Protection against cutting off management.** When reading the firewall, the app also notes where it connects from (`$SSH_CLIENT`: its IP and the router's SSH port) and the zone of that IP. A preview is shown in red when the change would most likely cut its SSH: turning off or deleting an ACCEPT rule that allows the SSH port from that zone (when the zone's input policy does not allow it anyway), turning on a REJECT/DROP rule that blocks it, a port forward from that zone on the SSH port, or blocking the MAC of the machine the app runs on (it loses internet access only). It is a warning, not a ban – the change can still be saved, and if it does cut the app off, the safety net returns the router to the previous state after 90 s.
+
 **Blocked devices** (top of the tab; also "⛔ internet" next to a client in the client tables, which opens the form with the device filled in) – blocks internet access by MAC; the device keeps working on the home network:
 - **now for** 15 min – 24 h, **until** a date and time (router time), **schedule** (from–to and days; when "to" is earlier than "from", the block ends the next morning), or **permanently**. One or more MACs, an optional label.
 - The app creates a firewall rule in a named section `firewall.owa_blk_<id>` (`src='*'`, `dest=<WAN zone>`, `src_mac`, `target=REJECT`) and, for timed blocks, cron lines in `/etc/crontabs/root` ending in `# owadmin <section> on|off|until`. Cron runs in the router's local time: a schedule turns the rule on and off, a temporary block deletes the rule and its own cron line at the given minute. This works while Home Assistant is off and after a router reboot (a temporary block whose end passed while the router was off is shown as "should have ended" – remove it by hand). fw4's own time options are not used because it is not certain whether they use UTC or local time and they do not handle ranges across midnight.
@@ -702,6 +711,15 @@ Záložka **Firewall** na stránce routeru čte fw4 (na fw3 – OpenWrt 21.02 a 
 - **Přesměrování portů** a **pravidla** v pořadí konfigurace (první shoda vyhrává) – zóny, protokol, porty, zdrojová IP/MAC, časové podmínky; pravidla, která zahazují provoz konkrétních zařízení, mají štítek „blokace“. Vlastní soubory v `/etc/nftables.d/` se jen vypíšou.
 
 S plným přístupem jde existující pravidla a přesměrování **zapnout a vypnout** (zapnutí přesměrování upozorní, že otevře port).
+
+**Přesměrování portů** (plný přístup) – **nové**, **upravit** a **smazat** (✕) v panelu Přesměrování portů; upravit jdou i přesměrování vytvořená v LuCI.
+- Název, protokol (TCP, UDP, TCP+UDP), port z internetu (jeden port nebo rozsah `5000-5010`), cílová IP (nabídka ze zápůjček a statických zápůjček DHCP), port uvnitř (prázdný = stejný; rozsah musí být stejně velký) a volitelně **Jen z adresy** – jedna IP nebo síť (CIDR), která smí přesměrování používat.
+- Zdrojová zóna je zóna WAN, cílová zóna se určí podle IP (`ip -4 addr` + zóna rozhraní z `fw4 print`). Nová přesměrování dostanou pojmenovanou sekci `firewall.owa_fwd_<id>` (`target=DNAT`).
+- Chyby náhled zastaví: neplatný port nebo IP, IP mimo sítě routeru nebo ve WAN, různě velké rozsahy, stejný port už přesměrovaný jinam (fungovalo by jen první přesměrování).
+- Upozornění: na portu poslouchá sám router (z internetu pak na něj nepůjde), často napadané porty (SSH, RDP, SMB, databáze, MQTT…) bez „Jen z adresy“, velký rozsah, IP není statická zápůjčka DHCP (může se změnit), adresa samotného routeru.
+- Ukládá se s pojistkou.
+
+**Ochrana proti odříznutí správy.** Při čtení firewallu si aplikace poznamená, odkud se připojuje (`$SSH_CLIENT`: svou IP a port SSH na routeru), a zónu té IP. Náhled se ukáže červeně, když by změna nejspíš přerušila její SSH: vypnutí nebo smazání pravidla ACCEPT, které z té zóny povoluje port SSH (pokud ho nepovoluje už politika zóny), zapnutí pravidla REJECT/DROP, které ho blokuje, přesměrování z té zóny na portu SSH, nebo blokace MAC počítače, na kterém aplikace běží (ten přijde jen o internet). Je to upozornění, ne zákaz – změnu jde uložit, a když aplikaci opravdu odřízne, pojistka router po 90 s vrátí do původního stavu.
 
 **Blokovaná zařízení** (nahoře na záložce; také „⛔ internet“ u klienta v tabulkách klientů, které otevře formulář s vyplněným zařízením) – blokuje přístup do internetu podle MAC; v domácí síti zařízení funguje dál:
 - **teď na** 15 min – 24 h, **do** data a času (čas routeru), **rozvrh** (od–do a dny; když je „do“ dřív než „od“, blokace končí ráno dalšího dne) nebo **trvale**. Jedna i více MAC, volitelný popis.

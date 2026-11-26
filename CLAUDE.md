@@ -179,6 +179,7 @@ openwrt_admin/
     firewall.py              # firewall routeru (fw4): zony, pravidla, presmerovani, kontroly, co je otevrene, demo
     safeapply.py             # pojistka: zaloha + odpocet na zarizeni, zmena na pozadi, potvrzeni novym spojenim
     blocks.py                # blokovani zarizeni: pravidlo owa_blk_<id> + cron na routeru (rozvrh, docasne)
+    portfwd.py               # presmerovani portu (owa_fwd_<id>, kontroly) + pojistka proti odriznuti spravy
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/
@@ -199,3 +200,8 @@ openwrt_admin/
   přes půlnoc neřeší). Pravidla v pojmenovaných sekcích `owa_blk_<hex>` – anonymní `cfg…` se přečíslují a cron by
   trefil jiné pravidlo. Řádky cronu končí `# owadmin <sekce> on|off|until`; mazání přes `sed '/# owadmin <sekce> /d'`.
   Pojistka (`files=`) zálohuje i crontab. Testovat: `in_window` přes půlnoc, `until`-řádek nad testovacím crontabem.
+- **Přesměrování portů (`app/portfwd.py`):** cílová zóna z IP = `@@addr` (`ip -4 -o addr`) + zóna rozhraní z
+  `fw4 print`. Nové v `owa_fwd_<hex>`, LuCI sekce se upravují přes jméno z `uci -X`. Proto jako list (`add_list`),
+  při úpravě nejdřív smazat. Ochrana proti odříznutí: `@@me` = `$SSH_CLIENT` při čtení (IP klienta + port SSH
+  routeru) → zóna; `lockout_rule/redirect/block` vrací rizika, náhled je pak `danger` s `crits`. Je to varování,
+  ne zákaz – skutečná ochrana je pojistka (90 s). Bez `$SSH_CLIENT` se nehlásí nic.
