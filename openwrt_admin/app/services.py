@@ -315,11 +315,11 @@ def demo_text(name: str, router: bool, state: dict | None = None) -> str:
     """Vystup SVC_CMD pro demo (stejny format jako ze zarizeni -> testuje i parsery)."""
     state = state or {}
     now = int(time.time())
-    svc = {"dnsmasq": {"instances": {"cfg01411c": {"running": True, "pid": 6136}}},
+    svc = {"dnsmasq": {"instances": {"cfg01411c": {"running": True, "pid": 2400}}},
            "dropbear": {"instances": {"instance1": {"running": True, "pid": 1203}}},
            "network": {"instances": {"instance1": {"running": True, "pid": 1010}}},
            "log": {"instances": {"instance1": {"running": True, "pid": 900}}},
-           "collectd": {"instances": {"instance1": {"running": True, "pid": 16289}}},
+           "collectd": {"instances": {"instance1": {"running": True, "pid": 3120}}},
            "cron": {}, "rpcd": {"instances": {"instance1": {"running": True, "pid": 1100}}}}
     en = ["boot 1", "cron 0", "dnsmasq 1", "dropbear 1", "network 1", "log 1", "collectd 1", "rpcd 1", "sysntpd 1"]
     if not router:

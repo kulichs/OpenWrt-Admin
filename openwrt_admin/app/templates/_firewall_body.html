@@ -1,0 +1,102 @@
+{# obsah zalozky Firewall – vklada se primo, nebo se dotahne pres htmx (/ap/<router>/firewall/body) #}
+{% macro toggle(it) -%}
+{% if can_edit %}<button type="button" class="secondary small" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out"
+  hx-vals='{{ {"op": "toggle", "id": it.id, "enable": "0" if it.enabled else "1"} | tojson }}'>{{ t("fw.disable") if it.enabled else t("fw.enable") }}</button>{% endif %}
+{%- endmacro %}
+<div id="fw-body">
+{% if fw.error and not fw.zones %}<p class="err">{{ fw.error }}</p>{% else %}
+<p class="muted">{{ t("fw.intro") }}</p>
+
+{% if fw.warns %}
+<div class="panel"><ul class="warnlist">
+  {% for w in fw.warns %}<li class="{{ 'err' if w.level == 'crit' else 'muted' if w.level == 'info' else '' }}">{{ '⛔' if w.level == 'crit' else 'ℹ' if w.level == 'info' else '⚠' }} {{ t(w.key, **w.args) }}</li>{% endfor %}
+</ul></div>
+{% endif %}
+
+<div class="panel">
+  <h2>{{ t("fw.from_internet") }} <span class="muted small">{{ t("fw.wan_zone", zone=fw.wan_zone) }}{% if fw.wanips %} · {{ fw.wanips | join(", ") }}{% endif %}</span></h2>
+  <table class="list">
+    <thead><tr><th>{{ t("fw.port") }}</th><th>{{ t("fw.goes_to") }}</th><th>{{ t("fw.why") }}</th></tr></thead>
+    {% for e in fw.exposed %}
+    <tr><td class="mono">{{ e.ports }}/{{ e.proto }}</td><td class="mono small">{{ e.to }}{% if e.dest %} <span class="tag">{{ e.dest }}</span>{% endif %}</td>
+      <td class="small">{{ t("fw.how_" ~ e.how) }} „{{ e.name }}“</td></tr>
+    {% endfor %}
+    {% for s in fw.services if s.state == "open" %}
+    <tr class="{{ 'row-bad' if s.state == 'open' }}"><td class="mono">{{ s.port }}/{{ s.proto }}</td><td class="small">{{ t("fw.router_svc", prog=s.prog or "?") }}</td>
+      <td class="small {{ 'err' if s.state == 'open' }}">{{ t("fw.svc_" ~ s.state, rule=s.rule, zone=fw.wan_zone) }}</td></tr>
+    {% endfor %}
+    {% if not fw.exposed and not (fw.services | selectattr("state", "equalto", "open") | list) %}<tr><td colspan="3" class="muted">{{ t("fw.nothing_open") }}</td></tr>{% endif %}
+  </table>
+  <details class="small"><summary>{{ t("fw.router_services") }}</summary>
+    <table class="list compact">
+      {% for s in fw.services %}<tr><td class="mono">{{ s.port }}/{{ s.proto }}</td><td>{{ s.prog or "?" }}</td><td class="mono small muted">{{ s.addr }}</td>
+        <td><span class="tag svc-{{ {'open': 'failed', 'allowed': 'paused', 'dnat': 'stopped', 'blocked': 'running', 'closed': 'running'}[s.state] }}">{{ t("fw.st_" ~ s.state) }}</span> <span class="muted small">{{ s.rule }}</span></td></tr>{% endfor %}
+    </table>
+    <p class="muted">{{ t("fw.services_hint") }}</p>
+  </details>
+</div>
+
+<div class="panel">
+  <h2>{{ t("fw.matrix") }}</h2>
+  <div class="matrix-wrap"><table class="list fwmatrix">
+    <thead><tr><th>{{ t("fw.from_to") }}</th><th>{{ t("fw.router") }}</th>{% for z in fw.zones %}<th>{{ z.name }}</th>{% endfor %}</tr></thead>
+    {% for row in fw.matrix %}
+    <tr><th><b>{{ row.zone.name }}</b><br><span class="muted small">{{ row.zone.networks | join(", ") }}{% if row.zone.masq %} · masq{% endif %}</span></th>
+      {% for c in row.cells %}
+      <td class="{{ 'ok' if c.ok else 'no' }}{{ ' self' if c.self }}" title="{{ c.policy or '' }}">{{ "✓" if c.ok else "✗" }}{% if c.rules %}<br><span class="small muted">+ {{ c.rules | length }} {{ t("fw.rules_n") }}</span>{% endif %}</td>
+      {% endfor %}</tr>
+    {% endfor %}
+  </table></div>
+  <p class="muted small">{{ t("fw.matrix_hint") }}</p>
+</div>
+
+<div class="panel">
+  <h2>{{ t("fw.redirects") }} <span class="muted small">{{ fw.redirects | length }}</span></h2>
+  <div class="cmd-out"></div>
+  <table class="list">
+    <thead><tr><th>{{ t("fw.name") }}</th><th>{{ t("fw.port") }}</th><th>{{ t("fw.goes_to") }}</th><th></th></tr></thead>
+    {% for d in fw.redirects %}
+    <tr class="{{ 'row-off' if not d.enabled }}"><td>{{ d.name }}</td><td class="mono small">{{ d.src }} {{ d.src_dport | replace(' ', ', ') }}/{{ d.proto | join('/') }}</td>
+      <td class="mono small">{{ d.dest_ip or "router" }}:{{ d.dest_port }} <span class="tag">{{ d.dest }}</span></td>
+      <td class="btns">{% if not d.enabled %}<span class="muted small">{{ t("fw.off") }}</span> {% endif %}{{ toggle(d) }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">{{ t("list.empty") }}</td></tr>{% endfor %}
+  </table>
+</div>
+
+<div class="panel">
+  <h2>{{ t("fw.rules") }} <span class="muted small">{{ fw.rules | length }}</span></h2>
+  <div class="cmd-out"></div>
+  <div class="filters"><label>{{ t("dhcp.filter") }} <input type="search" oninput="owFilter(this, 'fw-rules')" placeholder="{{ t('fw.filter_ph') }}"></label></div>
+  <table class="list" id="fw-rules">
+    <thead><tr><th>{{ t("fw.name") }}</th><th>{{ t("fw.from_to") }}</th><th>{{ t("fw.match") }}</th><th>{{ t("fw.action") }}</th><th></th></tr></thead>
+    {% for r in fw.rules %}
+    <tr class="{{ 'row-off' if not r.enabled }}">
+      <td>{{ r.name }}{% if r.kind == 'block' %} <span class="tag tag-warn">{{ t("fw.block") }}</span>{% endif %}</td>
+      <td class="small">{{ r.src or "–" }} → {{ r.dest or t("fw.router") }}</td>
+      <td class="small mono">{% if r.proto %}{{ r.proto | join('/') }} {% endif %}{% if r.dest_port %}{{ r.dest_port }}{% endif %}{% if r.icmp_type %} {{ r.icmp_type | first }}{% if r.icmp_type | length > 1 %} +{{ r.icmp_type | length - 1 }}{% endif %}{% endif %}
+        {% if r.src_ip %}<br>IP {{ r.src_ip | join(", ") }}{% endif %}{% if r.src_mac %}<br>MAC {{ r.src_mac | join(", ") }}{% endif %}
+        {% if r.time %}<br>⏱ {{ r.time.get("start_time", "") }}–{{ r.time.get("stop_time", "") }} {{ r.time.get("weekdays", "") }} {{ r.time.get("stop_date", "") }}{% endif %}
+        {% if r.family %} <span class="muted">{{ r.family }}</span>{% endif %}</td>
+      <td><span class="tag {{ 'svc-running' if r.target == 'ACCEPT' else 'svc-failed' }}">{{ r.target }}</span></td>
+      <td class="btns">{% if not r.enabled %}<span class="muted small">{{ t("fw.off") }}</span> {% endif %}{{ toggle(r) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted small">{{ t("fw.rules_hint") }}</p>
+</div>
+
+{% if fw.includes or fw.nftd %}
+<div class="panel">
+  <h2>{{ t("fw.custom") }}</h2>
+  <ul class="small">
+    {% for i in fw.includes %}<li class="mono">{{ i.path }} {% if not i.fw4 %}<span class="muted">– {{ t("fw.ignored") }}</span>{% endif %}</li>{% endfor %}
+    {% for f in fw.nftd %}<li class="mono">/etc/nftables.d/{{ f }}</li>{% endfor %}
+  </ul>
+  <p class="muted small">{{ t("fw.custom_hint") }}</p>
+</div>
+{% endif %}
+<script>
+function owFilter(inp, id) { var q = inp.value.toLowerCase(); document.querySelectorAll('#' + id + ' tr').forEach(function (tr) { if (tr.querySelector('th')) return; tr.style.display = !q || tr.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none'; }); }
+</script>
+{% endif %}
+</div>

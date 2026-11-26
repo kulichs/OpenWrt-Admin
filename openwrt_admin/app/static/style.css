@@ -248,3 +248,11 @@ table.kv td { padding: .35rem 0; }
 details.danger-zone { margin-top: 1rem; border: 1px solid var(--bad); border-radius: 8px; padding: .5rem .8rem; }
 details.danger-zone summary { cursor: pointer; }
 .result.preview.danger { border-left-color: var(--bad); }
+/* Firewall (0.21.0) */
+.matrix-wrap { overflow-x: auto; }
+table.fwmatrix td { text-align: center; font-weight: 600; }
+table.fwmatrix td.ok { color: var(--good); }
+table.fwmatrix td.no { color: var(--muted); }
+table.fwmatrix td.self { background: color-mix(in srgb, var(--line) 35%, transparent); }
+table.fwmatrix th { text-align: left; }
+tr.row-bad td { background: color-mix(in srgb, var(--bad) 12%, transparent); }

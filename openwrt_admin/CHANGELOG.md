@@ -2,6 +2,25 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.21.0
+- New **Firewall** tab on the router page (Overview | Services | DHCP | DNS | Firewall), fw4:
+  - **Checks**: the WAN interface in a zone with input ACCEPT (lists the router services reachable from the internet), WAN zone with forward ACCEPT, a network or interface in several zones (only the first one applies – taken from the real order in `fw4 print`), WAN without masquerading, old fw3 includes that fw4 ignores.
+  - **Open from the internet**: port forwards, ACCEPT rules from WAN and router services (`netstat`) with their state – open, allowed by a rule, blocked by a rule, port forwarded elsewhere, closed by the zone policy.
+  - **Zone map**: matrix "who may go where" (input to the router and forwarding between zones) with the number of rule exceptions.
+  - Lists of **port forwards** and **rules** (zones, ports, IP/MAC, time conditions, block tag), custom files in `/etc/nftables.d/`.
+  - Existing rules and port forwards can be **turned on and off**.
+- New **safety net for saving** (as in LuCI): the device backs up the affected configuration, starts a countdown, applies the change in the background (survives a dropped SSH session) and runs a check (`fw4 check`; on failure the backup is restored immediately). The app reconnects over a new SSH connection and confirms; without confirmation the device restores the backup and reloads after 90 s. Used for the firewall now, later for interfaces and VLANs.
+- Verified: parser on a real router configuration (all checks fired correctly: zones, open services, networks in several zones, blocking rules), safety net simulated (confirmed / not confirmed / failed command), demo cs + en, read-only user. Not yet on the real network.
+---
+- Nová záložka **Firewall** na stránce routeru (Přehled | Služby | DHCP | DNS | Firewall), fw4:
+  - **Kontroly**: rozhraní WAN v zóně se vstupem ACCEPT (vypíše služby routeru dostupné z internetu), zóna WAN s průchodem ACCEPT, síť nebo rozhraní ve více zónách (platí jen první – podle skutečného pořadí z `fw4 print`), WAN bez maškarády, staré include z fw3, které fw4 ignoruje.
+  - **Co je otevřené z internetu**: přesměrování portů, pravidla ACCEPT z WAN a služby routeru (`netstat`) se stavem – otevřená, povolená pravidlem, blokovaná pravidlem, port přesměrovaný jinam, zavřená politikou zóny.
+  - **Mapa zón**: matice „kdo kam smí“ (vstup na router a průchod mezi zónami) s počtem výjimek z pravidel.
+  - Seznam **přesměrování portů** a **pravidel** (zóny, porty, IP/MAC, časové podmínky, štítek blokace), vlastní soubory v `/etc/nftables.d/`.
+  - Existující pravidla a přesměrování jde **zapnout a vypnout**.
+- Nová **pojistka při ukládání** (jako v LuCI): zařízení si zazálohuje dotčenou konfiguraci, spustí odpočet, změnu provede na pozadí (přežije odpojení SSH) a zkontroluje (`fw4 check`; při chybě hned vrátí zálohu). Aplikace se znovu připojí novým SSH spojením a potvrdí; bez potvrzení zařízení po 90 s vrátí zálohu a znovu načte. Teď pro firewall, později pro rozhraní a VLAN.
+- Ověřeno: parser na skutečné konfiguraci routeru (všechny kontroly zafungovaly: zóny, otevřené služby, sítě ve více zónách, blokovací pravidla), pojistka nasimulovaná (potvrzeno / nepotvrzeno / chyba v příkazu), demo cs + en, uživatel jen pro čtení. Na skutečné síti zatím ne.
+
 ## 0.20.1
 - DNS tab – **upstream servers** can now be changed in two ways:
   - **In dnsmasq (recommended)**: `server` list with `noresolv=1`, takes precedence over the WAN servers, changed with a dnsmasq reload only (no internet outage); empty = back to the WAN servers. Presets CZ.NIC ODVR, Cloudflare, Quad9, Google. **Forwarded domains** (`server=/domain/ip`) can be added and removed.

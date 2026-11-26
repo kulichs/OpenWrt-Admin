@@ -175,7 +175,15 @@ openwrt_admin/
     services.py              # sluzby (procd/init.d), adblock, banIP: cteni, parsery, prikazy akci, demo
     dhcp.py                  # DHCP routeru: uci parser, site a rozsahy, staticke zapujcky, validace, uci prikazy, demo
     dns.py                   # DNS routeru: mistni jmena, CNAME, validace, nslookup (test prekladu), demo
+    firewall.py              # firewall routeru (fw4): zony, pravidla, presmerovani, kontroly, co je otevrene, demo
+    safeapply.py             # pojistka: zaloha + odpocet na zarizeni, zmena na pozadi, potvrzeni novym spojenim
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/
 ```
+
+- **Firewall (`app/firewall.py`) a pojistka (`app/safeapply.py`):** efektivní zóna rozhraní se bere z `fw4 print`
+  (pořadí `iifname … jump input_<zóna>`), ne z uci – síť/rozhraní ve více zónách → platí první (reálný případ:
+  WAN v zóně s input ACCEPT). Změny přes `main.safe_apply`: `arm_script` (záloha /etc/config/<pkg> do
+  /tmp/owadmin-rb/<token>, odpočet, změna + commit + kontrola, reload na pozadí) → nové SSH spojení → `confirm_cmd`.
+  Bez potvrzení zařízení samo vrátí. Testovat simulací s falešným `uci` (confdir/base parametry).

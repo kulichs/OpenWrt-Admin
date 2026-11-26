@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
@@ -147,6 +147,8 @@ class Store:
         self.dhcp: dict | None = None                  # DHCP routeru (dhcp.build) – nacita se se zalozkou DHCP
         self.dhcp_demo: dict = {k: dict(v) for k, v in dhcpmod.DEMO_UCI.items()}
         self.dhcp_demo_wan: list[str] = []            # demo: DNS na WAN
+        self.fw: dict | None = None                    # firewall routeru (firewall.build)
+        self.fw_demo: dict[str, bool] = {}             # demo: zapnuto/vypnuto pravidel a presmerovani
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -624,6 +626,27 @@ class Store:
         if m["error"] and not res.ok:
             m["error"] = res.output[-300:]
         self.dhcp = m
+
+    async def load_fw(self, max_age: float = 60.0, force: bool = False):
+        """Firewall routeru – jen cteni (bez zapisu do logu routeru)."""
+        r = self.router
+        if not r or (not force and self.fw and time.time() - self.fw["ts"] < max_age):
+            return
+        if self.opts.get("demo"):
+            m = fwmod.build(fwmod.DEMO)
+            for it in m["rules"] + m["redirects"]:
+                if it["id"] in self.fw_demo:
+                    it["enabled"] = self.fw_demo[it["id"]]
+            self.fw = m
+            return
+        if not r.online:
+            self.fw = {"ts": time.time(), "error": r.error or "offline"}
+            return
+        res = await actions.run(self.cfg(r.name), self.key, fwmod.READ_CMD, timeout=30, audit=False)
+        m = fwmod.build(res.output)
+        if m["error"] and not res.ok:
+            m["error"] = res.output[-300:]
+        self.fw = m
 
     def arp_ips(self) -> set[str]:
         """IP, ktere router vidi v ARP (i zarizeni s pevnou IP mimo DHCP) – navrh volne IP je vynecha."""
@@ -1806,6 +1829,95 @@ async def _upstream_plan(t, form, m: dict, op: str):
     return cmds, shown, changes, warns, {"script": script, "servers": servers, "forwards": forwards}
 
 
+async def safe_apply(ap: str, pkgs: list[str], cmds: list[str], reload: list[str], summary: str, t,
+                     check: str | None = None, timeout: int = 90) -> actions.Result:
+    """Ulozit s pojistkou: zaloha dne, odpocet na zarizeni, zmena na pozadi, nove spojeni a potvrzeni.
+    Kdyz se aplikace po zmene nepripoji, zarizeni se po `timeout` s samo vrati."""
+    dev = store.ap(ap)
+    out = []
+    today = time.strftime("%Y-%m-%d")
+    if not any(time.strftime("%Y-%m-%d", time.localtime(b["ts"])) == today for b in store.backups(dev)):
+        ok, msg = await store.backup_one(dev)
+        out.append(t("dhcp.backup_done", file=msg) if ok else t("dhcp.backup_failed", err=msg))
+        if not ok and msg != "busy":
+            return actions.Result(False, "\n".join(out))
+    tok = safeapply.new_token()
+    lock = store.ap_lock(ap)
+    async with lock:
+        r = await actions.run(store.cfg(ap), store.key, safeapply.arm_script(tok, pkgs, cmds, reload, timeout, check=check),
+                              timeout=60, t=t, summary=f"{summary} ({ap})")
+    if not r.ok or f"ARMED {tok}" not in r.output:
+        return actions.Result(False, "\n".join([*out, t("safe.failed"), r.output[-400:]]))
+    out.append(t("safe.armed", s=timeout))
+    await asyncio.sleep(4)
+    deadline = time.time() + timeout - 15
+    while time.time() < deadline:
+        c = await actions.run(store.cfg(ap), store.key, safeapply.confirm_cmd(tok), timeout=10, t=t, audit=False)
+        if c.ok and "CONFIRMED" in c.output:
+            out.append(t("safe.confirmed"))
+            return actions.Result(True, "\n".join(out))
+        if c.ok and "GONE" in c.output:
+            break
+        await asyncio.sleep(5)
+    out.append(t("safe.not_confirmed", s=timeout))
+    return actions.Result(False, "\n".join(out))
+
+
+def _fw_ctx(ap: APState) -> dict:
+    m = store.fw or {}
+    return {"fw": m}
+
+
+@app.get("/ap/{name}/firewall", response_class=HTMLResponse)
+async def device_firewall(request: Request, name: str):
+    ap = store.ap(name)
+    if ap.kind != "router":
+        raise HTTPException(404, "device not found")
+    fresh = store.fw and time.time() - store.fw["ts"] < SVC_FRESH
+    return render(request, "firewall.html", page="ap:" + name, ap=ap, ready=bool(fresh), autorefresh=False,
+                  **(_fw_ctx(ap) if fresh else {}))
+
+
+@app.get("/ap/{name}/firewall/body", response_class=HTMLResponse)
+async def device_firewall_body(request: Request, name: str):
+    ap = store.ap(name)
+    if ap.kind != "router":
+        raise HTTPException(404, "device not found")
+    await store.load_fw(max_age=SVC_FRESH)
+    return render(request, "_firewall_body.html", ap=ap, **_fw_ctx(ap))
+
+
+@app.post("/firewall/preview", response_class=HTMLResponse)
+async def firewall_preview(request: Request, op: str = Form(""), id: str = Form(""), enable: str = Form("")):
+    """Nahled zmeny firewallu (zatim zapnout/vypnout pravidlo nebo presmerovani)."""
+    require_htmx(request)
+    t = request.state.t
+    title = t("preview.title")
+    if request.state.user["role"] != "full":
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
+    r, m = store.router, store.fw
+    if not r or not m or m.get("error") and not m.get("zones"):
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    if op != "toggle":
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    it = next((x for x in m["rules"] + m["redirects"] if x["id"] == id), None)
+    if not it:
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    on = enable == "1"
+    if on == it["enabled"]:
+        return result(request, title, actions.Result(False, t("msg.no_change")))
+    cmds = fwmod.toggle_cmds(it["id"], on)
+    changes = [t("fw.do_on" if on else "fw.do_off", name=it["name"])]
+    warns = []
+    if it in m["redirects"] and on:
+        warns.append(t("fw.warn_open", name=it["name"], port=fwmod.fmt_ports(it["src_dport"])))
+    token = store.add_svc_pending(r.name, cmds, {"op": "fw_toggle", "uci": "firewall", "id": it["id"], "enable": on,
+                                                 "changes": changes})
+    shown = [*cmds, "uci commit firewall", fwmod.CHECK, *fwmod.RELOAD, t("safe.shown")]
+    return render(request, "_svc_preview.html", ap=r.name, cmds=shown, changes=changes, token=token,
+                  note=t("fw.note"), warns=warns)
+
+
 @app.post("/dhcp/preview", response_class=HTMLResponse)
 async def dhcp_preview(request: Request):
     """Nahled zmeny DHCP (staticka zapujcka, rozsah). Chyby zastavi, varovani se jen ukazou."""
@@ -2027,6 +2139,8 @@ async def services_apply(request: Request, token: str = Form(...)):
         await asyncio.sleep(0.5)
         if info.get("op") == "wan_dns":
             store.dhcp_demo_wan = list(info["servers"])
+        elif info.get("op") == "fw_toggle":
+            store.fw_demo[info["id"]] = info["enable"]
         elif info.get("uci") == "dhcp":
             dhcpmod.demo_apply(store.dhcp_demo, info)
         else:
@@ -2034,6 +2148,8 @@ async def services_apply(request: Request, token: str = Form(...)):
         r = actions.Result(True, f"{ap}: OK (demo)")
     elif info.get("uci") == "dhcp":
         r = await dhcp_apply(ap, cmds, summary, t, info.get("script"))
+    elif info.get("uci") == "firewall":
+        r = await safe_apply(ap, ["firewall"], cmds, fwmod.RELOAD, summary, t, check=fwmod.CHECK)
     else:
         lock = store.ap_lock(ap)
         if lock.locked():
@@ -2041,6 +2157,12 @@ async def services_apply(request: Request, token: str = Form(...)):
         async with lock:
             r = await actions.run(store.cfg(ap), store.key, " && ".join(cmds) + " && echo OK", timeout=90, t=t,
                                   summary=f"{summary} ({ap})")
+    if info.get("uci") == "firewall":
+        await store.load_fw(force=True)
+        resp = result(request, title, r)
+        if r.ok:
+            resp.headers["HX-Refresh"] = "true"
+        return resp
     if info.get("uci") == "dhcp":
         await store.load_dhcp(force=True)
         if r.ok and not store.opts.get("demo"):

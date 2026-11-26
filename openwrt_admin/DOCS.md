@@ -137,6 +137,7 @@ logread -e dropbear          # logins (with a dedicated user you see "owadmin" i
 | Local name / alias: add / edit / delete | router page → DNS | `uci add dhcp domain` / `uci add dhcp cname`, `uci set …`, `uci delete …` → `uci commit dhcp`, `dnsmasq reload` |
 | Upstream DNS / forwarded domain in dnsmasq | router page → DNS | `uci add_list dhcp.<cfg…>.server=…`, `noresolv=1` → commit, `dnsmasq reload`, check `nslookup nic.cz 127.0.0.1`, rollback on failure |
 | Upstream DNS on WAN | router page → DNS (red section) | `uci add_list network.wan.dns=…` (`peerdns=0`) → commit, `network reload` in the background, check, rollback on failure |
+| Turn a firewall rule / port forward on or off | router page → Firewall | `uci set firewall.<cfg…>.enabled=0` / delete → commit, `fw4 check`, `firewall reload` – with the safety net (rollback after 90 s without confirmation) |
 
 - **Adding an SSID:** name, password (8–63 characters), encryption WPA2 (`psk2`), WPA2/WPA3 (`sae-mixed`) or WPA3 (`sae`; both SAE variants also set `ieee80211w`), network (interface on the AP, e.g. `lan` or a VLAN network) and hidden; tick the radios (AP + band). The network must exist on each selected AP and the same SSID must not already be on that radio. WPA3 needs wpad with SAE (wpad-basic-mbedtls and newer).
 - Editing SSIDs changes **existing** SSIDs (`wifi-iface` sections). Tick the APs/radios (bands) the change applies to. A preview of the `uci` commands is shown first; the change is written only after confirming. The password is never shown.
@@ -232,6 +233,19 @@ The **DNS** tab on the router page (Overview | Services | DHCP | DNS) works with
 - **DNS settings** (read only) – local domain, how many static leases put their name into DNS (`dns=1`), rebind protection and its exceptions.
 
 Changes work exactly like DHCP: preview → **Apply** → `uci commit dhcp` + `/etc/init.d/dnsmasq reload`, `uci revert dhcp` on error, a configuration backup before the first change of the day, a syslog entry with the HA user. Clients may cache an old answer for a while; the lookup test shows the router's answer immediately.
+
+### Firewall (router)
+
+The **Firewall** tab on the router page reads fw4: `uci show firewall`, the real zone order per interface from `fw4 print` (which zone gets traffic from an interface first) and the listening services from `netstat`.
+
+- **Checks** at the top: the WAN interface in a zone with input ACCEPT (the router is reachable from the internet except for what a rule blocks – the open services are listed), the WAN zone with forward ACCEPT, a network or an interface in several zones (only the first one applies, the rules of the others do not), WAN without masquerading, old fw3 includes (`/etc/firewall.user`) that fw4 ignores.
+- **Open from the internet** – port forwards (`redirect` from WAN), ACCEPT rules from WAN and services on the router with their state: open (nothing blocks them), allowed by a rule, blocked by a rule, port forwarded elsewhere (DNAT goes first), closed by the zone policy. The full list of listening services is in a collapsible section.
+- **Zone map** – rows = from, columns = to; the "router" column is input to the router itself (zone input policy), the other columns are forwardings between zones, the diagonal is the forward policy inside the zone. "+ N rules" = exceptions for specific ports or addresses.
+- **Port forwards** and **rules** in configuration order (first match wins) – zones, protocol, ports, source IP/MAC, time conditions; rules that drop traffic of specific devices are tagged "block". Custom files in `/etc/nftables.d/` are only listed.
+
+With full access, existing rules and port forwards can be **turned on and off** (turning on a port forward warns that it opens a port). More editing (blocking devices including time limits, port forwards, rules) comes next.
+
+**Safety net when saving.** Firewall changes (and later network and VLAN changes) are saved like LuCI's "apply with rollback": the device backs up the affected configuration to `/tmp/owadmin-rb/<token>/`, starts a 90 s countdown, applies the change in the background (so a dropped SSH session cannot interrupt it) and runs `fw4 check` – if the check fails, the backup is restored immediately. The app then opens a new SSH connection and confirms. If it cannot reconnect (the change cut it off), the device restores the backup and reloads after 90 s on its own and logs `rollback … not confirmed`. Before the first change of the day the configuration is backed up as with DHCP.
 
 ### Statistics
 
@@ -398,6 +412,7 @@ Open pages reload every `refresh_interval` seconds (0 = off). Each browser can c
 | neighbouring networks (only on Scan, `radio_scan`) | `iwinfo <if> scan` |
 | services, adblock, banIP (only when the Services tab opens) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, allow/block list files |
 | DHCP and DNS (only when the DHCP or DNS tab opens; lookup test: `nslookup <name> 127.0.0.1`) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `resolv.conf.auto`, `ls /etc/config/*.apk-new` |
+| firewall (only when the Firewall tab opens) | `uci -X show firewall`, `fw4 print` (zone order per interface), `netstat -tulpn`, `ifstatus wan`, `ls /etc/nftables.d` |
 
 Works on APs without LuCI (only `wpad`/`hostapd` and `ubus`, present in every OpenWrt).
 
@@ -569,6 +584,7 @@ logread -e dropbear          # přihlášení (s vlastním uživatelem uvidíš 
 | Místní jméno / alias: přidat / upravit / smazat | stránka routeru → DNS | `uci add dhcp domain` / `uci add dhcp cname`, `uci set …`, `uci delete …` → `uci commit dhcp`, `dnsmasq reload` |
 | Nadřazené DNS / přesměrovaná doména v dnsmasq | stránka routeru → DNS | `uci add_list dhcp.<cfg…>.server=…`, `noresolv=1` → commit, `dnsmasq reload`, kontrola `nslookup nic.cz 127.0.0.1`, při chybě návrat |
 | Nadřazené DNS na WAN | stránka routeru → DNS (červená sekce) | `uci add_list network.wan.dns=…` (`peerdns=0`) → commit, `network reload` na pozadí, kontrola, při chybě návrat |
+| Zapnout / vypnout pravidlo firewallu nebo přesměrování | stránka routeru → Firewall | `uci set firewall.<cfg…>.enabled=0` / smazat → commit, `fw4 check`, `firewall reload` – s pojistkou (návrat po 90 s bez potvrzení) |
 
 - **Přidání SSID:** název, heslo (8–63 znaků), šifrování WPA2 (`psk2`), WPA2/WPA3 (`sae-mixed`) nebo WPA3 (`sae`; u obou SAE se nastaví i `ieee80211w`), síť (rozhraní na AP, např. `lan` nebo VLAN síť) a skrytí; zaškrtnou se rádia (AP + pásmo). Síť musí na každém vybraném AP existovat a stejné SSID na tom rádiu ještě nesmí být. WPA3 potřebuje wpad s SAE (wpad-basic-mbedtls a novější).
 - Úprava SSID mění **existující** SSID (sekce `wifi-iface`). Zaškrtnutím se vybírají AP a rádia (pásma), kterých se změna týká. Nejdřív se zobrazí náhled příkazů `uci`, zapíše se až po potvrzení. Heslo se nikde nezobrazuje.
@@ -664,6 +680,19 @@ Záložka **DNS** na stránce routeru (Přehled | Služby | DHCP | DNS) pracuje 
 - **Nastavení DNS** (jen čtení) – místní doména, kolik statických zápůjček dává jméno do DNS (`dns=1`), ochrana proti rebind a její výjimky.
 
 Změny fungují stejně jako u DHCP: náhled → **Použít** → `uci commit dhcp` + `/etc/init.d/dnsmasq reload`, při chybě `uci revert dhcp`, záloha konfigurace před první změnou dne, záznam do syslogu se jménem uživatele HA. Klienti můžou mít starou odpověď chvíli v mezipaměti; test překladu ukáže odpověď routeru hned.
+
+### Firewall (router)
+
+Záložka **Firewall** na stránce routeru čte fw4: `uci show firewall`, skutečné pořadí zón na rozhraních z `fw4 print` (která zóna dostane provoz z rozhraní jako první) a služby, které na routeru poslouchají, z `netstat`.
+
+- **Kontroly** nahoře: rozhraní WAN v zóně se vstupem ACCEPT (router je z internetu dostupný kromě toho, co blokuje pravidlo – otevřené služby se vypíšou), zóna WAN s průchodem ACCEPT, síť nebo rozhraní ve více zónách (platí jen první, pravidla ostatních ne), WAN bez maškarády, staré include z fw3 (`/etc/firewall.user`), které fw4 ignoruje.
+- **Co je otevřené z internetu** – přesměrování portů (`redirect` z WAN), pravidla ACCEPT z WAN a služby na routeru se stavem: otevřená (nic ji neblokuje), povolená pravidlem, blokovaná pravidlem, port přesměrovaný jinam (DNAT má přednost), zavřená politikou zóny. Celý seznam poslouchajících služeb je ve sbalené části.
+- **Mapa zón** – řádky = odkud, sloupce = kam; sloupec „router“ je vstup na samotný router (politika input zóny), ostatní sloupce průchody mezi zónami, na diagonále politika forward uvnitř zóny. „+ N pravidel“ = výjimky pro konkrétní porty nebo adresy.
+- **Přesměrování portů** a **pravidla** v pořadí konfigurace (první shoda vyhrává) – zóny, protokol, porty, zdrojová IP/MAC, časové podmínky; pravidla, která zahazují provoz konkrétních zařízení, mají štítek „blokace“. Vlastní soubory v `/etc/nftables.d/` se jen vypíšou.
+
+S plným přístupem jde existující pravidla a přesměrování **zapnout a vypnout** (zapnutí přesměrování upozorní, že otevře port). Další úpravy (blokování zařízení i na čas, přesměrování portů, pravidla) přijdou v dalších verzích.
+
+**Pojistka při ukládání.** Změny firewallu (a později sítí a VLAN) se ukládají jako „apply with rollback“ v LuCI: zařízení si zazálohuje dotčenou konfiguraci do `/tmp/owadmin-rb/<token>/`, spustí odpočet 90 s, změnu provede na pozadí (aby ji nepřerušilo odpojení SSH) a spustí `fw4 check` – když kontrola selže, záloha se vrátí hned. Aplikace pak otevře nové SSH spojení a změnu potvrdí. Když se připojit nejde (změna ji odřízla), zařízení po 90 s samo vrátí zálohu, znovu načte a zapíše do logu `rollback … not confirmed`. Před první změnou dne se konfigurace zálohuje jako u DHCP.
 
 ### Statistiky
 
@@ -830,6 +859,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | okolní sítě (jen po Skenovat, `radio_scan`) | `iwinfo <if> scan` |
 | služby, adblock, banIP (jen při otevření záložky Služby) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, soubory povolených/blokovaných |
 | DHCP a DNS (jen při otevření záložky DHCP nebo DNS; test překladu: `nslookup <jméno> 127.0.0.1`) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `resolv.conf.auto`, `ls /etc/config/*.apk-new` |
+| firewall (jen při otevření záložky Firewall) | `uci -X show firewall`, `fw4 print` (pořadí zón na rozhraních), `netstat -tulpn`, `ifstatus wan`, `ls /etc/nftables.d` |
 
 Funguje i na AP bez LuCI (stačí `wpad`/`hostapd` a `ubus`, které jsou v každém OpenWrt).
 
