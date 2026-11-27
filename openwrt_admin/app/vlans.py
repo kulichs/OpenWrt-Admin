@@ -372,11 +372,14 @@ def build_device(name: str, text: str, router: bool = False) -> dict:
 
 # ---------------------------------------------------------------- napric zarizenimi
 
-def compare(devs: list[dict]) -> tuple[list[dict], list[tuple]]:
-    """Radky prehledu (klic VLAN -> bunky po zarizenich) a spolecne nalezy."""
+def compare(devs: list[dict], sws: list[dict] | None = None) -> tuple[list[dict], list[tuple]]:
+    """Radky prehledu (klic VLAN -> bunky po zarizenich a switchich) a spolecne nalezy."""
+    sws = sws or []
     keys = set()
     for d in devs:
         keys |= set(d["rows"])
+    for v in sws:
+        keys |= set(v["rows"])
     order = sorted(keys, key=lambda k: (k != NATIVE, k if isinstance(k, int) else 0))
     router = next((d for d in devs if d["router"] and not d["error"]), None)
     out, issues = [], []
@@ -387,7 +390,7 @@ def compare(devs: list[dict]) -> tuple[list[dict], list[tuple]]:
             for i in (c or {}).get("ifaces", []):
                 names.add(i["name"].lower())
         label = ", ".join(sorted(names)) or "–"
-        out.append({"key": k, "label": label, "cells": cells})
+        out.append({"key": k, "label": label, "cells": cells, "sw_cells": [v["rows"].get(k) for v in sws]})
         if router and k not in router["rows"]:
             users = [d["name"] for d, c in zip(devs, cells) if c and not d["router"] and (c["ssids"] or c["ifaces"])]
             if users:
@@ -414,6 +417,124 @@ def compare(devs: list[dict]) -> tuple[list[dict], list[tuple]]:
             issues.append(("err", "vl.e_ssid_vlans", {"ssid": ss, "where": "; ".join(
                 f"{n}: {fmt_key(k)}" for k, n in sorted(kd, key=lambda x: (str(x[0]), x[1])))}))
     return out, issues
+
+
+# ---------------------------------------------------------------- spravovany switch (SNMP)
+
+def _norm(s: str) -> str:
+    s = re.sub(r"[^a-z0-9]", "", (s or "").lower())
+    return s.replace("openwrt", "")
+
+
+def switch_ports_of(sw: dict, devs: list[dict]) -> dict[str, str]:
+    """{jmeno zarizeni: id portu switche} – podle MAC zarizeni v tabulce switche, zalozne podle popisu portu."""
+    out: dict[str, str] = {}
+    arl = sw.get("arl") or {}
+    for d in devs:
+        mac = (d.get("mac") or "").lower()
+        cands = [p for p, macs in arl.items() if mac and mac in [m.lower() for m in macs]]
+        if cands:
+            out[d["name"]] = min(cands, key=lambda p: len(arl[p]))
+            continue
+        key = _norm(d["name"])
+        for p in sw.get("ports", []):
+            a = _norm(p.get("alias", ""))
+            if key and a and (key in a or a in key) and len(min(key, a, key=len)) >= 4:
+                out[d["name"]] = p["id"]
+                break
+    return out
+
+
+def _base_of(rw: dict) -> str:
+    """Fyzicky zaklad VLAN radku: eth1.40 -> eth1, br-lan.10 -> br-lan, eth1 -> eth1."""
+    for x in rw.get("l2") or []:
+        m = TAG_RE.match(x)
+        return m.group(1) if m else x
+    return ""
+
+
+def _router_base(d: dict) -> str:
+    """Port routeru ke switchi = zaklad, pres ktery vede nejvic VLAN."""
+    cnt: dict[str, int] = {}
+    for rw in d["rows"].values():
+        b = _base_of(rw)
+        if b:
+            cnt[b] = cnt.get(b, 0) + 1
+    return max(cnt, key=lambda b: (cnt[b], b)) if cnt else ""
+
+
+def switch_view(sw: dict, devs: list[dict], dev_macs: dict[str, str]) -> dict:
+    """Sloupec switche v prehledu + kontroly portu k routeru a AP.
+    sw = {"name","error","ports":[{id,num,name,alias,up,vlans_u,vlans_t,pvid}],"arl"}; devs = vysledky build_device."""
+    view = {"name": sw["name"], "error": sw.get("error") or "", "rows": {}, "issues": [], "map": {}}
+    if view["error"] or not sw.get("ports"):
+        view["error"] = view["error"] or "no ports"
+        return view
+    ports = {p["id"]: p for p in sw["ports"]}
+    readable = [d for d in devs if not d["error"]]
+    pmap = switch_ports_of(sw, [{"name": d["name"], "mac": dev_macs.get(d["name"], "")} for d in readable])
+    view["map"] = {v: k for k, v in pmap.items()}          # port -> zarizeni
+    router = next((d for d in readable if d["router"]), None)
+    rport = ports.get(pmap.get(router["name"], "")) if router else None
+    native_vid = (rport["vlans_u"][0] if rport and rport["vlans_u"] else 1)
+
+    def label(p) -> str:
+        who = view["map"].get(p["id"]) or p.get("alias") or ""
+        return (p.get("name") or p["num"]) + (f" {who}" if who else "")
+
+    # radky: klic = nativni VLAN routeru -> "native", ostatni cislo
+    for p in sw["ports"]:
+        for kind in ("untagged", "tagged"):
+            for v in p.get("vlans_u" if kind == "untagged" else "vlans_t") or []:
+                k = NATIVE if v == native_vid else v
+                r = view["rows"].setdefault(k, {"tagged": [], "untagged": [], "down": [], "vid": v})
+                if p["up"] or view["map"].get(p["id"]) or p.get("alias"):
+                    r[kind].append(label(p) + ("" if p["up"] else " ⨯"))
+                else:
+                    r["down"].append(p.get("name") or p["num"])
+    iss = view["issues"]
+    # porty k routeru a AP: musi nest presne to, co zarizeni ceka
+    for d in readable:
+        pid = pmap.get(d["name"])
+        if not pid or pid not in ports:
+            if not d["router"]:
+                iss.append(("warn", "vl.w_sw_unmapped", {"dev": d["name"]}))
+            continue
+        p = ports[pid]
+        pl = p.get("name") or p["num"]
+        u, tg = set(p.get("vlans_u") or []), set(p.get("vlans_t") or [])
+        want = {k for k, rw in d["rows"].items() if rw["ifaces"] or rw["ssids"] or rw["access"] or d["router"]}
+        if d["router"]:
+            want = {k for k in want if _base_of(d["rows"][k]) == _router_base(d)}
+        if NATIVE in want and native_vid not in u:
+            iss.append(("err", "vl.e_sw_native", {"port": pl, "dev": d["name"], "vid": native_vid,
+                                                   "u": ", ".join(map(str, sorted(u))) or "–"}))
+        for k in sorted(x for x in want if x != NATIVE):
+            if k in tg:
+                continue
+            if k in u:
+                iss.append(("err", "vl.e_sw_untagged", {"port": pl, "dev": d["name"], "vid": k}))
+            else:
+                iss.append(("err", "vl.e_sw_missing", {"port": pl, "dev": d["name"], "vid": k}))
+        extra = sorted(v for v in tg if v not in want and v != native_vid)
+        if extra and not d["router"]:
+            iss.append(("warn", "vl.w_sw_extra", {"port": pl, "dev": d["name"], "vids": ", ".join(map(str, extra))}))
+    # VLAN na portech switche, ale ne na portu k routeru (router ji ma) -> provoz se k routeru nedostane
+    if router and rport:
+        rv = set(rport.get("vlans_t") or []) | set(rport.get("vlans_u") or [])
+        rb = _router_base(router)
+        for k, rw in view["rows"].items():
+            v = rw["vid"]
+            if k in router["rows"] and _base_of(router["rows"][k]) == rb and v not in rv:
+                iss.append(("err", "vl.e_sw_router_port", {"vid": v, "port": label(rport)}))
+    # PVID x netagovana VLAN
+    for p in sw["ports"]:
+        u = p.get("vlans_u") or []
+        if len(u) > 1:
+            iss.append(("warn", "vl.w_sw_multi_u", {"port": label(p), "vids": ", ".join(map(str, u))}))
+        elif u and p.get("pvid") and p["pvid"] != u[0]:
+            iss.append(("warn", "vl.w_sw_pvid", {"port": label(p), "pvid": p["pvid"], "u": u[0]}))
+    return view
 
 
 def fmt_key(k) -> str:

@@ -177,7 +177,8 @@ def demo_switch(name: str, host: str, aps: list[APState], router_mac: str) -> AP
     sw.ports = [{"id": f"sw:{n}", "num": str(n), "up": n in speeds, "speed": speeds.get(n, 0),
                  "duplex": "full" if n in speeds else "", "kind": "switch",
                  "name": f"g{n}", "ifindex": n, "alias": {24: "router", 2: "AP-Office", 3: "AP-Living", 8: "dmz"}.get(n, ""),
-                 "vlans_u": [100] if n == 8 else [1], "vlans_t": [10, 30] if n in (2, 3, 24) else []} for n in range(1, 25)]
+                 "vlans_u": [100] if n == 8 else [1], "vlans_t": [10, 30] if n in (2, 24) else [10] if n == 3 else [],  # port 3: chybi VLAN 30 (ukazka kontroly)
+                 "pvid": 100 if n == 8 else 1} for n in range(1, 25)]
     return sw
 
 

@@ -2,6 +2,15 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.27.0
+- VLAN page: **managed switch column** (SNMP, Q-BRIDGE-MIB) – per VLAN the switch ports tagged (T) / untagged (U) with the device on each port, the native VLAN, free ports only as a count. PVID (`dot1qPvid`) is now read too.
+- Switch checks: the port to an AP or the router missing a VLAN the device uses, untagged instead of tagged, a different native VLAN; a VLAN not on the port to the router; several untagged VLANs on a port; PVID different from the untagged VLAN; extra VLANs (warning); device port not found. Ports are matched by the device MAC in the switch table or by the port description.
+- Verified: switch layouts like a real 24-port switch (all consistent; and with deliberate errors: missing VLAN, untagged instead of tagged, wrong PVID), demo cs + en (one deliberate missing VLAN on the demo switch). Not yet on the real network.
+---
+- Stránka VLAN: **sloupec spravovaného switche** (SNMP, Q-BRIDGE-MIB) – u každé VLAN porty switche tagovaně (T) / netagovaně (U) se zařízením na portu, nativní VLAN, volné porty jen jako počet. Nově se čte i PVID (`dot1qPvid`).
+- Kontroly switche: port k AP nebo routeru nemá VLAN, kterou zařízení používá, má ji netagovaně místo tagovaně, jinou nativní VLAN; VLAN chybí na portu k routeru; víc netagovaných VLAN na portu; PVID jiné než netagovaná VLAN; VLAN navíc (upozornění); port zařízení nenalezen. Porty se párují podle MAC zařízení v tabulce switche nebo podle popisu portu.
+- Ověřeno: rozložení jako u skutečného 24portového switche (vše sedí; a s úmyslnými chybami: chybějící VLAN, netagovaně místo tagovaně, špatné PVID), demo cs + en (na demo switchi jedna úmyslně chybějící VLAN). Na skutečné síti zatím ne.
+
 ## 0.26.0
 - **New network on the router** (VLAN page, full access): name, VLAN ID and subnet suggestions, VLAN method by the router (DSA bridge-vlan, swconfig switch_vlan, or an 8021q device on a port), DHCP range, firewall zone (new isolated zone with optional internet and DHCP/DNS rules, an existing zone, or none). One preview, saved at once with the safety net (network + dhcp + firewall, fw4 check).
 - **Delete a network** (✕ in the router column): cleans up its bridge, VLAN device, switch/bridge VLAN, DHCP section and a zone used only by it (with forwardings and rules). Not for lan, wan, the management network or non-IP interfaces; red warning when APs still use the VLAN.

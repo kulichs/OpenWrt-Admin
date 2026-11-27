@@ -694,8 +694,13 @@ class Store:
             return dv
 
         devs = list(await asyncio.gather(*(one(d) for d in devs_in)))
-        rows, issues = vlanmod.compare(devs)
-        self.vl = {"ts": time.time(), "devs": devs, "rows": rows, "issues": issues}
+        macs = {a.name: a.mac for a in self.aps if a.mac}
+        if self.router:
+            macs[self.router.name] = self.router_mac()
+        sws = [vlanmod.switch_view({"name": sw.name, "error": sw.error if not sw.online else "", "ports": sw.ports,
+                                    "arl": sw.arl or {}}, devs, macs) for sw in self.switches]
+        rows, issues = vlanmod.compare(devs, sws)
+        self.vl = {"ts": time.time(), "devs": devs, "sws": sws, "rows": rows, "issues": issues}
 
     def arp_ips(self) -> set[str]:
         """IP, ktere router vidi v ARP (i zarizeni s pevnou IP mimo DHCP) – navrh volne IP je vynecha."""

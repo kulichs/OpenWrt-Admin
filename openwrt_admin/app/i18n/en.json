@@ -926,7 +926,7 @@
   "vl.n_not_uplink": "only on the device's ports, not on the uplink",
   "vl.hint": "Rows follow how traffic goes over the cable to the router (uplink): a VLAN number or \"untagged\". Network names may differ between devices; they are matched by VLAN. For each device: the network (address, or \"none\" = bridging only), 📶 SSIDs with bands (struck through = disabled), 🔌 ports where the VLAN is available, and the bridge. Read-only – nothing changes; keys and passwords are filtered out on the device.",
   "vl.switch": "Switch between the router and the APs",
-  "vl.switch_text": "The app does not read a managed switch (e.g. Netgear GS724T) yet. For a VLAN to get from the router to an AP, the switch must carry every VLAN from the table: tagged (T) on the port to the router and on the ports to the APs that use it; \"untagged\" = the VLAN the port has as PVID (untagged, usually 1). A port to an end device in one network (e.g. a server in the DMZ) has that VLAN untagged and as PVID. Writing over SNMP is a possible future extension.",
+  "vl.switch_text": "The app reads a managed switch between the router and the APs over SNMP when it is configured (option switches) – it then gets its own column and the ports to the router and APs are checked. Without it: for a VLAN to get from the router to an AP, the switch must carry every VLAN from the table tagged (T) on the port to the router and on the ports to the APs that use it; \"untagged\" = the VLAN the port has as PVID (untagged, usually 1). A port to an end device in one network (e.g. a server in the DMZ) has that VLAN untagged and as PVID. Writing to the switch over SNMP is a possible future extension.",
   "vl.e_two_bridges": "{dev} is in two bridges ({brs}). Only one applies (by start order) – the networks may get joined together, or one bridge stays disconnected. Keep it in one only.",
   "vl.e_no_switch_vlan": "{dev} is used, but VLAN {vid} is not configured on the device's switch (swconfig / bridge-vlan) – traffic will not pass.",
   "vl.e_ssid_no_iface": "SSID {ssid} is assigned to network {net}, which does not exist.",
@@ -990,5 +990,15 @@
   "nw.w_ap_has": "APs already have VLAN {vid}: {aps} – they will connect once it is created.",
   "nw.c_del_aps": "These APs use this VLAN: {aps}. Their SSIDs and ports in it stop working (left without the router).",
   "nw.w_del_hosts": "The network has {n} static leases ({names}) – they stay in DHCP but will not apply.",
-  "nw.w_del_clients": "Devices in network \"{name}\" lose their connection."
+  "nw.w_del_clients": "Devices in network \"{name}\" lose their connection.",
+  "vl.sw_legend": "T tagged, U untagged, ⨯ down",
+  "vl.sw_down": "+ {n} free ports",
+  "vl.w_sw_unmapped": "Could not find which switch port {dev} is on (its MAC is not in the switch table, no port description matches) – its port is not checked. A port description with the device name helps.",
+  "vl.e_sw_native": "Port {port} to {dev} has VLAN {u} untagged, but the router's native network is VLAN {vid} – {dev} will be in the wrong network.",
+  "vl.e_sw_untagged": "Port {port} to {dev} has VLAN {vid} untagged, but {dev} expects it tagged – set T on the switch.",
+  "vl.e_sw_missing": "Port {port} to {dev} does not carry VLAN {vid}, which {dev} uses – add it on the switch as tagged (T).",
+  "vl.w_sw_extra": "Port {port} to {dev} also carries VLAN {vids}, which {dev} does not use – harmless, but can be removed.",
+  "vl.e_sw_router_port": "VLAN {vid} is on switch ports but not on the port to the router ({port}) – its traffic cannot reach the router.",
+  "vl.w_sw_multi_u": "Port {port} has several VLANs untagged ({vids}) – a device on it cannot tell which network it belongs to.",
+  "vl.w_sw_pvid": "Port {port} has PVID {pvid} but VLAN {u} untagged – incoming traffic goes to VLAN {pvid}, outgoing comes from VLAN {u}."
 }

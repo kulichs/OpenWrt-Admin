@@ -220,3 +220,6 @@ openwrt_admin/
   s jejich `uci -X` jmény). Nové sekce `owa_<typ>_<síť>` (bv/sv/vd/br/zn/zf/r). DSA bez bridge-vlan se nemění (jen
   návod). Mazání uklidí jen to, co nepoužívá jiná síť; nikdy lan/wan/správcovská síť. Uložení: `info["uci"]="net"`
   → `safe_apply(network+dhcp+firewall)`. Demo: `netwiz.uci_sim` nad textem `uci show` (network, firewall), dhcp model.
+- **Switch ve VLAN (`vlans.switch_view`):** porty ze `store.switches` (`vlans_u`, `vlans_t`, `pvid` z SNMP). Port zařízení =
+  MAC zařízení v `arl` (nejmenší port), záložně popis portu. Nativní řádek = VLAN netagovaná na portu k routeru. U routeru
+  se kontrolují jen VLAN na „základu“ s nejvíc VLAN (`_router_base`) – VLAN na jiném portu routeru (např. eth1.100) ne.

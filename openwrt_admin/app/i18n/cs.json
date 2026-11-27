@@ -934,7 +934,7 @@
   "vl.n_not_uplink": "jen na portech zařízení, ne na uplinku",
   "vl.hint": "Řádky jsou podle toho, jak jde provoz po kabelu k routeru (uplink): číslo VLAN, nebo „bez tagu“. Jména sítí se na zařízeních můžou lišit, párují se podle VLAN. U každého zařízení: síť (adresa nebo „none“ = jen přemosťuje), 📶 SSID s pásmy (přeškrtnuté = vypnuté), 🔌 porty, kde je VLAN vyvedená, a most. Jen čtení – nic se nemění; klíče a hesla se odfiltrují už na zařízení.",
   "vl.switch": "Switch mezi routerem a AP",
-  "vl.switch_text": "Spravovaný switch (např. Netgear GS724T) aplikace zatím nečte. Aby VLAN došla z routeru až k AP, musí být na switchi každá VLAN z tabulky: tagovaně (T) na portu k routeru a na portech k AP, které ji používají; „bez tagu“ = VLAN, kterou má port jako PVID (netagovaně, obvykle 1). Port ke koncovému zařízení v jedné síti (např. server v DMZ) má tu VLAN netagovaně a jako PVID. Zápis přes SNMP je možné budoucí rozšíření.",
+  "vl.switch_text": "Spravovaný switch mezi routerem a AP aplikace čte přes SNMP, když je v konfiguraci (volba switches) – pak má v tabulce vlastní sloupec a kontrolují se porty k routeru a AP. Bez toho platí: aby VLAN došla z routeru až k AP, musí být na switchi každá VLAN z tabulky tagovaně (T) na portu k routeru a na portech k AP, které ji používají; „bez tagu“ = VLAN, kterou má port jako PVID (netagovaně, obvykle 1). Port ke koncovému zařízení v jedné síti (např. server v DMZ) má tu VLAN netagovaně a jako PVID. Zápis na switch přes SNMP je možné budoucí rozšíření.",
   "vl.e_two_bridges": "{dev} je ve dvou mostech ({brs}). Platí jen jeden (podle pořadí startu) – sítě se můžou spojit dohromady, nebo jeden most zůstane bez spojení. Nech ho jen v jednom.",
   "vl.e_no_switch_vlan": "Používá {dev}, ale VLAN {vid} není nastavená na switchi zařízení (swconfig / bridge-vlan) – provoz neprojde.",
   "vl.e_ssid_no_iface": "SSID {ssid} je přiřazené k síti {net}, která neexistuje.",
@@ -998,5 +998,15 @@
   "nw.w_ap_has": "VLAN {vid} už mají AP: {aps} – po vytvoření se s nimi propojí.",
   "nw.c_del_aps": "Tuhle VLAN používají AP: {aps}. Jejich SSID a porty v ní přestanou fungovat (zůstanou bez routeru).",
   "nw.w_del_hosts": "V síti je {n} statických zápůjček ({names}) – zůstanou v DHCP, ale nebudou platit.",
-  "nw.w_del_clients": "Zařízení v síti „{name}“ přijdou o spojení."
+  "nw.w_del_clients": "Zařízení v síti „{name}“ přijdou o spojení.",
+  "vl.sw_legend": "T tagovaně, U netagovaně, ⨯ odpojeno",
+  "vl.sw_down": "+ {n} volných portů",
+  "vl.w_sw_unmapped": "Nepodařilo se zjistit, na kterém portu switche je {dev} (MAC není v tabulce switche, popis portu neodpovídá) – jeho port se nekontroluje. Pomůže dát portu popis se jménem zařízení.",
+  "vl.e_sw_native": "Port {port} k {dev} má netagovaně VLAN {u}, ale nativní síť routeru je VLAN {vid} – {dev} bude ve špatné síti.",
+  "vl.e_sw_untagged": "Port {port} k {dev} má VLAN {vid} netagovaně, ale {dev} ji čeká tagovanou – nastav na switchi T.",
+  "vl.e_sw_missing": "Port {port} k {dev} nemá VLAN {vid}, kterou {dev} používá – přidej ji na switchi tagovaně (T).",
+  "vl.w_sw_extra": "Port {port} k {dev} nese i VLAN {vids}, kterou {dev} nepoužívá – neškodí, ale jde odebrat.",
+  "vl.e_sw_router_port": "VLAN {vid} je na portech switche, ale ne na portu k routeru ({port}) – provoz se k routeru nedostane.",
+  "vl.w_sw_multi_u": "Port {port} má netagovaně víc VLAN ({vids}) – zařízení na něm nepozná, do které sítě patří.",
+  "vl.w_sw_pvid": "Port {port} má PVID {pvid}, ale netagovaně VLAN {u} – příchozí provoz půjde do VLAN {pvid}, odchozí z VLAN {u}."
 }

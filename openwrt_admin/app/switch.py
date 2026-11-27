@@ -34,6 +34,7 @@ Q_FDB_PORT = "1.3.6.1.2.1.17.7.1.2.2.1.2"
 Q_VLAN_NAME = "1.3.6.1.2.1.17.7.1.4.3.1.1"
 Q_VLAN_EGRESS = "1.3.6.1.2.1.17.7.1.4.3.1.2"
 Q_VLAN_UNTAGGED = "1.3.6.1.2.1.17.7.1.4.3.1.4"
+Q_PVID = "1.3.6.1.2.1.17.7.1.4.5.1.1"          # dot1qPvid (index = bridge port)
 DUPLEX = "1.3.6.1.2.1.10.7.2.1.19"
 
 ETHER_TYPES = {6, 62, 69, 117}  # ethernetCsmacd, fastEther, fastEtherFX, gigabitEthernet
@@ -116,6 +117,7 @@ def build_state(name: str, host: str, d: dict) -> APState:
     # VLANy na portech
     egress = {int(k): ports_of_bitmap(v) for k, v in (d.get("vlan_egress") or {}).items() if k.isdigit()}
     untagged = {int(k): ports_of_bitmap(v) for k, v in (d.get("vlan_untagged") or {}).items() if k.isdigit()}
+    pvid = {int(k): v for k, v in (d.get("pvid") or {}).items() if k.isdigit() and isinstance(v, int)}
 
     for port in sorted(port_if):
         ifi = port_if[port]
@@ -129,6 +131,7 @@ def build_state(name: str, host: str, d: dict) -> APState:
             "kind": "switch", "name": names.get(ifi, ""), "alias": alias.get(ifi, ""), "ifindex": ifi,
             "vlans_u": sorted(v for v, ps in untagged.items() if port in ps),
             "vlans_t": sorted(v for v, ps in egress.items() if port in ps and port not in untagged.get(v, set())),
+            "pvid": pvid.get(port, 0),
         })
 
     fdb = parse_fdb(d.get("q_fdb") or {}, d.get("tp_fdb") or {})
@@ -140,6 +143,7 @@ TABLES = {
     "system": SYSTEM, "if_type": IF_TYPE, "if_oper": IF_OPER, "if_highspeed": IF_HIGHSPEED, "if_speed": IF_SPEED,
     "if_name": IF_NAME, "if_alias": IF_ALIAS, "bridge_addr": BRIDGE_ADDR, "base_port_if": BASE_PORT_IF,
     "q_fdb": Q_FDB_PORT, "vlan_egress": Q_VLAN_EGRESS, "vlan_untagged": Q_VLAN_UNTAGGED, "duplex": DUPLEX,
+    "pvid": Q_PVID,
 }
 
 
