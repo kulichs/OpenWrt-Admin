@@ -181,6 +181,7 @@ openwrt_admin/
     blocks.py                # blokovani zarizeni: pravidlo owa_blk_<id> + cron na routeru (rozvrh, docasne)
     portfwd.py               # presmerovani portu (owa_fwd_<id>, kontroly) + pojistka proti odriznuti spravy
     zones.py                 # mapa zon klikanim: input/forward zony, forwarding (owa_zf_<id>), rizika
+    vlans.py                 # prehled VLAN router + AP (swconfig, DSA, 8021q, 19.07) a kontroly konzistence
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/
@@ -209,3 +210,8 @@ openwrt_admin/
 - **Mapa zón (`app/zones.py`):** změny z matice jako `input|zona|1`, `zfwd|zona|0`, `fwd|odkud|kam|1`, všechny v jednom
   náhledu a jedné pojistce. JS (`owCell`) v `_firewall_body.html` jen značí políčka a skládá skryté inputy `ch`.
   WAN zóna = `wan_zones` + `wan_zone` (i zóna, kde je WAN s dalšími sítěmi – pak `zm.w_mixed`).
+- **VLAN (`app/vlans.py`):** řádky podle klíče „na kabelu k routeru“ (`native` nebo číslo), ne podle jmen sítí.
+  swconfig: CPU port = tagovaný ve všech VLAN, uplink = port tagovaný v nejvíc VLAN; DSA podobně z `bridge-vlan`.
+  Zařízení ve dvou mostech se pro přehled přiřadí k menšímu mostu (jinak falešné navazující chyby). Tajné volby
+  se filtrují na zařízení přes `grep -v -e …` (BusyBox/musl nezná `\|`). `fmt_key` je jazykově neutrální
+  (`@@N@@` → „bez tagu“ v šabloně). Testovat i 19.07 zápis (interface type=bridge + ifname) a DSA bez bridge-vlan.

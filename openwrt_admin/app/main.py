@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, zones as zonemod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, zones as zonemod, vlans as vlanmod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
@@ -154,6 +154,7 @@ class Store:
         self.fw_demo_blocks: dict[str, dict] = {}       # demo: blokace (sekce -> pravidlo + radky cronu)
         self.fw_demo_fwd: dict[str, dict | None] = {}   # demo: presmerovani portu (sekce -> data, None = smazano)
         self.fw_demo_zops: list[dict] = []              # demo: zmeny mapy zon (politiky, pruchody)
+        self.vl: dict | None = None                     # prehled VLAN (router + AP)
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -663,6 +664,31 @@ class Store:
         if m["error"] and not res.ok:
             m["error"] = res.output[-300:]
         self.fw = m
+
+    async def load_vlans(self, max_age: float = 60.0, force: bool = False):
+        """Prehled VLAN: site a SSID routeru a vsech AP (jen cteni, bez zapisu do logu zarizeni)."""
+        if not force and self.vl and time.time() - self.vl["ts"] < max_age:
+            return
+        devs_in = [*([self.router] if self.router else []), *self.aps]
+
+        async def one(d) -> dict:
+            is_router = d is self.router
+            if self.opts.get("demo"):
+                text = vlanmod.DEMO.get("router" if is_router else d.name, "")
+                if not d.online or not text:
+                    return {**vlanmod.build_device(d.name, "", is_router), "error": d.error or "offline"}
+                return vlanmod.build_device(d.name, text, is_router)
+            if not d.online:
+                return {**vlanmod.build_device(d.name, "", is_router), "error": d.error or "offline"}
+            res = await actions.run(self.cfg(d.name), self.key, vlanmod.READ_CMD, timeout=25, audit=False)
+            dv = vlanmod.build_device(d.name, res.output, is_router)
+            if dv["error"] and not res.ok:
+                dv["error"] = res.output[-300:]
+            return dv
+
+        devs = list(await asyncio.gather(*(one(d) for d in devs_in)))
+        rows, issues = vlanmod.compare(devs)
+        self.vl = {"ts": time.time(), "devs": devs, "rows": rows, "issues": issues}
 
     def arp_ips(self) -> set[str]:
         """IP, ktere router vidi v ARP (i zarizeni s pevnou IP mimo DHCP) – navrh volne IP je vynecha."""
@@ -2424,6 +2450,18 @@ async def services_search(request: Request, ap: str = Form(""), kind: str = Form
     r = await actions.run(store.cfg(ap), store.key, svcmod.search_cmd(kind, v, data.get("searchcmd", "search")),
                           timeout=60, t=t, audit=False)
     return result(request, title, r)
+
+
+@app.get("/vlans", response_class=HTMLResponse)
+async def vlans_page(request: Request):
+    fresh = store.vl and time.time() - store.vl["ts"] < SVC_FRESH
+    return render(request, "vlans.html", page="vlans", ready=bool(fresh), autorefresh=False, vl=store.vl if fresh else None)
+
+
+@app.get("/vlans/body", response_class=HTMLResponse)
+async def vlans_body(request: Request, force: int = 0):
+    await store.load_vlans(max_age=SVC_FRESH, force=bool(force))
+    return render(request, "_vlans_body.html", vl=store.vl)
 
 
 @app.get("/stats", response_class=HTMLResponse)

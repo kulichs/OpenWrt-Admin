@@ -1,0 +1,51 @@
+<div id="vl-body">
+{% if not vl or not vl.devs %}
+<div class="panel"><p class="muted">{{ t("vl.none") }}</p></div>
+{% else %}
+{% set ns = namespace(items=[]) %}
+{% for d in vl.devs %}{% for lvl, k, a in d.issues %}{% set ns.items = ns.items + [(lvl, d.name, k, a)] %}{% endfor %}{% endfor %}
+{% for lvl, k, a in vl.issues %}{% set ns.items = ns.items + [(lvl, "", k, a)] %}{% endfor %}
+<div class="panel">
+  <h2>{{ t("vl.checks") }} <span class="muted small">{{ ns.items | length }}</span>
+    <button type="button" class="secondary small" style="float:right" hx-get="{{ base }}/vlans/body?force=1" hx-target="#vl-body" hx-swap="outerHTML">{{ t("vl.reload") }}</button></h2>
+  {% if ns.items %}
+  <ul class="warnlist">
+    {% for lvl, dn, k, a in ns.items | sort(attribute='0') %}
+    <li class="{{ 'err' if lvl == 'err' }}">{{ "⛔" if lvl == "err" else "⚠" }} {% if dn %}<b>{{ dn }}</b>: {% endif %}{{ t(k, **a) | replace('@@N@@', t('vl.native')) }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="good">✓ {{ t("vl.all_ok") }}</p>{% endif %}
+</div>
+
+<div class="panel">
+  <h2>{{ t("vl.matrix") }}</h2>
+  <div class="matrix-wrap"><table class="list vlmatrix">
+    <thead><tr><th>{{ t("vl.on_wire") }}</th>
+      {% for d in vl.devs %}<th>{{ d.name }}{% if d.router %} <span class="tag">{{ t("router.kind") }}</span>{% endif %}<br>
+        <span class="small muted">{% if d.error %}<span class="err">{{ t("vl.unreadable") }}</span>{% else %}{{ t("vl.m_" ~ d.method) }}{% if d.uplink %} · {{ t("vl.uplink") }} {{ d.uplink }}{% endif %}{% endif %}</span></th>{% endfor %}</tr></thead>
+    {% for r in vl.rows %}
+    <tr><th>{% if r.key == "native" %}{{ t("vl.native") }}{% else %}VLAN {{ r.key }}{% endif %}<br><span class="small muted">{{ r.label }}</span></th>
+      {% for c in r.cells %}{% set d = vl.devs[loop.index0] %}
+      <td>{% if d.error %}<span class="muted">?</span>
+      {% elif not c %}<span class="muted">–</span>
+      {% else %}
+        {% for i in c.ifaces %}<div><b>{{ i.name }}</b> <span class="small muted">{{ i.ip or i.proto }}</span></div>{% endfor %}
+        {% for g in c.ssid_groups %}<div class="small">📶 {{ g.ssid }} <span class="muted">{{ g.on | join("+") }}{% if g.off %} <s title="{{ t('vl.off') }}">{{ g.off | join("+") }}</s>{% endif %}</span></div>{% endfor %}
+        {% if c.access %}<div class="small">🔌 {{ c.access | join(", ") }}</div>{% endif %}
+        {% if r.key == "native" and c.vid %}<div class="small muted">{{ t("vl.internal", vid=c.vid) }}</div>{% endif %}
+        {% if c.note %}<div class="small bad">{{ t(c.note) }}</div>{% endif %}
+        <div class="small muted mono">{{ (c.bridges or c.l2) | join(", ") }}</div>
+      {% endif %}</td>
+      {% endfor %}</tr>
+    {% endfor %}
+  </table></div>
+  <p class="muted small">{{ t("vl.hint") }}</p>
+  {% for d in vl.devs if d.error %}<p class="small bad">{{ d.name }}: <span class="mono">{{ d.error[:200] }}</span></p>{% endfor %}
+</div>
+
+<div class="panel">
+  <h2>{{ t("vl.switch") }}</h2>
+  <p class="small">{{ t("vl.switch_text") }}</p>
+</div>
+{% endif %}
+</div>

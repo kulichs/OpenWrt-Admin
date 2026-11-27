@@ -2,6 +2,19 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.25.0
+- New **VLAN** page: networks and SSIDs of the router and all APs in one table (read-only), rows by how traffic goes over the cable to the router (VLAN number or untagged), so differently named networks on different devices line up. Each cell shows the network and its address, SSIDs with bands, ports and the bridge.
+  - Understands swconfig (switch_vlan), DSA (bridge-vlan), VLAN on a port without a switch (eth1.N) and the old 19.07 style.
+  - Checks: a VLAN device in two bridges, a VLAN missing on the device's switch, SSID → missing network, the same SSID in different networks or VLANs, a VLAN used by an AP but missing on the router; warnings for an AP address in a non-management network, several default gateways, a bare CPU port in a bridge, an address outside the router's subnet.
+  - Keys and passwords are filtered out on the device (POSIX `grep -v -e`), they never reach the app.
+- Verified: parsing of swconfig, DSA, 8021q and 19.07 configurations (including real-world-like layouts with a shared native VLAN and an AP with an IP in a guest network), secret filtering, demo cs + en. Not yet on the real network.
+---
+- Nová stránka **VLAN**: sítě a SSID routeru a všech AP v jedné tabulce (jen čtení), řádky podle toho, jak jde provoz po kabelu k routeru (číslo VLAN nebo bez tagu), takže se srovnají i různě pojmenované sítě na různých zařízeních. V buňce je síť a její adresa, SSID s pásmy, porty a most.
+  - Rozumí swconfigu (switch_vlan), DSA (bridge-vlan), VLAN na portu bez switche (eth1.N) i starému zápisu 19.07.
+  - Kontroly: VLAN zařízení ve dvou mostech, VLAN chybí na switchi zařízení, SSID → neexistující síť, stejné SSID v různých sítích nebo VLAN, VLAN použitá na AP, ale chybí na routeru; upozornění na adresu AP v nesprávcovské síti, víc výchozích bran, holý CPU port v mostu, adresu mimo síť routeru.
+  - Klíče a hesla se odfiltrují už na zařízení (POSIX `grep -v -e`), do aplikace nedorazí.
+- Ověřeno: zpracování konfigurací swconfig, DSA, 8021q a 19.07 (i rozložení podobná skutečným – sdílená nativní VLAN, AP s adresou v hostovské síti), filtrování tajných údajů, demo cs + en. Na skutečné síti zatím ne.
+
 ## 0.24.0
 - **Zone map editable by clicking** (Firewall tab, full access): a click switches a cell, changed cells are dashed and can be undone, "Preview changes" saves all of them at once with the safety net. Router column = zone input ACCEPT/REJECT, diagonal = forward inside the zone, other cells = `forwarding` sections (new ones named `owa_zf_<id>`, a disabled one is turned on, removing deletes the enabled ones).
   - Red preview: opening the router, a zone or the zone itself to traffic from the internet; closing input from the zone the app connects from without a rule for its SSH port.

@@ -262,6 +262,10 @@ table.fwmatrix td.edit:hover { outline: 1px solid var(--accent); outline-offset:
 table.fwmatrix td.pending { outline: 2px dashed var(--ok); outline-offset: -3px; background: color-mix(in srgb, var(--ok) 18%, transparent); }
 form.matrix-form { margin-top: .6rem; align-items: center; }
 form.matrix-form[hidden] { display: none; }
+.vlmatrix td, .vlmatrix th { vertical-align: top; }
+.vlmatrix td > div { margin-bottom: .15rem; }
+.vlmatrix th:first-child { white-space: nowrap; }
+.bad { color: var(--bad); } .good { color: var(--good); }
 tr.row-bad td { background: color-mix(in srgb, var(--bad) 12%, transparent); }
 /* blokace (0.22.0) */
 .block-form { display: block; margin-top: .8rem; }

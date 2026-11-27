@@ -266,6 +266,16 @@ With full access, existing rules and port forwards can be **turned on and off** 
 
 **Safety net when saving.** Firewall changes (and later network and VLAN changes) are saved like LuCI's "apply with rollback": the device backs up the affected configuration to `/tmp/owadmin-rb/<token>/`, starts a 90 s countdown, applies the change in the background (so a dropped SSH session cannot interrupt it) and runs `fw4 check` – if the check fails, the backup is restored immediately. The app then opens a new SSH connection and confirms. If it cannot reconnect (the change cut it off), the device restores the backup and reloads after 90 s on its own and logs `rollback … not confirmed`. Before the first change of the day the configuration is backed up as with DHCP.
 
+### VLANs and networks
+
+The **VLAN** page (top bar) reads the networks and SSIDs of the router and all APs at once and shows them in one table – read-only, nothing changes on the devices. Keys and passwords are filtered out on the device already (`grep -v`), they never reach the app.
+
+- **Rows** follow how traffic goes over the cable to the router (the uplink): a VLAN number or "untagged". Network names often differ between devices (`HOST` / `host`), so rows are matched by VLAN, not by name.
+- **Each cell**: the network (address, or `none` = the AP only bridges it), 📶 SSIDs with bands (struck through = disabled), 🔌 ports where the VLAN is available (e.g. an access port), the bridge. The column header shows how the device writes VLANs and which port is its uplink.
+- Supported ways of writing VLANs: **swconfig** (older hardware with a switch: `switch_vlan`, `eth0.<vid>`; the CPU port is the one tagged in all VLANs, the uplink the port tagged in the most VLANs), **DSA** (`bridge-vlan`, `br-lan.<vid>`), **VLAN on a port without a switch** (`eth1.<vid>`, `8021q` device or just the name in the bridge ports) and the old **19.07** style (interface `type=bridge` + `ifname`).
+- **Checks** – errors: the same VLAN device in two bridges (only one applies, the networks may get joined), a VLAN used but missing on the device's switch, an SSID pointing to a network that does not exist, the same SSID in different networks on one AP or in different VLANs on different APs (roaming lands a client in another network), a VLAN used by an AP but missing on the router. Warnings: the AP has an address in another network than the management one (it is reachable from there – use proto `none`), a default gateway on several networks, a bare CPU port next to its VLANs in a bridge, an SSID in a network that leads nowhere, an AP address outside the router's subnet of that VLAN.
+- The managed switch between the router and the APs is not read yet; the page explains what it has to carry (every VLAN tagged on the ports to the router and APs, "untagged" = PVID).
+
 ### Statistics
 
 The **Statistics** page (option `stats`, on by default) shows what the network is doing right now and in the last hour:
@@ -733,6 +743,16 @@ S plným přístupem jde existující pravidla a přesměrování **zapnout a vy
 - Ukládá se s pojistkou; ta zálohuje a vrací i `/etc/crontabs/root` spolu s konfigurací firewallu a podle potřeby zapne a restartuje `cron`.
 
 **Pojistka při ukládání.** Změny firewallu (a později sítí a VLAN) se ukládají jako „apply with rollback“ v LuCI: zařízení si zazálohuje dotčenou konfiguraci do `/tmp/owadmin-rb/<token>/`, spustí odpočet 90 s, změnu provede na pozadí (aby ji nepřerušilo odpojení SSH) a spustí `fw4 check` – když kontrola selže, záloha se vrátí hned. Aplikace pak otevře nové SSH spojení a změnu potvrdí. Když se připojit nejde (změna ji odřízla), zařízení po 90 s samo vrátí zálohu, znovu načte a zapíše do logu `rollback … not confirmed`. Před první změnou dne se konfigurace zálohuje jako u DHCP.
+
+### VLAN a sítě
+
+Stránka **VLAN** (horní lišta) načte sítě a SSID routeru a všech AP najednou a ukáže je v jedné tabulce – jen čtení, na zařízeních se nic nemění. Klíče a hesla se odfiltrují už na zařízení (`grep -v`), do aplikace vůbec nedorazí.
+
+- **Řádky** jsou podle toho, jak jde provoz po kabelu k routeru (uplink): číslo VLAN, nebo „bez tagu“. Jména sítí se na zařízeních často liší (`HOST` / `host`), proto se párují podle VLAN, ne podle jména.
+- **V každé buňce**: síť (adresa, nebo `none` = AP ji jen přemosťuje), 📶 SSID s pásmy (přeškrtnuté = vypnuté), 🔌 porty, kde je VLAN vyvedená (např. přístupový port), most. Záhlaví sloupce ukazuje, jak zařízení VLAN zapisuje a který port je jeho uplink.
+- Podporované zápisy VLAN: **swconfig** (starší HW se switchem: `switch_vlan`, `eth0.<vid>`; CPU port = tagovaný ve všech VLAN, uplink = port tagovaný v nejvíc VLAN), **DSA** (`bridge-vlan`, `br-lan.<vid>`), **VLAN na portu bez switche** (`eth1.<vid>`, zařízení `8021q` nebo jen jméno v portech mostu) a starý zápis **19.07** (rozhraní `type=bridge` + `ifname`).
+- **Kontroly** – chyby: stejné VLAN zařízení ve dvou mostech (platí jen jeden, sítě se můžou spojit), VLAN použitá, ale nenastavená na switchi zařízení, SSID u sítě, která neexistuje, stejné SSID v různých sítích na jednom AP nebo v různých VLAN na různých AP (při přechodu se klient ocitne v jiné síti), VLAN, kterou AP používá, ale router ji nemá. Upozornění: AP má adresu i v jiné než správcovské síti (je z ní dostupné – použij proto `none`), výchozí brána u víc sítí, holý CPU port vedle svých VLAN v mostu, SSID v síti, která nikam nevede, adresa AP mimo síť routeru v té VLAN.
+- Spravovaný switch mezi routerem a AP se zatím nečte; stránka vysvětluje, co musí přenášet (každou VLAN tagovaně na portech k routeru a AP, „bez tagu“ = PVID).
 
 ### Statistiky
 
