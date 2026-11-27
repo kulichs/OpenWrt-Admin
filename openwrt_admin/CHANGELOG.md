@@ -2,6 +2,11 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.29.1
+- Firewall tab: the intro text no longer says that only turning rules on and off is possible (blocking, port forwards and the zone map have been there since 0.22–0.24).
+---
+- Záložka Firewall: úvodní text už netvrdí, že jde jen zapínat a vypínat pravidla (blokování, přesměrování portů a mapa zón jsou tam od 0.22–0.24).
+
 ## 0.29.0
 - **SSID by VLAN**: the network of a new SSID is chosen by VLAN, each AP uses its own network name (HOST / host); radios of APs without that network are disabled, the preview refuses them.
 - **Move an SSID to another network** (SSID page, Network: unchanged / VLAN …), with a warning that clients reconnect into the new network.

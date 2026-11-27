@@ -753,7 +753,7 @@
   "dns.note_up": "Po Použít: uci commit dhcp, reload dnsmasq a kontrola překladu nic.cz (s automatickým návratem).",
   "dns.note_wan": "Po Použít: uci commit network a reload sítě – internet může na pár sekund vypadnout. Pak kontrola překladu nic.cz, při chybě návrat k původním serverům.",
   "fw.loading": "Načítám firewall z routeru…",
-  "fw.intro": "Zóny, průchody, pravidla a přesměrování portů na routeru (fw4) a co je z toho dostupné z internetu. Zatím jde jen zapínat a vypínat existující pravidla a přesměrování – vždy s pojistkou: když se aplikace po změně k routeru znovu nepřipojí, router se do 90 s sám vrátí.",
+  "fw.intro": "Zóny, průchody, pravidla a přesměrování portů na routeru (fw4) a co je z toho dostupné z internetu. Blokování zařízení, přesměrování portů, zapínání pravidel i mapa zón klikáním – každá změna s pojistkou: když se aplikace po změně k routeru znovu nepřipojí, router se do 90 s sám vrátí.",
   "fw.w_wan_input": "Rozhraní WAN je v zóně „{zone}“, která má vstup ACCEPT – na router se z internetu dostane všechno, co neblokuje pravidlo. Otevřené služby: {ports}.",
   "fw.w_wan_forward": "Zóna „{zone}“ (WAN) má průchod ACCEPT – router přepustí z internetu i provoz do vnitřních sítí, pokud k němu dorazí.",
   "fw.w_net_multi": "Síť {net} je ve více zónách ({zones}) – platí jen první, „{first}“; pravidla ostatních zón se na ni neuplatní.",

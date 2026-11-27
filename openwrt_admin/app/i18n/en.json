@@ -745,7 +745,7 @@
   "dns.note_up": "After Apply: uci commit dhcp, dnsmasq reload and a nic.cz lookup check (with automatic rollback).",
   "dns.note_wan": "After Apply: uci commit network and a network reload – the internet may drop for a few seconds. Then a nic.cz lookup check, rolled back to the previous servers on failure.",
   "fw.loading": "Loading the firewall from the router…",
-  "fw.intro": "Zones, forwardings, rules and port forwards on the router (fw4) and what of it is reachable from the internet. For now only existing rules and port forwards can be turned on and off – always with a safety net: if the app cannot reconnect after the change, the router reverts within 90 s.",
+  "fw.intro": "Zones, forwardings, rules and port forwards on the router (fw4) and what of it is reachable from the internet. Blocking devices, port forwards, turning rules on and off and the zone map by clicking – every change with a safety net: if the app cannot reconnect after the change, the router reverts within 90 s.",
   "fw.w_wan_input": "The WAN interface is in the zone \"{zone}\" with input ACCEPT – everything not blocked by a rule on the router is reachable from the internet. Open services: {ports}.",
   "fw.w_wan_forward": "The zone \"{zone}\" (WAN) has forward ACCEPT – the router also passes traffic from the internet into internal networks if it arrives.",
   "fw.w_net_multi": "Network {net} is in several zones ({zones}) – only the first, \"{first}\", applies; rules of the other zones do not.",
