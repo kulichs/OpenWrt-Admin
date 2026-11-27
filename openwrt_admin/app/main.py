@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, zones as zonemod, vlans as vlanmod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, zones as zonemod, vlans as vlanmod, netwiz, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
@@ -155,6 +155,7 @@ class Store:
         self.fw_demo_fwd: dict[str, dict | None] = {}   # demo: presmerovani portu (sekce -> data, None = smazano)
         self.fw_demo_zops: list[dict] = []              # demo: zmeny mapy zon (politiky, pruchody)
         self.vl: dict | None = None                     # prehled VLAN (router + AP)
+        self.demo_net_cmds: list[str] = []              # demo: uci prikazy pruvodce siti (network/dhcp/firewall)
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -622,7 +623,9 @@ class Store:
         if not r or (not force and self.dhcp and time.time() - self.dhcp["ts"] < max_age):
             return
         if self.opts.get("demo"):
-            self.dhcp = dhcpmod.build(dhcpmod.demo_text(self.dhcp_demo, self.leases, self.dhcp_demo_wan))
+            extra = "\n".join(l for l in netwiz.uci_sim("", self.demo_net_cmds, "network").splitlines()
+                              if re.match(r"network\.\w+(=interface|\.(proto|ipaddr|netmask)=)", l))
+            self.dhcp = dhcpmod.build(dhcpmod.demo_text(self.dhcp_demo, self.leases, self.dhcp_demo_wan, extra))
             return
         if not r.online:
             self.dhcp = {"ts": time.time(), "error": r.error or "offline"}
@@ -648,6 +651,8 @@ class Store:
                           f"firewall.{sid}.src_mac=" + " ".join(f"'{x.upper()}'" for x in b["macs"]) + "\n")
                 cron += b["lines"]
             text = zonemod.demo_text(fwdmod.demo_lines(self.fw_demo_fwd, fwmod.DEMO), self.fw_demo_zops)
+            if self.demo_net_cmds:
+                text = netwiz.uci_sim(text, self.demo_net_cmds, "firewall")
             text = text.replace("@@dispatch", extra + "@@dispatch").replace(
                 "@@end", "@@cron\n" + "\n".join(cron) + f"\n@@now\n{now}\n@@end")
             m = fwmod.build(text)
@@ -675,6 +680,8 @@ class Store:
             is_router = d is self.router
             if self.opts.get("demo"):
                 text = vlanmod.DEMO.get("router" if is_router else d.name, "")
+                if is_router and self.demo_net_cmds:
+                    text = netwiz.uci_sim(text, self.demo_net_cmds, "network")
                 if not d.online or not text:
                     return {**vlanmod.build_device(d.name, "", is_router), "error": d.error or "offline"}
                 return vlanmod.build_device(d.name, text, is_router)
@@ -2385,6 +2392,17 @@ async def services_apply(request: Request, token: str = Form(...)):
             store.fw_demo_fwd[info["id"]] = {**info["data"], "enabled": info["enabled"]}
         elif info.get("op") == "matrix":
             store.fw_demo_zops += zonemod.demo_ops(cmds)
+        elif info.get("uci") == "net":
+            store.demo_net_cmds += cmds
+            for c in cmds:  # dhcp do demo modelu
+                m = re.match(r"^uci set dhcp\.(\w+)(?:\.(\w+))?='?([^']*)'?$", c)
+                if m and not m.group(2):
+                    store.dhcp_demo[m.group(1)] = {"_type": m.group(3)}
+                elif m:
+                    store.dhcp_demo.setdefault(m.group(1), {"_type": "dhcp"})[m.group(2)] = m.group(3)
+                m = re.match(r"^uci delete dhcp\.(\w+)$", c)
+                if m:
+                    store.dhcp_demo.pop(m.group(1), None)
         elif info.get("op") == "fwd_del":
             store.fw_demo_fwd[info["id"]] = None
             store.fw_demo.pop(info["id"], None)
@@ -2395,6 +2413,9 @@ async def services_apply(request: Request, token: str = Form(...)):
         r = actions.Result(True, f"{ap}: OK (demo)")
     elif info.get("uci") == "dhcp":
         r = await dhcp_apply(ap, cmds, summary, t, info.get("script"))
+    elif info.get("uci") == "net":
+        r = await safe_apply(ap, ["network", "dhcp", "firewall"], cmds, netwiz.reload_cmds(bool(info.get("dhcp"))),
+                             summary, t, check=fwmod.CHECK)
     elif info.get("uci") == "firewall":
         cron = bool(info.get("cron"))
         r = await safe_apply(ap, ["firewall"], cmds, blockmod.reload_cmds(cron), summary, t, check=fwmod.CHECK,
@@ -2406,6 +2427,14 @@ async def services_apply(request: Request, token: str = Form(...)):
         async with lock:
             r = await actions.run(store.cfg(ap), store.key, " && ".join(cmds) + " && echo OK", timeout=90, t=t,
                                   summary=f"{summary} ({ap})")
+    if info.get("uci") == "net":
+        await store.load_vlans(force=True)
+        await store.load_fw(force=True)
+        await store.load_dhcp(force=True)
+        resp = result(request, title, r)
+        if r.ok:
+            resp.headers["HX-Refresh"] = "true"
+        return resp
     if info.get("uci") == "firewall":
         await store.load_fw(force=True)
         resp = result(request, title, r)
@@ -2455,13 +2484,110 @@ async def services_search(request: Request, ap: str = Form(""), kind: str = Form
 @app.get("/vlans", response_class=HTMLResponse)
 async def vlans_page(request: Request):
     fresh = store.vl and time.time() - store.vl["ts"] < SVC_FRESH
-    return render(request, "vlans.html", page="vlans", ready=bool(fresh), autorefresh=False, vl=store.vl if fresh else None)
+    return render(request, "vlans.html", page="vlans", ready=bool(fresh and store.fw and store.dhcp), autorefresh=False,
+                  vl=store.vl if fresh else None, **(_nw_ctx() if fresh else {}))
 
 
 @app.get("/vlans/body", response_class=HTMLResponse)
 async def vlans_body(request: Request, force: int = 0):
     await store.load_vlans(max_age=SVC_FRESH, force=bool(force))
-    return render(request, "_vlans_body.html", vl=store.vl)
+    if request.state.user["role"] == "full" and _vl_router(store.vl):
+        await store.load_fw(max_age=SVC_FRESH, force=bool(force))
+        await store.load_dhcp(max_age=SVC_FRESH, force=bool(force))
+    return render(request, "_vlans_body.html", vl=store.vl, **_nw_ctx())
+
+
+def _vl_router(vl: dict | None) -> dict | None:
+    return next((d for d in (vl or {}).get("devs", []) if d["router"] and not d["error"] and d.get("raw")), None)
+
+
+def _nw_ctx() -> dict:
+    """Kontext formulare nove site: zpusoby VLAN, navrh VID a podsite, zony."""
+    rd = _vl_router(store.vl)
+    fw = store.fw or {}
+    if not rd or not fw.get("zones"):
+        return {"nw": None}
+    vid = netwiz.free_vid(rd["raw"])
+    return {"nw": {"trunks": netwiz.trunks(rd["raw"]), "vid": vid, "cidr": netwiz.suggest_subnet(rd["raw"], vid),
+                   "zones": [z["name"] for z in fw["zones"]], "wan_zone": fw.get("wan_zone") or "",
+                   "fw4": fw.get("fwver") == "fw4", "dsa_off": not rd["raw"]["dsa"] and not rd["raw"]["sw_dev"]
+                   and not rd["raw"]["plain_up"] and not rd["raw"]["phys"],
+                   "deletable": [n for n in rd["raw"]["ifaces"] if not netwiz.check_del(rd["raw"], fw, n, fwdmod.mgmt(fw)["ip"])],
+                   "router": rd["name"]}}
+
+
+@app.post("/vlans/preview", response_class=HTMLResponse)
+async def vlans_preview(request: Request):
+    require_htmx(request)
+    t = request.state.t
+    title = t("preview.title")
+    if request.state.user["role"] != "full":
+        return result(request, title, actions.Result(False, t("msg.no_permission")))
+    form = await request.form()
+    op = str(form.get("op") or "")
+    await store.load_vlans(max_age=SVC_FRESH)
+    await store.load_fw(max_age=SVC_FRESH)
+    await store.load_dhcp(max_age=SVC_FRESH)
+    rd = _vl_router(store.vl)
+    fw = store.fw or {}
+    if not rd or not fw.get("zones"):
+        return result(request, title, actions.Result(False, t("nw.err_unreadable")))
+    raw = rd["raw"]
+    dhcp_uci = (store.dhcp or {}).get("uci") or {}
+    mg = fwdmod.mgmt(fw)
+    if op == "net_add":
+        data_in = {k: str(form.get(k) or "") for k in ("name", "vid", "trunk", "cidr", "zone_mode", "zone_name",
+                                                       "zone_existing", "start", "limit")}
+        data_in["ports"] = [str(x) for x in form.getlist("ports")]
+        data_in["inet"] = form.get("inet") == "1"
+        data_in["dhcp"] = form.get("dhcp") == "1"
+        errs, warns_k, d = netwiz.check_add(raw, fw, dhcp_uci, data_in, mg["zone"])
+        if errs:
+            return result(request, title, actions.Result(False, "\n".join(t(k, **a) for k, a in errs)))
+        cmds = netwiz.add_cmds(raw, d)
+        changes = [t("nw.do_add", name=d["name"], vid=d["vid"], cidr=d["cidr"], trunk=d["trunk"]["label"],
+                     ports=", ".join(d["ports"]) or d["trunk"]["label"])]
+        if d["dhcp"]:
+            changes.append(t("nw.do_dhcp", start=d["start"], limit=d["limit"]))
+        if d["zone_mode"] == "new":
+            changes.append(t("nw.do_zone_new" if d["inet"] else "nw.do_zone_new_noinet", zone=d["zone_name"], wan=d["wan_zone"]))
+        elif d["zone_mode"] == "existing":
+            changes.append(t("nw.do_zone_add", zone=d["zone_existing"]))
+        warns = [t(k, **a) for k, a in warns_k] + [t("nw.w_next", vid=d["vid"])]
+        aps = [x["name"] for x in store.vl["devs"] if not x["router"] and d["vid"] in x["rows"]]
+        if aps:
+            warns.append(t("nw.w_ap_has", vid=d["vid"], aps=", ".join(aps)))
+        info = {"op": "net_add", "uci": "net", "dhcp": d["dhcp"], "changes": changes}
+        note = t("nw.note")
+        crits = []
+    elif op == "net_del":
+        name = str(form.get("name") or "")
+        errs = netwiz.check_del(raw, fw, name, mg["ip"])
+        if errs:
+            return result(request, title, actions.Result(False, "\n".join(t(k, **a) for k, a in errs)))
+        cmds, what = netwiz.del_plan(raw, fw, dhcp_uci, name)
+        changes = [t("nw.do_del", name=name), t("nw.do_del_what", what=", ".join(what))]
+        key = next((k for k, rw in rd["rows"].items() if any(i["name"] == name for i in rw["ifaces"])), None)
+        crits, warns = [], []
+        aps = [f"{x['name']} ({', '.join(g['ssid'] for g in x['rows'][key]['ssid_groups']) or '–'})"
+               for x in store.vl["devs"] if not x["router"] and key is not None and key in x["rows"]]
+        if aps:
+            crits.append(t("nw.c_del_aps", aps="; ".join(aps)))
+        hosts = [h["name"] or h["ip"] for h in (store.dhcp or {}).get("hosts", []) if h.get("ip") and
+                 "/" in raw["ifaces"][name].get("ip", "") and
+                 ipaddress.ip_address(h["ip"]) in ipaddress.ip_interface(raw["ifaces"][name]["ip"]).network]
+        if hosts:
+            warns.append(t("nw.w_del_hosts", n=len(hosts), names=", ".join(hosts[:6])))
+        warns.append(t("nw.w_del_clients", name=name))
+        info = {"op": "net_del", "uci": "net", "dhcp": True, "changes": changes}
+        note = t("nw.note")
+    else:
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    token = store.add_svc_pending(rd["name"], cmds, info)
+    shown = [*cmds, "uci commit network", "uci commit dhcp", "uci commit firewall", fwmod.CHECK,
+             *netwiz.reload_cmds(info["dhcp"]), t("safe.shown")]
+    return render(request, "_svc_preview.html", ap=rd["name"], cmds=shown, changes=changes, token=token, note=note,
+                  warns=warns, crits=crits, danger=True)
 
 
 @app.get("/stats", response_class=HTMLResponse)

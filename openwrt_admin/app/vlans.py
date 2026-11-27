@@ -96,15 +96,17 @@ def build_device(name: str, text: str, router: bool = False) -> dict:
 
     # --- mosty a rozhrani
     bridges: dict[str, list[str]] = {}
-    l2: dict[str, dict] = {}          # explicitni 8021q zarizeni: jmeno -> {base, vid}
+    bridge_sid: dict[str, str] = {}
+    l2: dict[str, dict] = {}          # explicitni 8021q zarizeni: jmeno -> {base, vid, sid}
     for sid, o in net.items():
         t = o.get("_type")
         if t == "device":
             nm = _f(o.get("name")) or sid
             if _f(o.get("type")) == "bridge":
                 bridges[nm] = _l(o.get("ports")) + _l(o.get("ifname"))
+                bridge_sid[nm] = sid
             elif _f(o.get("type")) in ("8021q", "8021ad") and o.get("vid"):
-                l2[nm] = {"base": _f(o.get("ifname")), "vid": int(_f(o.get("vid")))}
+                l2[nm] = {"base": _f(o.get("ifname")), "vid": int(_f(o.get("vid"))), "sid": sid}
     ifaces: dict[str, dict] = {}
     for sid, o in net.items():
         if o.get("_type") != "interface" or sid == "loopback":
@@ -125,6 +127,8 @@ def build_device(name: str, text: str, router: bool = False) -> dict:
                 ip = str(ipaddress.ip_interface(ips[0] if "/" in ips[0] or not mask else f"{ips[0]}/{mask}"))
             except ValueError:
                 ip = ips[0]
+        for a in _l(o.get("addresses")):            # wireguard apod.
+            ip = ip or a
         ifaces[sid] = {"name": sid, "device": devname, "proto": _f(o.get("proto")) or "none", "ip": ip,
                        "gateway": _f(o.get("gateway")), "disabled": _f(o.get("disabled")) == "1"}
 
@@ -142,15 +146,22 @@ def build_device(name: str, text: str, router: bool = False) -> dict:
 
     # --- VLAN na switchi (swconfig) nebo v mostu (DSA)
     sw_vlans: dict[int, list[tuple[str, bool]]] = {}
+    sw_meta: dict[int, dict] = {}
+    sw_dev, sw_idx = "", 0
     for sid, o in sorted(net.items(), key=lambda kv: kv[1]["_order"]):
         if o.get("_type") == "switch_vlan":
             vid = int(_f(o.get("vid")) or _f(o.get("vlan")) or 0)
+            sw_dev = sw_dev or _f(o.get("device"))
+            sw_idx = max(sw_idx, int(_f(o.get("vlan")) or 0))
             if vid:
                 sw_vlans[vid] = _sw_ports(_f(o.get("ports")) if not isinstance(o.get("ports"), list) else " ".join(o["ports"]))
+                sw_meta[vid] = {"sid": sid, "device": _f(o.get("device"))}
     dsa: dict[str, dict[int, list[tuple[str, bool]]]] = {}
+    dsa_sid: dict[tuple[str, int], str] = {}
     for sid, o in net.items():
         if o.get("_type") == "bridge-vlan" and o.get("vlan"):
             dsa.setdefault(_f(o.get("device")), {})[int(_f(o.get("vlan")))] = _dsa_ports(_l(o.get("ports")))
+            dsa_sid[(_f(o.get("device")), int(_f(o.get("vlan"))))] = sid
 
     # CPU port swconfigu = port tagovany ve vsech VLAN (obvykle 0, 5, 6 nebo 8)
     cpu_ports: set[str] = set()
@@ -321,6 +332,26 @@ def build_device(name: str, text: str, router: bool = False) -> dict:
     for ss, nets in seen.items():
         if len(nets) > 1:
             issues.append(("err", "vl.e_ssid_split", {"ssid": ss, "nets": ", ".join(sorted(nets))}))
+    # surova data pro pruvodce novou siti / mazani (main -> netwiz)
+    sw_ports = sorted({p for ps in sw_vlans.values() for p, _ in ps} - cpu_ports, key=lambda x: int(x))
+    phys = sorted({p for br, ps in bridges.items() for p in ps
+                   if not TAG_RE.match(p) and p not in bridges and p != cpu_eth and br not in dsa
+                   and not p.startswith(("wlan", "phy", "wg", "tun", "tap"))})
+    used_vids = set(sw_vlans) | {v for vl in dsa.values() for v in vl} | {x["vid"] for x in l2.values()}
+    for n in used_names:
+        m = TAG_RE.match(n)
+        if m:
+            used_vids.add(int(m.group(2)))
+    dev["raw"] = {"ifaces": ifaces, "bridges": bridges, "bridge_sid": bridge_sid, "l2": l2,
+                  "dsa": {br: {v: [f"{p}{':t' if t else ''}" for p, t in ps] for v, ps in vl.items()} for br, vl in dsa.items()},
+                  "dsa_sid": {f"{b}|{v}": sid for (b, v), sid in dsa_sid.items()},
+                  "dsa_ports": {br: bridges.get(br, []) for br in dsa},
+                  "dsa_up": {br: _uplink(list(vl.items()), set()) for br, vl in dsa.items()},
+                  "sw_dev": sw_dev, "sw_idx": sw_idx, "sw_meta": sw_meta, "sw_ports": sw_ports,
+                  "cpu_port": next(iter(cpu_ports), ""), "sw_up": sw_up, "cpu_eth": cpu_eth,
+                  "plain_up": sorted(plain_up), "phys": phys, "used_vids": sorted(used_vids),
+                  "used_names": sorted(used_names)}
+
     # SSID seskupene podle jmena (pasma pohromade)
     for rw in rows.values():
         grp: dict[str, dict] = {}

@@ -19,6 +19,7 @@
 
 <div class="panel">
   <h2>{{ t("vl.matrix") }}</h2>
+  <div class="cmd-out"></div>
   <div class="matrix-wrap"><table class="list vlmatrix">
     <thead><tr><th>{{ t("vl.on_wire") }}</th>
       {% for d in vl.devs %}<th>{{ d.name }}{% if d.router %} <span class="tag">{{ t("router.kind") }}</span>{% endif %}<br>
@@ -29,7 +30,9 @@
       <td>{% if d.error %}<span class="muted">?</span>
       {% elif not c %}<span class="muted">–</span>
       {% else %}
-        {% for i in c.ifaces %}<div><b>{{ i.name }}</b> <span class="small muted">{{ i.ip or i.proto }}</span></div>{% endfor %}
+        {% for i in c.ifaces %}<div><b>{{ i.name }}</b> <span class="small muted">{{ i.ip or i.proto }}</span>
+          {% if can_edit and nw and d.router and i.name in nw.deletable %}<button type="button" class="secondary small" title="{{ t('nw.delete') }}"
+            hx-post="{{ base }}/vlans/preview" hx-target="previous .cmd-out" hx-vals='{{ {"op": "net_del", "name": i.name} | tojson }}'>✕</button>{% endif %}</div>{% endfor %}
         {% for g in c.ssid_groups %}<div class="small">📶 {{ g.ssid }} <span class="muted">{{ g.on | join("+") }}{% if g.off %} <s title="{{ t('vl.off') }}">{{ g.off | join("+") }}</s>{% endif %}</span></div>{% endfor %}
         {% if c.access %}<div class="small">🔌 {{ c.access | join(", ") }}</div>{% endif %}
         {% if r.key == "native" and c.vid %}<div class="small muted">{{ t("vl.internal", vid=c.vid) }}</div>{% endif %}
@@ -42,6 +45,63 @@
   <p class="muted small">{{ t("vl.hint") }}</p>
   {% for d in vl.devs if d.error %}<p class="small bad">{{ d.name }}: <span class="mono">{{ d.error[:200] }}</span></p>{% endfor %}
 </div>
+
+{% if can_edit and nw %}
+<div class="panel" id="newnet">
+  <h2>{{ t("nw.title", router=nw.router) }}</h2>
+  <div class="cmd-out"></div>
+  {% if not nw.fw4 %}<p class="muted small">{{ t("nw.err_fw4") }}</p>
+  {% elif not nw.trunks %}<p class="muted small">{{ t("nw.no_trunk") }}</p>
+  {% else %}
+  <details class="inline-edit"><summary>{{ t("nw.new") }}</summary>
+  <form class="nw-form" hx-post="{{ base }}/vlans/preview" hx-target="previous .cmd-out">
+    <input type="hidden" name="op" value="net_add">
+    <div class="filters edit">
+      <label>{{ t("nw.name") }} <input name="name" required maxlength="12" pattern="[A-Za-z][A-Za-z0-9_]*" placeholder="guest2" oninput="owNwName(this)"></label>
+      <label>VLAN ID <input name="vid" required type="number" min="2" max="4094" value="{{ nw.vid }}" style="width:6em"></label>
+      <label>{{ t("nw.trunk") }} <select name="trunk" onchange="owNwTrunk(this)">{% for x in nw.trunks %}<option value="{{ x.id }}">{{ x.label }}</option>{% endfor %}</select></label>
+    </div>
+    {% for x in nw.trunks if x.ports %}
+    <div class="filters edit nw-ports" data-trunk="{{ x.id }}" {% if not loop.first or nw.trunks[0].id != x.id %}hidden{% endif %}>
+      <span>{{ t("nw.ports_tagged") }}</span>
+      {% for p in x.ports %}<label class="chk"><input type="checkbox" name="ports" value="{{ p }}" {{ 'checked' if p in x.default }} {{ 'disabled' if nw.trunks[0].id != x.id }}> {{ p }}{% if p in x.default %} <span class="muted small">({{ t("vl.uplink") }})</span>{% endif %}</label>{% endfor %}
+    </div>
+    {% endfor %}
+    <div class="filters edit">
+      <label>{{ t("nw.cidr") }} <input name="cidr" required class="mono" value="{{ nw.cidr }}" style="width:11em"></label>
+      <label class="chk"><input type="checkbox" name="dhcp" value="1" checked> DHCP</label>
+      <label>{{ t("nw.start") }} <input name="start" type="number" min="1" value="100" style="width:5em"></label>
+      <label>{{ t("nw.limit") }} <input name="limit" type="number" min="1" value="150" style="width:5em"></label>
+    </div>
+    <div class="filters edit">
+      <label class="chk"><input type="radio" name="zone_mode" value="new" checked> {{ t("nw.zone_new") }}</label>
+      <label><input name="zone_name" maxlength="11" pattern="[A-Za-z][A-Za-z0-9_]*" style="width:8em" placeholder="{{ t('nw.zone_name') }}"></label>
+      <label class="chk"><input type="checkbox" name="inet" value="1" checked> {{ t("nw.inet", wan=nw.wan_zone or "wan") }}</label>
+      <label class="chk"><input type="radio" name="zone_mode" value="existing"> {{ t("nw.zone_existing") }}</label>
+      <select name="zone_existing">{% for z in nw.zones %}<option>{{ z }}</option>{% endfor %}</select>
+      <label class="chk"><input type="radio" name="zone_mode" value="none"> {{ t("nw.zone_none") }}</label>
+    </div>
+    <button type="submit" class="danger">{{ t("ssid.preview") }}</button>
+  </form>
+  </details>
+  <p class="muted small">{{ t("nw.hint") }}</p>
+  {% endif %}
+</div>
+<script>
+function owNwTrunk(sel) {
+  var f = sel.closest("form");
+  f.querySelectorAll(".nw-ports").forEach(function (d) {
+    var on = d.dataset.trunk === sel.value; d.hidden = !on;
+    d.querySelectorAll("input").forEach(function (i) { i.disabled = !on; });
+  });
+}
+function owNwName(inp) {
+  var z = inp.form.querySelector("input[name=zone_name]");
+  if (!z.dataset.touched) z.value = inp.value.toLowerCase().slice(0, 11);
+}
+document.addEventListener("input", function (e) { if (e.target.name === "zone_name") e.target.dataset.touched = "1"; });
+</script>
+{% endif %}
 
 <div class="panel">
   <h2>{{ t("vl.switch") }}</h2>

@@ -182,6 +182,7 @@ openwrt_admin/
     portfwd.py               # presmerovani portu (owa_fwd_<id>, kontroly) + pojistka proti odriznuti spravy
     zones.py                 # mapa zon klikanim: input/forward zony, forwarding (owa_zf_<id>), rizika
     vlans.py                 # prehled VLAN router + AP (swconfig, DSA, 8021q, 19.07) a kontroly konzistence
+    netwiz.py                # nova sit na routeru (VLAN+rozhrani+DHCP+zona) a smazani s uklidem; uci_sim pro demo
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/
@@ -215,3 +216,7 @@ openwrt_admin/
   Zařízení ve dvou mostech se pro přehled přiřadí k menšímu mostu (jinak falešné navazující chyby). Tajné volby
   se filtrují na zařízení přes `grep -v -e …` (BusyBox/musl nezná `\|`). `fmt_key` je jazykově neutrální
   (`@@N@@` → „bez tagu“ v šabloně). Testovat i 19.07 zápis (interface type=bridge + ifname) a DSA bez bridge-vlan.
+- **Nová síť (`app/netwiz.py`):** data z `vlans.build_device(...)["raw"]` (sekce mostů, 8021q, switch_vlan, bridge-vlan
+  s jejich `uci -X` jmény). Nové sekce `owa_<typ>_<síť>` (bv/sv/vd/br/zn/zf/r). DSA bez bridge-vlan se nemění (jen
+  návod). Mazání uklidí jen to, co nepoužívá jiná síť; nikdy lan/wan/správcovská síť. Uložení: `info["uci"]="net"`
+  → `safe_apply(network+dhcp+firewall)`. Demo: `netwiz.uci_sim` nad textem `uci show` (network, firewall), dhcp model.

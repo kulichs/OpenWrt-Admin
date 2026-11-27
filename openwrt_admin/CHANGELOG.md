@@ -2,6 +2,15 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.26.0
+- **New network on the router** (VLAN page, full access): name, VLAN ID and subnet suggestions, VLAN method by the router (DSA bridge-vlan, swconfig switch_vlan, or an 8021q device on a port), DHCP range, firewall zone (new isolated zone with optional internet and DHCP/DNS rules, an existing zone, or none). One preview, saved at once with the safety net (network + dhcp + firewall, fw4 check).
+- **Delete a network** (✕ in the router column): cleans up its bridge, VLAN device, switch/bridge VLAN, DHCP section and a zone used only by it (with forwardings and rules). Not for lan, wan, the management network or non-IP interfaces; red warning when APs still use the VLAN.
+- Verified: commands for DSA, swconfig and an 8021q router, error checks (name, VLAN, overlap, range, zone), cleanup on delete, demo create → delete. Not yet on the real network.
+---
+- **Nová síť na routeru** (stránka VLAN, plný přístup): návrh VLAN ID a podsítě, způsob VLAN podle routeru (DSA bridge-vlan, swconfig switch_vlan, nebo zařízení 8021q na portu), rozsah DHCP, zóna firewallu (nová izolovaná s volitelným internetem a pravidly pro DHCP/DNS, existující, nebo žádná). Jeden náhled, uloží se najednou s pojistkou (network + dhcp + firewall, fw4 check).
+- **Smazání sítě** (✕ ve sloupci routeru): uklidí most, VLAN zařízení, VLAN na switchi/mostu, sekci DHCP a zónu, kterou používala jen ona (i s průchody a pravidly). Ne u lan, wan, správcovské sítě a rozhraní bez IP; červené upozornění, když VLAN ještě používají AP.
+- Ověřeno: příkazy pro router s DSA, swconfigem i 8021q, kontroly (název, VLAN, překryv, rozsah, zóna), úklid při mazání, demo založit → smazat. Na skutečné síti zatím ne.
+
 ## 0.25.0
 - New **VLAN** page: networks and SSIDs of the router and all APs in one table (read-only), rows by how traffic goes over the cable to the router (VLAN number or untagged), so differently named networks on different devices line up. Each cell shows the network and its address, SSIDs with bands, ports and the bridge.
   - Understands swconfig (switch_vlan), DSA (bridge-vlan), VLAN on a port without a switch (eth1.N) and the old 19.07 style.

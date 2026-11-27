@@ -421,11 +421,12 @@ def to_uci(model: dict[str, dict]) -> str:
     return "\n".join(out)
 
 
-def demo_text(model: dict[str, dict], leases: dict[str, dict], wan_dns: list[str] | None = None) -> str:
+def demo_text(model: dict[str, dict], leases: dict[str, dict], wan_dns: list[str] | None = None,
+              extra_net: str = "") -> str:
     now = int(time.time())
     ls = "\n".join(f"{now + 3600 + i * 60} {mac} {l['ip']} {l.get('hostname') or '*'} 01:{mac}"
                    for i, (mac, l) in enumerate(leases.items()) if l.get("ip"))
-    return (f"@@uci\n{to_uci(model)}\n@@net\n{DEMO_NET}\n@@leases\n{ls}\n@@apknew\n/etc/config/dhcp.apk-new\n/etc/config/luci.apk-new\n/etc/config/uhttpd.apk-new\n"
+    return (f"@@uci\n{to_uci(model)}\n@@net\n{DEMO_NET}\n{extra_net}\n@@leases\n{ls}\n@@apknew\n/etc/config/dhcp.apk-new\n/etc/config/luci.apk-new\n/etc/config/uhttpd.apk-new\n"
             f"@@resolv\n" + "\n".join(f"nameserver {x}" for x in (wan_dns or ["203.0.113.53"])) +
             "\n@@wan\nnetwork.wan=interface\nnetwork.wan.proto='dhcp'\n" +
             (("network.wan.peerdns='0'\nnetwork.wan.dns=" + " ".join(f"'{x}'" for x in wan_dns) + "\n") if wan_dns else "") +
