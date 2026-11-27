@@ -628,7 +628,6 @@ network.iot=interface
 network.iot.proto='none'
 network.iot.device='br-iot'
 @@wifi
-network.x=y
 wireless.radio0=wifi-device
 wireless.radio0.band='2g'
 wireless.radio1=wifi-device

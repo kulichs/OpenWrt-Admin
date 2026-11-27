@@ -2,6 +2,17 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.28.0
+- **VLAN on the APs** from the VLAN page: + add (one AP) or + to all APs (row). The app creates the VLAN by the AP's method (swconfig switch_vlan, DSA bridge-vlan, or an 8021q device), a bridge and a network without an address (`proto none`), named after the router's network. Each AP separately with the safety net, stops after the first failure.
+- Remove a VLAN network from an AP (✕) with its bridge and VLAN – not the native or management network, not with an SSID connected.
+- Preview warnings: the switch port to the AP does not carry the VLAN yet, the AP's network reloads, no SSID yet.
+- Verified: commands on swconfig, 8021q and DSA APs (including layouts like real APs with existing VLANs and name clashes), demo add to all APs → remove. Not yet on the real network.
+---
+- **VLAN na AP** ze stránky VLAN: + přidat (jedno AP) nebo + na všechna AP (řádek). Aplikace založí VLAN podle způsobu AP (swconfig switch_vlan, DSA bridge-vlan, nebo zařízení 8021q), most a síť bez adresy (`proto none`) se jménem podle routeru. Každé AP zvlášť s pojistkou, po první chybě se končí.
+- Odebrání sítě VLAN z AP (✕) i s mostem a VLAN – ne nativní a správcovská síť, ne s připojeným SSID.
+- Upozornění v náhledu: port switche k AP VLAN ještě nemá, síť AP se znovu načte, zatím bez SSID.
+- Ověřeno: příkazy na AP se swconfigem, 8021q i DSA (i rozložení jako u skutečných AP se stávajícími VLAN a kolizí jmen), demo přidat na všechna AP → odebrat. Na skutečné síti zatím ne.
+
 ## 0.27.0
 - VLAN page: **managed switch column** (SNMP, Q-BRIDGE-MIB) – per VLAN the switch ports tagged (T) / untagged (U) with the device on each port, the native VLAN, free ports only as a count. PVID (`dot1qPvid`) is now read too.
 - Switch checks: the port to an AP or the router missing a VLAN the device uses, untagged instead of tagged, a different native VLAN; a VLAN not on the port to the router; several untagged VLANs on a port; PVID different from the untagged VLAN; extra VLANs (warning); device port not found. Ports are matched by the device MAC in the switch table or by the port description.

@@ -158,34 +158,36 @@ def check_add(raw: dict, fw: dict, dhcp_uci: dict, form: dict, mgmt_zone: str) -
     return errs, warns, data
 
 
-def add_cmds(raw: dict, d: dict) -> list[str]:
-    n, v, tr = d["name"], d["vid"], d["trunk"]
+def vlan_cmds(raw: dict, n: str, v: int, tr: dict, ports: list[str]) -> tuple[list[str], str]:
+    """Prikazy pro VLAN <v> (DSA / swconfig / 8021q) a most br-<n>; vraci (prikazy, zarizeni pro rozhrani)."""
     c = []
     if tr["kind"] == "dsa":
         br = tr["id"].split(":", 1)[1]
         s = f"network.owa_bv_{n}"
         c += [f"uci set {s}=bridge-vlan", f"uci set {s}.device={_q(br)}", f"uci set {s}.vlan='{v}'"]
-        c += [f"uci add_list {s}.ports={_q(p + ':t')}" for p in d["ports"]]
-        dev = f"{br}.{v}"
-    elif tr["kind"] == "sw":
+        c += [f"uci add_list {s}.ports={_q(p + ':t')}" for p in ports]
+        return c, f"{br}.{v}"
+    if tr["kind"] == "sw":
         s = f"network.owa_sv_{n}"
-        ports = " ".join([f"{raw['cpu_port']}t", *[f"{p}t" for p in d["ports"]]])
+        sp = " ".join([f"{raw['cpu_port']}t", *[f"{p}t" for p in ports]])
         c += [f"uci set {s}=switch_vlan", f"uci set {s}.device={_q(raw['sw_dev'])}",
-              f"uci set {s}.vlan='{raw['sw_idx'] + 1}'", f"uci set {s}.vid='{v}'", f"uci set {s}.ports={_q(ports)}"]
+              f"uci set {s}.vlan='{raw['sw_idx'] + 1}'", f"uci set {s}.vid='{v}'", f"uci set {s}.ports={_q(sp)}"]
         l2 = f"{raw['cpu_eth'] or 'eth0'}.{v}"
-        b = f"network.owa_br_{n}"
-        c += [f"uci set {b}=device", f"uci set {b}.type='bridge'", f"uci set {b}.name='br-{n}'",
-              f"uci add_list {b}.ports={_q(l2)}"]
-        dev = f"br-{n}"
     else:
         base = tr["id"].split(":", 1)[1]
         q = f"network.owa_vd_{n}"
         c += [f"uci set {q}=device", f"uci set {q}.type='8021q'", f"uci set {q}.ifname={_q(base)}",
               f"uci set {q}.vid='{v}'", f"uci set {q}.name={_q(f'{base}.{v}')}"]
-        b = f"network.owa_br_{n}"
-        c += [f"uci set {b}=device", f"uci set {b}.type='bridge'", f"uci set {b}.name='br-{n}'",
-              f"uci add_list {b}.ports={_q(f'{base}.{v}')}"]
-        dev = f"br-{n}"
+        l2 = f"{base}.{v}"
+    b = f"network.owa_br_{n}"
+    c += [f"uci set {b}=device", f"uci set {b}.type='bridge'", f"uci set {b}.name='br-{n}'",
+          f"uci add_list {b}.ports={_q(l2)}"]
+    return c, f"br-{n}"
+
+
+def add_cmds(raw: dict, d: dict) -> list[str]:
+    n = d["name"]
+    c, dev = vlan_cmds(raw, n, d["vid"], d["trunk"], d["ports"])
     i = f"network.{n}"
     c += [f"uci set {i}=interface", f"uci set {i}.proto='static'", f"uci set {i}.device={_q(dev)}",
           f"uci set {i}.ipaddr={_q(d['ip'])}", f"uci set {i}.netmask={_q(d['mask'])}"]
@@ -341,3 +343,57 @@ def uci_sim(text: str, cmds: list[str], pkg: str) -> str:
         elif op == "delete":
             lines = [l for l in lines if l.split("=", 1)[0] != key and not l.startswith(key + ".")]
     return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------- VLAN na AP (sit bez IP, jen most)
+
+def ap_name(raw: dict, wanted: str, vid: int) -> str:
+    n = re.sub(r"[^A-Za-z0-9_]", "", wanted or "")[:12] or f"vlan{vid}"
+    if not n[0].isalpha():
+        n = ("v" + n)[:12]
+    taken = {x.lower() for x in raw["ifaces"]} | {b[3:].lower() for b in raw["bridges"] if b.startswith("br-")}
+    if n.lower() in taken or n.lower() in RESERVED:
+        n = f"{n[:7]}_v{vid}"[:12]
+    return n
+
+
+def ap_add_plan(raw: dict, dev: dict, vid: int, wanted: str) -> tuple[list[tuple], list[str], str, dict | None]:
+    """(chyby, prikazy, jmeno site, kudy). Sit na AP bez adresy (proto none) – AP VLAN jen premostuje."""
+    if vid in dev["rows"]:
+        return [("ap.err_has", {"ap": dev["name"], "vid": vid})], [], "", None
+    trs = trunks(raw)
+    tr = next((x for x in trs if x["kind"] in ("sw", "dsa")), None) or (trs[0] if len(trs) == 1 else None)
+    if not tr and len(trs) > 1:
+        tr = next((x for x in trs if x["id"].split(":", 1)[1] in (raw.get("plain_up") or [])), None)
+    if not tr:
+        return [("ap.err_method", {"ap": dev["name"]})], [], "", None
+    ports = tr["default"] if tr["kind"] in ("sw", "dsa") else []
+    if tr["kind"] in ("sw", "dsa") and not ports:
+        return [("ap.err_uplink", {"ap": dev["name"]})], [], "", None
+    if tr["kind"] == "sw" and (not raw.get("cpu_port") or not raw.get("cpu_eth")):
+        return [("ap.err_uplink", {"ap": dev["name"]})], [], "", None
+    n = ap_name(raw, wanted, vid)
+    cmds, devname = vlan_cmds(raw, n, vid, tr, ports)
+    cmds += [f"uci set network.{n}=interface", f"uci set network.{n}.proto='none'", f"uci set network.{n}.device={_q(devname)}"]
+    return [], cmds, n, {"label": tr["label"], "ports": ports}
+
+
+def ap_del_check(raw: dict, dev: dict, name: str, host_ip: str) -> list[tuple]:
+    i = raw["ifaces"].get(name)
+    if not i or not SID_RE.match(name):
+        return [("msg.bad_request", {})]
+    if name.lower() in RESERVED or name.startswith("wan"):
+        return [("nw.err_del_reserved", {"v": name})]
+    if host_ip and "/" in (i.get("ip") or ""):
+        try:
+            if ipaddress.ip_address(host_ip) in ipaddress.ip_interface(i["ip"]).network:
+                return [("nw.err_del_mgmt", {"v": name})]
+        except ValueError:
+            pass
+    for rw in dev["rows"].values():
+        if any(x["name"] == name for x in rw["ifaces"]) and rw["ssids"]:
+            return [("ap.err_del_ssid", {"v": name, "ssids": ", ".join(sorted({x["ssid"] for x in rw["ssids"]}))})]
+    key = next((k for k, rw in dev["rows"].items() if any(x["name"] == name for x in rw["ifaces"])), None)
+    if key is None or key == "native":
+        return [("ap.err_del_native", {"v": name})]
+    return []

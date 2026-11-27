@@ -223,3 +223,6 @@ openwrt_admin/
 - **Switch ve VLAN (`vlans.switch_view`):** porty ze `store.switches` (`vlans_u`, `vlans_t`, `pvid` z SNMP). Port zařízení =
   MAC zařízení v `arl` (nejmenší port), záložně popis portu. Nativní řádek = VLAN netagovaná na portu k routeru. U routeru
   se kontrolují jen VLAN na „základu“ s nejvíc VLAN (`_router_base`) – VLAN na jiném portu routeru (např. eth1.100) ne.
+- **VLAN na AP (`netwiz.ap_add_plan`, `vlan_cmds`):** stejné stavební kameny jako u routeru, rozhraní `proto none`. Způsob:
+  swconfig/DSA přednostně, jinak jediný port (`plain_up`). Uložení `info["uci"]="apnet"`, `per_ap` = {AP: příkazy}, každé AP
+  zvlášť `safe_apply(network)`, po chybě konec. Mazání přes `del_plan(raw, {}, {}, jméno)`; ne nativní/správcovská/se SSID.

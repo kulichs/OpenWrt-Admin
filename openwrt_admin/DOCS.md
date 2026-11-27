@@ -283,6 +283,11 @@ The **VLAN** page (top bar) reads the networks and SSIDs of the router and all A
 - Errors: name or VLAN already used, overlapping subnet, DHCP range outside the network, zone name taken. Warnings: a public range, no internet, a trusted existing zone, the VLAN still has to be added to the switch and APs (and which APs already have it).
 - **Delete a network** (✕ in the router column): removes the interface and cleans up only what this network alone used – its bridge, VLAN device, `switch_vlan` / `bridge-vlan`, DHCP section, and the zone with its forwardings and rules (or just removes the network from a shared zone). Not offered for lan, wan, the network the app connects through or non-IP interfaces (e.g. WireGuard). Red warning when APs still use the VLAN.
 
+**VLAN on the APs** (full access) – a VLAN the router has can be added to APs right from the table: **+ add** in the AP's cell, or **+ to all APs** at the row. On the AP the app creates the VLAN the way the AP writes VLANs (swconfig: a new `switch_vlan` with the CPU port and the uplink tagged; DSA: `bridge-vlan` with the uplink tagged; a port without a switch: an `8021q` device `<port>.<VLAN>`), a bridge `br-<network>` and the network **without an address** (`proto none` – the AP only bridges it, DHCP and the gateway come from the router). The network gets the router's name for that VLAN (with a suffix if the AP already uses it).
+- Each AP is saved separately with the safety net; if one fails, the next ones are not changed. The AP's network reloads – clients on it disconnect for a few seconds.
+- The preview warns when the managed switch port to the AP does not carry the VLAN yet (the app does not write to the switch) and that the network has no SSID yet – connecting an SSID is the next step.
+- **✕** at an AP network removes it with its bridge and VLAN – not for the native network, the management network, or a network with an SSID connected.
+
 ### Statistics
 
 The **Statistics** page (option `stats`, on by default) shows what the network is doing right now and in the last hour:
@@ -767,6 +772,11 @@ Stránka **VLAN** (horní lišta) načte sítě a SSID routeru a všech AP najed
 - Zóna: **nová** (izolovaná – internet volitelně, do ostatních sítí ne, na router jen DHCP a DNS přes pravidla `Allow-<zóna>-DHCP/DNS`), **existující**, nebo žádná. Nové sekce mají jména `owa_bv_/owa_sv_/owa_vd_/owa_br_/owa_zn_/owa_zf_/owa_r_<síť>`.
 - Chyby: název nebo VLAN už existuje, podsíť se překrývá, rozsah DHCP mimo síť, obsazené jméno zóny. Upozornění: veřejný rozsah, bez internetu, důvěryhodná existující zóna, VLAN je ještě potřeba přidat na switch a AP (a které AP ji už mají).
 - **Smazání sítě** (✕ ve sloupci routeru): smaže rozhraní a uklidí jen to, co používala jen ona – její most, VLAN zařízení, `switch_vlan` / `bridge-vlan`, sekci DHCP a zónu i s průchody a pravidly (ze sdílené zóny jen odebere síť). Nenabízí se u lan, wan, sítě, přes kterou se aplikace připojuje, a rozhraní bez IP (např. WireGuard). Červené upozornění, když VLAN ještě používají AP.
+
+**VLAN na AP** (plný přístup) – VLAN, kterou má router, jde přidat na AP přímo z tabulky: **+ přidat** v buňce AP, nebo **+ na všechna AP** u řádku. Na AP aplikace založí VLAN tak, jak ji AP zapisuje (swconfig: nová `switch_vlan` s CPU portem a uplinkem tagovaně; DSA: `bridge-vlan` s uplinkem tagovaně; port bez switche: zařízení `8021q` `<port>.<VLAN>`), most `br-<síť>` a síť **bez adresy** (`proto none` – AP ji jen přemosťuje, DHCP a bránu dává router). Síť dostane jméno podle routeru (s příponou, když ho AP už používá).
+- Každé AP se uloží zvlášť s pojistkou; když se jedno nepovede, další se už nemění. Síť AP se znovu načte – klienti na něm se na pár sekund odpojí.
+- Náhled upozorní, když port spravovaného switche k AP VLAN ještě nemá (na switch aplikace nezapisuje), a že síť zatím nemá SSID – připojení SSID je další krok.
+- **✕** u sítě na AP ji odebere i s mostem a VLAN – ne u nativní sítě, správcovské sítě a sítě s připojeným SSID.
 
 ### Statistiky
 

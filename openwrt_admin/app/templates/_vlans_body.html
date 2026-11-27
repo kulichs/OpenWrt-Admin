@@ -27,14 +27,20 @@
         <span class="small muted">{% if d.error %}<span class="err">{{ t("vl.unreadable") }}</span>{% else %}{{ t("vl.m_" ~ d.method) }}{% if d.uplink %} · {{ t("vl.uplink") }} {{ d.uplink }}{% endif %}{% endif %}</span></th>
       {% if loop.first %}{% for sv in vl.sws or [] %}<th>{{ sv.name }} <span class="tag">switch</span><br><span class="small muted">{% if sv.error %}<span class="err">{{ t("vl.unreadable") }}</span>{% else %}SNMP · {{ t("vl.sw_legend") }}{% endif %}</span></th>{% endfor %}{% endif %}{% endfor %}</tr></thead>
     {% for r in vl.rows %}
-    <tr><th>{% if r.key == "native" %}{{ t("vl.native") }}{% else %}VLAN {{ r.key }}{% endif %}<br><span class="small muted">{{ r.label }}</span></th>
+    {% set miss = [] %}{% if can_edit and nw and r.key in nw.router_keys %}{% for c in r.cells %}{% set d = vl.devs[loop.index0] %}{% if not c and d.name in nw.ap_ok %}{% set _ = miss.append(d.name) %}{% endif %}{% endfor %}{% endif %}
+    <tr><th>{% if r.key == "native" %}{{ t("vl.native") }}{% else %}VLAN {{ r.key }}{% endif %}<br><span class="small muted">{{ r.label }}</span>
+      {% if miss | length > 1 %}<br><button type="button" class="secondary small" hx-post="{{ base }}/vlans/preview" hx-target="previous .cmd-out"
+        hx-vals='{{ {"op": "ap_add", "aps": miss | join(","), "vid": r.key} | tojson }}'>{{ t("ap.add_all") }}</button>{% endif %}</th>
       {% for c in r.cells %}{% set d = vl.devs[loop.index0] %}
       <td>{% if d.error %}<span class="muted">?</span>
-      {% elif not c %}<span class="muted">–</span>
+      {% elif not c %}<span class="muted">–</span>{% if d.name in miss %} <button type="button" class="secondary small" hx-post="{{ base }}/vlans/preview" hx-target="previous .cmd-out"
+        hx-vals='{{ {"op": "ap_add", "aps": d.name, "vid": r.key} | tojson }}'>{{ t("ap.add") }}</button>{% endif %}
       {% else %}
         {% for i in c.ifaces %}<div><b>{{ i.name }}</b> <span class="small muted">{{ i.ip or i.proto }}</span>
           {% if can_edit and nw and d.router and i.name in nw.deletable %}<button type="button" class="secondary small" title="{{ t('nw.delete') }}"
-            hx-post="{{ base }}/vlans/preview" hx-target="previous .cmd-out" hx-vals='{{ {"op": "net_del", "name": i.name} | tojson }}'>✕</button>{% endif %}</div>{% endfor %}
+            hx-post="{{ base }}/vlans/preview" hx-target="previous .cmd-out" hx-vals='{{ {"op": "net_del", "name": i.name} | tojson }}'>✕</button>{% endif %}
+          {% if can_edit and nw and not d.router and i.name in (nw.ap_del[d.name] or []) %}<button type="button" class="secondary small" title="{{ t('ap.delete') }}"
+            hx-post="{{ base }}/vlans/preview" hx-target="previous .cmd-out" hx-vals='{{ {"op": "ap_del", "ap": d.name, "name": i.name} | tojson }}'>✕</button>{% endif %}</div>{% endfor %}
         {% for g in c.ssid_groups %}<div class="small">📶 {{ g.ssid }} <span class="muted">{{ g.on | join("+") }}{% if g.off %} <s title="{{ t('vl.off') }}">{{ g.off | join("+") }}</s>{% endif %}</span></div>{% endfor %}
         {% if c.access %}<div class="small">🔌 {{ c.access | join(", ") }}</div>{% endif %}
         {% if r.key == "native" and c.vid %}<div class="small muted">{{ t("vl.internal", vid=c.vid) }}</div>{% endif %}

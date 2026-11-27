@@ -156,6 +156,7 @@ class Store:
         self.fw_demo_zops: list[dict] = []              # demo: zmeny mapy zon (politiky, pruchody)
         self.vl: dict | None = None                     # prehled VLAN (router + AP)
         self.demo_net_cmds: list[str] = []              # demo: uci prikazy pruvodce siti (network/dhcp/firewall)
+        self.demo_ap_cmds: dict[str, list[str]] = {}    # demo: VLAN pridane / odebrane na AP
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -682,6 +683,8 @@ class Store:
                 text = vlanmod.DEMO.get("router" if is_router else d.name, "")
                 if is_router and self.demo_net_cmds:
                     text = netwiz.uci_sim(text, self.demo_net_cmds, "network")
+                if not is_router and self.demo_ap_cmds.get(d.name):
+                    text = netwiz.uci_sim(text, self.demo_ap_cmds[d.name], "network")
                 if not d.online or not text:
                     return {**vlanmod.build_device(d.name, "", is_router), "error": d.error or "offline"}
                 return vlanmod.build_device(d.name, text, is_router)
@@ -2397,6 +2400,9 @@ async def services_apply(request: Request, token: str = Form(...)):
             store.fw_demo_fwd[info["id"]] = {**info["data"], "enabled": info["enabled"]}
         elif info.get("op") == "matrix":
             store.fw_demo_zops += zonemod.demo_ops(cmds)
+        elif info.get("uci") == "apnet":
+            for n, c in info["per_ap"].items():
+                store.demo_ap_cmds.setdefault(n, []).extend(c)
         elif info.get("uci") == "net":
             store.demo_net_cmds += cmds
             for c in cmds:  # dhcp do demo modelu
@@ -2418,6 +2424,18 @@ async def services_apply(request: Request, token: str = Form(...)):
         r = actions.Result(True, f"{ap}: OK (demo)")
     elif info.get("uci") == "dhcp":
         r = await dhcp_apply(ap, cmds, summary, t, info.get("script"))
+    elif info.get("uci") == "apnet":
+        outs, ok = [], True
+        names = list(info["per_ap"])
+        for idx, n in enumerate(names):     # kazde AP zvlast, kazde se svou pojistkou; po chybe dal ne
+            ri = await safe_apply(n, ["network"], info["per_ap"][n], ["/etc/init.d/network reload"], summary, t)
+            outs.append(f"{n}: " + ("OK" if ri.ok else t("ap.failed")) + ("\n" + ri.output if ri.output else ""))
+            if not ri.ok:
+                ok = False
+                if names[idx + 1:]:
+                    outs.append(t("ap.stopped", aps=", ".join(names[idx + 1:])))
+                break
+        r = actions.Result(ok, "\n".join(outs))
     elif info.get("uci") == "net":
         r = await safe_apply(ap, ["network", "dhcp", "firewall"], cmds, netwiz.reload_cmds(bool(info.get("dhcp"))),
                              summary, t, check=fwmod.CHECK)
@@ -2432,7 +2450,7 @@ async def services_apply(request: Request, token: str = Form(...)):
         async with lock:
             r = await actions.run(store.cfg(ap), store.key, " && ".join(cmds) + " && echo OK", timeout=90, t=t,
                                   summary=f"{summary} ({ap})")
-    if info.get("uci") == "net":
+    if info.get("uci") in ("net", "apnet"):
         await store.load_vlans(force=True)
         await store.load_fw(force=True)
         await store.load_dhcp(force=True)
@@ -2518,7 +2536,29 @@ def _nw_ctx() -> dict:
                    "fw4": fw.get("fwver") == "fw4", "dsa_off": not rd["raw"]["dsa"] and not rd["raw"]["sw_dev"]
                    and not rd["raw"]["plain_up"] and not rd["raw"]["phys"],
                    "deletable": [n for n in rd["raw"]["ifaces"] if not netwiz.check_del(rd["raw"], fw, n, fwdmod.mgmt(fw)["ip"])],
-                   "router": rd["name"]}}
+                   "router": rd["name"], "router_keys": [k for k in rd["rows"] if isinstance(k, int)],
+                   "ap_del": {d["name"]: [n for n in d["raw"]["ifaces"] if not netwiz.ap_del_check(d["raw"], d, n, _host_of(d["name"]))]
+                              for d in store.vl["devs"] if not d["router"] and not d["error"] and d.get("raw")},
+                   "ap_ok": [d["name"] for d in store.vl["devs"] if not d["router"] and not d["error"] and d.get("raw")]}}
+
+
+def _host_of(name: str) -> str:
+    try:
+        return store.ap(name).host.split(":")[0]
+    except HTTPException:
+        return ""
+
+
+def _sw_port_for(dev: str) -> tuple[str, dict] | None:
+    """Port spravovaneho switche, na kterem je zarizeni (podle prehledu VLAN)."""
+    for sv in (store.vl or {}).get("sws") or []:
+        pid = next((p for p, d in sv.get("map", {}).items() if d == dev), None)
+        sw = next((x for x in store.switches if x.name == sv["name"]), None)
+        if pid and sw:
+            port = next((p for p in sw.ports if p["id"] == pid), None)
+            if port:
+                return sv["name"], port
+    return None
 
 
 @app.post("/vlans/preview", response_class=HTMLResponse)
@@ -2565,6 +2605,57 @@ async def vlans_preview(request: Request):
         info = {"op": "net_add", "uci": "net", "dhcp": d["dhcp"], "changes": changes}
         note = t("nw.note")
         crits = []
+    elif op == "ap_add":
+        try:
+            vid = int(form.get("vid") or 0)
+        except ValueError:
+            vid = 0
+        names = [x for x in str(form.get("aps") or "").split(",") if x]
+        devs = {d["name"]: d for d in store.vl["devs"]}
+        if not names or not 2 <= vid <= 4094 or any(n not in devs or devs[n]["router"] or devs[n]["error"] for n in names):
+            return result(request, title, actions.Result(False, t("msg.bad_request")))
+        if vid not in rd["rows"]:
+            return result(request, title, actions.Result(False, t("ap.err_router", vid=vid)))
+        rname = next((i["name"] for i in rd["rows"][vid]["ifaces"]), f"vlan{vid}")
+        per_ap, changes, warns, errs = {}, [], [], []
+        for n in names:
+            d = devs[n]
+            e, cmds_ap, nm, how = netwiz.ap_add_plan(d["raw"], d, vid, rname)
+            if e:
+                errs += [t(k, **a) for k, a in e]
+                continue
+            per_ap[n] = cmds_ap
+            changes.append(t("ap.do_add", ap=n, vid=vid, name=nm, how=how["label"] + (f" ({', '.join(how['ports'])})" if how["ports"] else "")))
+            sp = _sw_port_for(n)
+            if sp and vid not in (sp[1].get("vlans_t") or []):
+                warns.append(t("ap.w_switch", sw=sp[0], port=sp[1].get("name") or sp[1]["num"], ap=n, vid=vid))
+            elif not sp and not store.switches:
+                warns.append(t("ap.w_switch_generic", ap=n, vid=vid))
+        if errs:
+            return result(request, title, actions.Result(False, "\n".join(errs)))
+        warns.append(t("ap.w_reload"))
+        warns.append(t("ap.w_next"))
+        cmds = [c for n in per_ap for c in [f"# {n}", *per_ap[n]]]
+        token = store.add_svc_pending("*", cmds, {"op": "ap_add", "uci": "apnet", "per_ap": per_ap, "changes": changes})
+        shown = [*cmds, "uci commit network", "/etc/init.d/network reload", t("safe.shown")]
+        return render(request, "_svc_preview.html", ap=", ".join(per_ap), cmds=shown, changes=changes, token=token,
+                      note=t("ap.note"), warns=warns, crits=[], danger=True)
+    elif op == "ap_del":
+        n = str(form.get("ap") or "")
+        name = str(form.get("name") or "")
+        d = next((x for x in store.vl["devs"] if x["name"] == n and not x["router"] and not x["error"]), None)
+        if not d:
+            return result(request, title, actions.Result(False, t("msg.bad_request")))
+        errs = netwiz.ap_del_check(d["raw"], d, name, _host_of(n))
+        if errs:
+            return result(request, title, actions.Result(False, "\n".join(t(k, **a) for k, a in errs)))
+        cmds_ap, what = netwiz.del_plan(d["raw"], {}, {}, name)
+        changes = [t("ap.do_del", ap=n, name=name), t("nw.do_del_what", what=", ".join(what))]
+        token = store.add_svc_pending("*", [f"# {n}", *cmds_ap], {"op": "ap_del", "uci": "apnet", "per_ap": {n: cmds_ap},
+                                                                 "changes": changes})
+        shown = [f"# {n}", *cmds_ap, "uci commit network", "/etc/init.d/network reload", t("safe.shown")]
+        return render(request, "_svc_preview.html", ap=n, cmds=shown, changes=changes, token=token, note=t("ap.note"),
+                      warns=[t("ap.w_reload")], crits=[], danger=True)
     elif op == "net_del":
         name = str(form.get("name") or "")
         errs = netwiz.check_del(raw, fw, name, mg["ip"])
