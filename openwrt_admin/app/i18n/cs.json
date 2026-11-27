@@ -502,7 +502,7 @@
   "radio.err_txpower": "neplatný výkon",
   "radio.err_country": "země musí být dvoupísmenný kód (např. CZ)",
   "ssid.new_title": "Přidat nové SSID",
-  "ssid.new_hint": "Na každém vybraném rádiu vznikne nová sekce wifi-iface (owadmin_<ssid>_<rádio>), pak uci commit wireless → wifi reload. Síť musí na AP existovat (u VLAN sítí musí AP mít příslušné rozhraní). WPA3 (sae) potřebuje na AP wpad s podporou SAE (wpad-basic-mbedtls a novější) a klienty, kteří WPA3 umí – bezpečná volba je WPA2/WPA3.",
+  "ssid.new_hint": "Na každém vybraném rádiu vznikne nová sekce wifi-iface (owadmin_<ssid>_<rádio>), pak uci commit wireless → wifi reload. Síť musí na AP existovat (u VLAN sítí musí AP mít příslušné rozhraní). WPA3 (sae) potřebuje na AP wpad s podporou SAE (wpad-basic-mbedtls a novější) a klienty, kteří WPA3 umí – bezpečná volba je WPA2/WPA3. Síť se vybírá podle VLAN – na každém AP se použije jeho vlastní jméno sítě (např. HOST / host); rádia AP, které síť nemá, nejdou vybrat.",
   "ssid.new_note": "Po wifi reload se klienti na pár sekund odpojí. Heslo se nikde nezobrazuje ani neloguje.",
   "ssid.new_row": "nové SSID „{ssid}“ · síť {net} · {enc}",
   "ssid.err_network": "{ap}: síť „{net}“ na AP neexistuje.",
@@ -1026,5 +1026,9 @@
   "ap.w_reload": "Síť AP se znovu načte – klienti na AP se na pár sekund odpojí (u AP se switchem i kabelová zařízení na jeho portech).",
   "ap.w_next": "Síť na AP zatím nemá žádné SSID – připojení SSID je další krok (stránka SSID).",
   "ap.failed": "nepovedlo se",
-  "ap.stopped": "Nezměněno (zastaveno po chybě): {aps}"
+  "ap.stopped": "Nezměněno (zastaveno po chybě): {aps}",
+  "ssid.no_vlan": "(nemá tuto síť)",
+  "ssid.err_vlan_missing": "{ap} nemá síť {net} – nejdřív ji na AP přidej (stránka VLAN).",
+  "ssid.w_move": "Klienti na přesunutém SSID se znovu připojí už do nové sítě – dostanou adresu z ní a uplatní se pravidla její zóny.",
+  "ap.add_ssid": "📶 přidat SSID"
 }

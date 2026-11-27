@@ -494,7 +494,7 @@
   "radio.err_txpower": "invalid power",
   "radio.err_country": "the country must be a two-letter code (e.g. CZ)",
   "ssid.new_title": "Add a new SSID",
-  "ssid.new_hint": "A new wifi-iface section (owadmin_<ssid>_<radio>) is created on each selected radio, then uci commit wireless → wifi reload. The network must exist on the AP (for VLAN networks the AP needs the interface). WPA3 (sae) needs wpad with SAE support on the AP (wpad-basic-mbedtls and newer) and WPA3-capable clients – WPA2/WPA3 is the safe choice.",
+  "ssid.new_hint": "A new wifi-iface section (owadmin_<ssid>_<radio>) is created on each selected radio, then uci commit wireless → wifi reload. The network must exist on the AP (for VLAN networks the AP needs the interface). WPA3 (sae) needs wpad with SAE support on the AP (wpad-basic-mbedtls and newer) and WPA3-capable clients – WPA2/WPA3 is the safe choice. The network is chosen by VLAN – each AP uses its own name for it (e.g. HOST / host); radios of an AP without that network cannot be selected.",
   "ssid.new_note": "After wifi reload clients disconnect for a few seconds. The password is never shown or logged.",
   "ssid.new_row": "new SSID \"{ssid}\" · network {net} · {enc}",
   "ssid.err_network": "{ap}: network \"{net}\" does not exist on the AP.",
@@ -1018,5 +1018,9 @@
   "ap.w_reload": "The AP's network reloads – clients on the AP disconnect for a few seconds (on an AP with a switch also wired devices on its ports).",
   "ap.w_next": "The network on the AP has no SSID yet – connecting an SSID is the next step (SSID page).",
   "ap.failed": "failed",
-  "ap.stopped": "Not changed (stopped after an error): {aps}"
+  "ap.stopped": "Not changed (stopped after an error): {aps}",
+  "ssid.no_vlan": "(does not have this network)",
+  "ssid.err_vlan_missing": "{ap} does not have network {net} – add it to the AP first (VLAN page).",
+  "ssid.w_move": "Clients on the moved SSID reconnect into the new network – they get an address from it and its zone rules apply.",
+  "ap.add_ssid": "📶 add SSID"
 }

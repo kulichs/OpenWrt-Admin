@@ -288,6 +288,8 @@ The **VLAN** page (top bar) reads the networks and SSIDs of the router and all A
 - The preview warns when the managed switch port to the AP does not carry the VLAN yet (the app does not write to the switch) and that the network has no SSID yet – connecting an SSID is the next step.
 - **✕** at an AP network removes it with its bridge and VLAN – not for the native network, the management network, or a network with an SSID connected.
 
+**SSID in a VLAN network** – on the SSID page the network for a new SSID is chosen **by VLAN** (e.g. "VLAN 30 (HOST / host)"); each AP uses its own name for that network, and radios of an AP without it cannot be selected. An existing SSID can be **moved to another network** (Network: unchanged / VLAN …) – the preview shows the new network per AP and warns that clients reconnect into it. From the VLAN page, an AP network without an SSID has a **📶 add SSID** link that opens the form with the VLAN preselected. So a new network goes switch (by hand, checked) → router (New network) → APs (+ add) → Wi-Fi (add SSID).
+
 ### Statistics
 
 The **Statistics** page (option `stats`, on by default) shows what the network is doing right now and in the last hour:
@@ -777,6 +779,8 @@ Stránka **VLAN** (horní lišta) načte sítě a SSID routeru a všech AP najed
 - Každé AP se uloží zvlášť s pojistkou; když se jedno nepovede, další se už nemění. Síť AP se znovu načte – klienti na něm se na pár sekund odpojí.
 - Náhled upozorní, když port spravovaného switche k AP VLAN ještě nemá (na switch aplikace nezapisuje), a že síť zatím nemá SSID – připojení SSID je další krok.
 - **✕** u sítě na AP ji odebere i s mostem a VLAN – ne u nativní sítě, správcovské sítě a sítě s připojeným SSID.
+
+**SSID v síti VLAN** – na stránce SSID se síť nového SSID vybírá **podle VLAN** (např. „VLAN 30 (HOST / host)“); každé AP použije své jméno té sítě a rádia AP, které ji nemá, nejdou vybrat. Existující SSID jde **přesunout do jiné sítě** (Síť: beze změny / VLAN …) – náhled ukáže novou síť pro každé AP a upozorní, že se klienti připojí už do ní. Ze stránky VLAN má síť na AP bez SSID odkaz **📶 přidat SSID**, který otevře formulář s předvybranou VLAN. Nová síť tak jde switch (ručně, s kontrolou) → router (Nová síť) → AP (+ přidat) → Wi-Fi (přidat SSID).
 
 ### Statistiky
 

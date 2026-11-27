@@ -103,6 +103,7 @@ class SsidChange:
     key: str | None = None        # None = beze zmeny
     hidden: bool | None = None
     disabled: bool | None = None
+    network: str | None = None    # None = beze zmeny; jinak jmeno rozhrani na tomto AP
 
 
 def validate(ch: SsidChange, t) -> str | None:
@@ -112,6 +113,8 @@ def validate(ch: SsidChange, t) -> str | None:
         return t("msg.bad_ssid")
     if ch.key is not None and not (8 <= len(ch.key) <= 63 and ch.key.isascii() and ch.key.isprintable()):
         return t("msg.bad_key")
+    if ch.network is not None and not SECTION_RE.match(ch.network):
+        return t("msg.bad_section", section=ch.network)
     return None
 
 
@@ -126,6 +129,8 @@ def uci_commands(ch: SsidChange) -> list[str]:
         out.append(f"uci set {s}.hidden={'1' if ch.hidden else '0'}")
     if ch.disabled is not None:
         out.append(f"uci set {s}.disabled={'1' if ch.disabled else '0'}")
+    if ch.network is not None:
+        out.append(f"uci set {s}.network={ch.network}")
     return out
 
 

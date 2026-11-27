@@ -226,3 +226,5 @@ openwrt_admin/
 - **VLAN na AP (`netwiz.ap_add_plan`, `vlan_cmds`):** stejné stavební kameny jako u routeru, rozhraní `proto none`. Způsob:
   swconfig/DSA přednostně, jinak jediný port (`plain_up`). Uložení `info["uci"]="apnet"`, `per_ap` = {AP: příkazy}, každé AP
   zvlášť `safe_apply(network)`, po chybě konec. Mazání přes `del_plan(raw, {}, {}, jméno)`; ne nativní/správcovská/se SSID.
+- **SSID podle VLAN (`_net_options`, `_resolve_net` v main):** hodnota sítě `vlan:<klíč>` → jméno rozhraní na každém AP
+  z `store.vl` (HOST / host). `SsidChange.network` = přesun SSID. Demo: změny Wi-Fi jdou do `demo_ap_cmds` a `uci_sim(..., "wireless")`.

@@ -43,6 +43,7 @@
             hx-post="{{ base }}/vlans/preview" hx-target="previous .cmd-out" hx-vals='{{ {"op": "ap_del", "ap": d.name, "name": i.name} | tojson }}'>✕</button>{% endif %}</div>{% endfor %}
         {% for g in c.ssid_groups %}<div class="small">📶 {{ g.ssid }} <span class="muted">{{ g.on | join("+") }}{% if g.off %} <s title="{{ t('vl.off') }}">{{ g.off | join("+") }}</s>{% endif %}</span></div>{% endfor %}
         {% if c.access %}<div class="small">🔌 {{ c.access | join(", ") }}</div>{% endif %}
+        {% if can_edit and not d.router and c.ifaces and not c.ssids %}<div class="small"><a href="{{ base }}/ssids?net=vlan:{{ r.key }}#new-ssid">{{ t("ap.add_ssid") }}</a></div>{% endif %}
         {% if r.key == "native" and c.vid %}<div class="small muted">{{ t("vl.internal", vid=c.vid) }}</div>{% endif %}
         {% if c.note %}<div class="small bad">{{ t(c.note) }}</div>{% endif %}
         <div class="small muted mono">{{ (c.bridges or c.l2) | join(", ") }}</div>

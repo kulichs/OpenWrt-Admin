@@ -11,6 +11,7 @@
         {% if r.ch.key is not none %}{{ t("preview.key_changed") }}<br>{% endif %}
         {% if r.ch.hidden is not none %}{{ t("col.hidden") }}: {{ t("yes") if r.item.hidden else t("no") }} → <b>{{ t("yes") if r.ch.hidden else t("no") }}</b><br>{% endif %}
         {% if r.ch.disabled is not none %}{{ t("col.state") }}: {{ t("state.off") if r.item.disabled else t("state.on") }} → <b>{{ t("state.off") if r.ch.disabled else t("state.on") }}</b>{% endif %}
+        {% if r.ch.network is not none %}<br>{{ t("col.network") }}: <s>{{ r.item.network }}</s> → <b>{{ r.ch.network }}</b>{% endif %}
       </td>
       <td><pre class="small">{{ r.cmds | join('\n') }}
 uci commit wireless
@@ -18,6 +19,7 @@ wifi reload</pre></td>
     </tr>
     {% endfor %}
   </table>
+  {% if rows | selectattr("ch.network") | list %}<ul class="warnlist"><li>⚠ {{ t("ssid.w_move") }}</li></ul>{% endif %}
   <p class="muted small">{{ t("preview.reload_note") }}</p>
   <form hx-post="{{ base }}/ssids/apply" hx-target="closest .ssid-out" hx-disabled-elt="find button">
     <input type="hidden" name="token" value="{{ token }}">

@@ -2,6 +2,17 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.29.0
+- **SSID by VLAN**: the network of a new SSID is chosen by VLAN, each AP uses its own network name (HOST / host); radios of APs without that network are disabled, the preview refuses them.
+- **Move an SSID to another network** (SSID page, Network: unchanged / VLAN …), with a warning that clients reconnect into the new network.
+- VLAN page: **📶 add SSID** at AP networks without an SSID, opens the SSID form with the VLAN preselected. Completes the chain switch → router → APs → Wi-Fi.
+- Verified: demo chain VLAN on an AP → new SSID in it → moving an existing SSID (different network names per AP), regression tests. Not yet on the real network.
+---
+- **SSID podle VLAN**: síť nového SSID se vybírá podle VLAN, každé AP použije své jméno sítě (HOST / host); rádia AP bez té sítě nejdou vybrat, náhled je odmítne.
+- **Přesun SSID do jiné sítě** (stránka SSID, Síť: beze změny / VLAN …), s upozorněním, že se klienti připojí už do nové sítě.
+- Stránka VLAN: **📶 přidat SSID** u sítí na AP bez SSID, otevře formulář SSID s předvybranou VLAN. Tím je hotový řetězec switch → router → AP → Wi-Fi.
+- Ověřeno: demo řetězec VLAN na AP → nové SSID v ní → přesun existujícího SSID (různá jména sítí na AP), regresní testy. Na skutečné síti zatím ne.
+
 ## 0.28.0
 - **VLAN on the APs** from the VLAN page: + add (one AP) or + to all APs (row). The app creates the VLAN by the AP's method (swconfig switch_vlan, DSA bridge-vlan, or an 8021q device), a bridge and a network without an address (`proto none`), named after the router's network. Each AP separately with the safety net, stops after the first failure.
 - Remove a VLAN network from an AP (✕) with its bridge and VLAN – not the native or management network, not with an SSID connected.

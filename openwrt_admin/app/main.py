@@ -685,6 +685,7 @@ class Store:
                     text = netwiz.uci_sim(text, self.demo_net_cmds, "network")
                 if not is_router and self.demo_ap_cmds.get(d.name):
                     text = netwiz.uci_sim(text, self.demo_ap_cmds[d.name], "network")
+                    text = netwiz.uci_sim(text, self.demo_ap_cmds[d.name], "wireless")
                 if not d.online or not text:
                     return {**vlanmod.build_device(d.name, "", is_router), "error": d.error or "offline"}
                 return vlanmod.build_device(d.name, text, is_router)
@@ -1578,6 +1579,10 @@ async def pending_apply(request: Request, token: str = Form(...)):
     log.info("%s: %s na %s", who(request), kind, ", ".join(plan))
     if store.opts.get("demo"):
         await asyncio.sleep(1)
+        if kind == "new-ssid":
+            for ap, cmds in plan.items():
+                store.demo_ap_cmds.setdefault(ap, []).extend(cmds)
+            store.vl = None
         return result(request, title, actions.Result(True, "\n".join(f"{ap}: OK (demo)" for ap in plan)))
 
     async def one(ap_name, cmds):
@@ -1607,20 +1612,25 @@ async def ssid_new_preview(request: Request, ssid: str = Form(""), key: str = Fo
     targets = form.getlist("target")  # "ap|radio"
     plan: dict[str, list[str]] = {}
     rows = []
+    if network.startswith("vlan:"):
+        await store.load_vlans(max_age=SVC_FRESH)
+    opts = _net_options(t) if network.startswith("vlan:") else []
+    net_label = next((o["label"] for o in opts if o["value"] == network), network)
     for target in targets:
         ap_name, _, radio_name = target.partition("|")
         ar = store.radio(ap_name, radio_name)
         if not ar:
             continue
         a, r = ar
-        nets = {i["name"] for i in a.interfaces if not i.get("wan")}
-        if nets and network not in nets:
-            return result(request, title, actions.Result(False, t("ssid.err_network", ap=a.name, net=network)))
+        ifname = _resolve_net(network, a, opts)
+        if not ifname:
+            key = "ssid.err_vlan_missing" if network.startswith("vlan:") else "ssid.err_network"
+            return result(request, title, actions.Result(False, t(key, ap=a.name, net=net_label)))
         if any(w["ssid"] == ssid and w["device"] == r["name"] for w in a.wifi_ifaces):
             return result(request, title, actions.Result(False, t("ssid.err_exists", ap=a.name, ssid=ssid, radio=r["name"])))
         existing = {w["section"] for w in a.wifi_ifaces} | {p.split("=")[0].split(".")[1] for p in plan.get(a.name, [])
                                                               if p.endswith("=wifi-iface")}
-        n = actions.NewSsid(device=r["name"], ssid=ssid, key=key, encryption=encryption, network=network,
+        n = actions.NewSsid(device=r["name"], ssid=ssid, key=key, encryption=encryption, network=ifname,
                             hidden=hidden == "1")
         n.section = actions.new_section(ssid, r["name"], existing)
         err = actions.validate_new(n, t)
@@ -1629,7 +1639,8 @@ async def ssid_new_preview(request: Request, ssid: str = Form(""), key: str = Fo
         cmds = actions.new_ssid_cmds(n)
         plan.setdefault(a.name, []).extend(cmds)
         rows.append({"ap": a.name, "label": f"{r['name']} · {r.get('band', '')}",
-                     "changes": [t("ssid.new_row", ssid=ssid, net=network, enc=encryption)], "cmds": [actions.mask(c) for c in cmds]})
+                     "changes": [t("ssid.new_row", ssid=ssid, net=ifname + (f" · {net_label}" if net_label != ifname else ""),
+                                   enc=encryption)], "cmds": [actions.mask(c) for c in cmds]})
     if not rows:
         return result(request, title, actions.Result(False, t("ssid.err_no_target")))
     token = store.add_pending("new-ssid", plan)
@@ -2915,14 +2926,44 @@ async def client_unban(request: Request, mac: str = Form(...), ssid: str = Form(
 
 # ---------------------------------------------------------------- SSID
 
+def _net_options(t) -> list[dict]:
+    """Site pro SSID podle VLAN (jmena na AP se lisi: HOST / host): [{value, label, aps: {AP: rozhrani}}]."""
+    vl = store.vl or {}
+    out = []
+    for r in vl.get("rows", []):
+        aps = {}
+        for d, c in zip(vl.get("devs", []), r["cells"]):
+            if d["router"] or d["error"] or not c or not c["ifaces"]:
+                continue
+            aps[d["name"]] = c["ifaces"][0]["name"]
+        if not aps:
+            continue
+        names = sorted({n for n in aps.values()}, key=str.lower)
+        head = t("vl.native") if r["key"] == "native" else f"VLAN {r['key']}"
+        out.append({"value": f"vlan:{r['key']}", "label": f"{head} ({' / '.join(names)})", "aps": aps})
+    return out
+
+
+def _resolve_net(value: str, ap: APState, opts: list[dict]) -> str | None:
+    """Hodnota z formulare -> jmeno rozhrani na AP (None = AP tuto sit / VLAN nema)."""
+    if value.startswith("vlan:"):
+        o = next((x for x in opts if x["value"] == value), None)
+        return (o or {}).get("aps", {}).get(ap.name)
+    nets = {i["name"] for i in ap.interfaces if not i.get("wan")}
+    return value if (not nets or value in nets) else None
+
+
 @app.get("/ssids", response_class=HTMLResponse)
-async def ssids_page(request: Request):
+async def ssids_page(request: Request, net: str = ""):
+    await store.load_vlans(max_age=SVC_FRESH)
+    opts = _net_options(request.state.t)
     nets = sorted({i["name"] for a in store.aps for i in a.interfaces if not i.get("wan") and i.get("name") != "loopback"},
                   key=lambda n: (n != "lan", n))
-    radios = [{"ap": a.name, "radio": r["name"], "band": r.get("band", ""), "up": r.get("up")}
+    radios = [{"ap": a.name, "radio": r["name"], "band": r.get("band", ""), "up": r.get("up"),
+               "has": (not net or not opts) or a.name in next((o["aps"] for o in opts if o["value"] == net), {})}
               for a in store.aps if a.online for r in a.radios]
     return render(request, "ssids.html", page="ssids", groups=store.ssid_groups(), autorefresh=False,
-                  new_nets=nets or ["lan"], new_radios=radios, encryptions=actions.ENCRYPTIONS)
+                  new_nets=nets or ["lan"], net_opts=opts, net_sel=net, new_radios=radios, encryptions=actions.ENCRYPTIONS)
 
 
 def _tri(v: str) -> bool | None:
@@ -2931,7 +2972,7 @@ def _tri(v: str) -> bool | None:
 
 @app.post("/ssids/preview", response_class=HTMLResponse)
 async def ssids_preview(request: Request, ssid: str = Form(...), new_ssid: str = Form(""),
-                        new_key: str = Form(""), hidden: str = Form(""), disabled: str = Form("")):
+                        new_key: str = Form(""), hidden: str = Form(""), disabled: str = Form(""), network: str = Form("")):
     require_htmx(request)
     t = request.state.t
     title = t("preview.title")
@@ -2945,12 +2986,24 @@ async def ssids_preview(request: Request, ssid: str = Form(...), new_ssid: str =
     known = {(i["ap"], i["section"]): i for i in group["items"]}
     plan: dict[str, list[actions.SsidChange]] = {}
     rows = []
+    if network.startswith("vlan:"):
+        await store.load_vlans(max_age=SVC_FRESH)
+    opts = _net_options(t) if network else []
+    net_label = next((o["label"] for o in opts if o["value"] == network), network)
     for target in targets:
         ap_name, _, section = target.partition("|")
         item = known.get((ap_name, section))
         if not item:
             continue
+        ifname = None
+        if network:
+            ifname = _resolve_net(network, store.ap(ap_name), opts)
+            if not ifname:
+                return result(request, title, actions.Result(False, t("ssid.err_vlan_missing", ap=ap_name, net=net_label)))
+            if ifname == item["network"]:
+                ifname = None
         ch = actions.SsidChange(
+            network=ifname,
             section=section,
             ssid=new_ssid if new_ssid and new_ssid != item["ssid"] else None,
             key=new_key or None,
@@ -2971,7 +3024,7 @@ async def ssids_preview(request: Request, ssid: str = Form(...), new_ssid: str =
     store.pending = {k: v for k, v in store.pending.items() if now - v[0] < 600}
     token = secrets.token_urlsafe(16)
     store.pending[token] = (now, plan)
-    return render(request, "_ssid_preview.html", rows=rows, token=token)
+    return render(request, "_ssid_preview.html", rows=rows, token=token, net_label=net_label)
 
 
 @app.post("/ssids/apply", response_class=HTMLResponse)
@@ -2988,6 +3041,9 @@ async def ssids_apply(request: Request, token: str = Form(...)):
     log.info("%s: SSID change on %s", who(request), ", ".join(plan))
     if store.opts.get("demo"):
         await asyncio.sleep(1)
+        for ap, chs in plan.items():
+            store.demo_ap_cmds.setdefault(ap, []).extend(c for ch in chs for c in actions.uci_commands(ch))
+        store.vl = None
         return result(request, title, actions.Result(True, "\n".join(f"{ap}: OK (demo)" for ap in plan)))
 
     async def one(ap_name, changes):

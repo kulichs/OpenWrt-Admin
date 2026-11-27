@@ -8,20 +8,21 @@
 {% endif %}
 {% if not groups %}<p class="empty">{{ t("ssid.none") }}</p>{% endif %}
 {% if can_edit and new_radios %}
-<details class="panel" id="new-ssid">
+<details class="panel" id="new-ssid" {{ 'open' if net_sel }}>
   <summary><b>{{ t("ssid.new_title") }}</b></summary>
   <form hx-post="{{ base }}/ssids/new/preview" hx-target="next .cmd-out" hx-disabled-elt="find button[type=submit]">
     <div class="filters edit">
       <label>SSID <input name="ssid" maxlength="32" required></label>
       <label>{{ t("ssid.new_key") }} <input name="key" type="password" minlength="8" maxlength="63" autocomplete="new-password" required></label>
       <label>{{ t("col.encryption") }} <select name="encryption">{% for e in encryptions %}<option value="{{ e }}">{{ t("ssid.enc_" ~ e | replace('-', '_')) }}</option>{% endfor %}</select></label>
-      <label>{{ t("col.network") }} <select name="network">{% for n in new_nets %}<option value="{{ n }}">{{ n }}</option>{% endfor %}</select></label>
+      <label>{{ t("col.network") }} <select name="network">{% if net_opts %}{% for o in net_opts %}<option value="{{ o.value }}" {{ 'selected' if o.value == net_sel }}>{{ o.label }}</option>{% endfor %}
+        {% else %}{% for n in new_nets %}<option value="{{ n }}">{{ n }}</option>{% endfor %}{% endif %}</select></label>
       <label><input type="checkbox" name="hidden" value="1"> {{ t("col.hidden") }}</label>
     </div>
     <table class="list">
       <thead><tr><th></th><th>AP</th><th>{{ t("col.radio") }}</th><th>{{ t("col.band") }}</th></tr></thead>
       {% for r in new_radios %}
-      <tr class="{{ '' if r.up else 'row-off' }}"><td><input type="checkbox" name="target" value="{{ r.ap }}|{{ r.radio }}"></td><td>{{ r.ap }}</td><td class="mono small">{{ r.radio }}</td><td>{{ r.band | band }}</td></tr>
+      <tr class="{{ '' if r.up and r.has else 'row-off' }}"><td><input type="checkbox" name="target" value="{{ r.ap }}|{{ r.radio }}" {{ 'disabled' if not r.has }}></td><td>{{ r.ap }}{% if not r.has %} <span class="small muted">{{ t("ssid.no_vlan") }}</span>{% endif %}</td><td class="mono small">{{ r.radio }}</td><td>{{ r.band | band }}</td></tr>
       {% endfor %}
     </table>
     <div class="filters edit"><button type="submit">{{ t("ssid.preview") }}</button></div>
@@ -52,6 +53,7 @@
       <label>{{ t("ssid.new_key") }} <input name="new_key" type="password" minlength="8" maxlength="63" autocomplete="new-password" placeholder="{{ t('ssid.unchanged') }}"></label>
       <label>{{ t("col.hidden") }} <select name="hidden"><option value="">{{ t("ssid.unchanged") }}</option><option value="1">{{ t("yes") }}</option><option value="0">{{ t("no") }}</option></select></label>
       <label>{{ t("col.state") }} <select name="disabled"><option value="">{{ t("ssid.unchanged") }}</option><option value="0">{{ t("ssid.enable") }}</option><option value="1">{{ t("ssid.disable") }}</option></select></label>
+      {% if net_opts %}<label>{{ t("col.network") }} <select name="network"><option value="">{{ t("ssid.unchanged") }}</option>{% for o in net_opts %}<option value="{{ o.value }}">{{ o.label }}</option>{% endfor %}</select></label>{% endif %}
       <button type="submit">{{ t("ssid.preview") }}</button>
     </div>
     {% endif %}
