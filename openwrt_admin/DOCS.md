@@ -121,7 +121,11 @@ logread -e dropbear          # logins (with a dedicated user you see "owadmin" i
 
 On the first connection the app stores the fingerprint of each device's SSH key in `/data/known_hosts.json` (trust on first use). If the key changes later, the app **refuses the connection before sending any command** (no Wi-Fi password or configuration leaves) and shows a red banner on every page with the old and new fingerprint. After a reinstall or `sysupgrade -n` this is expected: check the fingerprint on the device (`dropbearkey -y -f /etc/dropbear/dropbear_ed25519_host_key`, line *Fingerprint*) and click **Accept new key** (full access only). Otherwise someone on the network may be impersonating the device.
 
-**Tip:** limit where the app key can be used – in `/etc/dropbear/authorized_keys` put `from="<IP of Home Assistant>" ` in front of the key line.
+#### Limit the app key by IP
+
+The app key has root on every device; if it leaked (e.g. from an HA backup) it would work from any computer on the network. **Settings → Limit the app key by IP** shows, for every device, the address the app connects from (`$SSH_CLIENT` on the device – Home Assistant may reach different networks from different interfaces, so there can be several) and whether the key is limited, and gives the commands to run on each device.
+
+OpenWrt's dropbear does **not** support `from="…"` in `authorized_keys` – a line with it is rejected as a whole and the app could no longer log in. The limit is therefore a small script `/etc/dropbear/owadmin-gate.sh` used via `command="…"`: it runs the original command only when the client address is listed in `/etc/dropbear/owadmin-allow`, otherwise it logs `app key used from … - refused` (`logread -e openwrt-admin`) and exits. The key line also gets `no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty` (the app needs none of it). `/etc/dropbear/` is added to `/etc/sysupgrade.conf` so it survives an upgrade. Your own key and password are not affected. Home Assistant needs a fixed IP; the Settings page also shows the command to undo the limit.
 
 ### What it can do
 
@@ -480,6 +484,7 @@ A **change preview** opens directly below the button, form or table row it was r
 | radios: real channel, width, power, noise; channel utilisation | `iwinfo`, `iw dev <if> survey dump` |
 | neighbouring networks (only on Scan, `radio_scan`) | `iwinfo <if> scan` |
 | configuration fingerprint (with the firewall / DHCP / VLAN reads, for the stale-preview check) | `uci -q show <package> \| md5sum` |
+| where the app connects from, how its key is limited (Settings) | `$SSH_CLIENT`, `grep` of the app key in `/etc/dropbear/authorized_keys`, `/etc/dropbear/owadmin-allow` |
 | services, adblock, banIP (only when the Services tab opens) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, allow/block list files |
 | DHCP and DNS (only when the DHCP or DNS tab opens; lookup test: `nslookup <name> 127.0.0.1`) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `resolv.conf.auto`, `ls /etc/config/*.apk-new` |
 | firewall (only when the Firewall tab opens) | `uci -X show firewall`, `fw4 print` (zone order per interface), `netstat -tulpn` / `ss -tulpn`, `ip route` + `ip addr` (WAN), `ls /etc/nftables.d`, owadmin lines in `/etc/crontabs/root`, `date` |
@@ -638,7 +643,11 @@ logread -e dropbear          # přihlášení (s vlastním uživatelem uvidíš 
 
 Při prvním připojení si aplikace uloží otisk klíče SSH každého zařízení do `/data/known_hosts.json` (důvěra při prvním použití). Když se klíč později změní, aplikace **spojení odmítne dřív, než pošle jakýkoli příkaz** (neodejde heslo Wi-Fi ani konfigurace), a na každé stránce ukáže červený pruh se starým a novým otiskem. Po reinstalaci nebo `sysupgrade -n` je to v pořádku: otisk ověř na zařízení (`dropbearkey -y -f /etc/dropbear/dropbear_ed25519_host_key`, řádek *Fingerprint*) a klikni na **Přijmout nový klíč** (jen plný přístup). Jinak se může za zařízení vydávat někdo jiný v síti.
 
-**Tip:** omez, odkud jde klíč aplikace použít – v `/etc/dropbear/authorized_keys` dej před řádek s klíčem `from="<IP Home Assistantu>" `.
+#### Omezení klíče aplikace podle IP
+
+Klíč aplikace má root na všech zařízeních; kdyby unikl (třeba ze zálohy HA), fungoval by z kteréhokoli počítače v síti. **Nastavení → Omezení klíče aplikace podle IP** ukáže u každého zařízení adresu, ze které se aplikace připojuje (`$SSH_CLIENT` na zařízení – Home Assistant může do různých sítí chodit z různých rozhraní, adres tedy může být víc), jestli je klíč omezený, a dá příkazy, které na každém zařízení spustíš.
+
+Dropbear v OpenWrt volbu `from="…"` v `authorized_keys` **nezná** – řádek s ní odmítne celý a aplikace by se už nepřihlásila. Omezení proto dělá malý skript `/etc/dropbear/owadmin-gate.sh` přes `command="…"`: původní příkaz pustí jen tehdy, když je adresa klienta v `/etc/dropbear/owadmin-allow`, jinak zapíše do logu `app key used from … - refused` (`logread -e openwrt-admin`) a skončí. Řádek klíče navíc dostane `no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty` (nic z toho aplikace nepotřebuje). `/etc/dropbear/` se přidá do `/etc/sysupgrade.conf`, aby přežil upgrade. Tvůj vlastní klíč ani heslo se nemění. Home Assistant musí mít pevnou IP; stránka Nastavení ukáže i příkaz pro zrušení omezení.
 
 ### Co umí
 
@@ -997,6 +1006,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | rádia: skutečný kanál, šířka, výkon, šum; vytížení kanálu | `iwinfo`, `iw dev <if> survey dump` |
 | okolní sítě (jen po Skenovat, `radio_scan`) | `iwinfo <if> scan` |
 | otisk konfigurace (se čtením firewallu / DHCP / VLAN, pro kontrolu zastaralého náhledu) | `uci -q show <balík> \| md5sum` |
+| odkud se aplikace připojuje, jak je omezen její klíč (Nastavení) | `$SSH_CLIENT`, `grep` klíče aplikace v `/etc/dropbear/authorized_keys`, `/etc/dropbear/owadmin-allow` |
 | služby, adblock, banIP (jen při otevření záložky Služby) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, soubory povolených/blokovaných |
 | DHCP a DNS (jen při otevření záložky DHCP nebo DNS; test překladu: `nslookup <jméno> 127.0.0.1`) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `resolv.conf.auto`, `ls /etc/config/*.apk-new` |
 | firewall (jen při otevření záložky Firewall) | `uci -X show firewall`, `fw4 print` (pořadí zón na rozhraních), `netstat -tulpn` / `ss -tulpn`, `ip route` + `ip addr` (WAN), `ls /etc/nftables.d`, řádky owadmin v `/etc/crontabs/root`, `date` |

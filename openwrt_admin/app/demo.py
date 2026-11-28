@@ -33,7 +33,7 @@ def _clients(ap, ssid, net, ifname, n, freq=2437):
 
 def demo_states() -> tuple[list[APState], dict]:
     now = time.time()
-    a = APState(name="AP-Living", host="192.168.1.2", online=True, updated=now,
+    a = APState(name="AP-Living", host="192.168.1.2", online=True, updated=now, ssh_from="192.168.1.10", key_found=True,
                 hostname="ap-living", model="Ubiquiti UniFi AP LR",
                 release="OpenWrt 25.12.2 r30000", kernel="6.6.110", uptime=7340, load=0.08,
                 mem_total=60 * 2**20, mem_avail=31 * 2**20,
@@ -48,7 +48,7 @@ def demo_states() -> tuple[list[APState], dict]:
         a.ssids.append({"ifname": ifn, "ssid": ssid, "network": net, "radio": "radio0",
                         "encryption": "psk2+ccmp", "channel": 6, "freq": 2437, "band": "2,4 GHz", "clients": n})
 
-    b = APState(name="AP-Office", host="192.168.1.3", online=True, updated=now,
+    b = APState(name="AP-Office", host="192.168.1.3", online=True, updated=now, ssh_from="192.168.20.10", key_found=True,
                 hostname="ap-office", model="Xiaomi Mi Router 4A Gigabit",
                 release="OpenWrt 25.12.2 r30000", kernel="6.6.110", uptime=950000, load=0.21,
                 mem_total=120 * 2**20, mem_avail=70 * 2**20,
@@ -131,7 +131,7 @@ def demo_states() -> tuple[list[APState], dict]:
 
 
 def demo_router(name: str, host: str) -> APState:
-    r = APState(name=name, host=host, kind="router", online=True, updated=time.time(),
+    r = APState(name=name, host=host, kind="router", online=True, updated=time.time(), ssh_from="192.168.1.10", key_found=True,
                 hostname="router", model="Xunlong Orange Pi R1 Plus LTS",
                 release="OpenWrt 25.12.2 r30000", kernel="6.6.110", uptime=1_950_000, load=0.12,
                 mem_total=990 * 2**20, mem_avail=760 * 2**20,

@@ -9,6 +9,37 @@
   <pre>echo '{{ store.pubkey }}' &gt;&gt; /etc/dropbear/authorized_keys
 chmod 600 /etc/dropbear/authorized_keys</pre>
   <p class="muted small">{{ t("setup.key_note") }}</p>
+  {% set kl = store.key_limits() %}
+  <h3>{{ t("kl.title") }}</h3>
+  <p>{{ t("kl.text") }}</p>
+  <table class="list">
+    <thead><tr><th>{{ t("col.name") }}</th><th>{{ t("kl.from") }}</th><th>{{ t("kl.state") }}</th></tr></thead>
+    {% for r in kl.rows %}
+    <tr><td>{{ r.name }}</td><td class="mono">{{ r.from or "–" }}</td>
+      <td>{% if not r.online %}<span class="muted">offline</span>
+        {% elif r.gated %}<span class="sig good">{{ t("kl.gated") }}</span> <span class="mono small">{{ r.allow | join(", ") or "–" }}</span>{% if not r.script %} <span class="sig bad">{{ t("kl.no_script") }}</span>{% endif %}
+        {% elif r.found %}<span class="sig ok">{{ t("kl.open") }}</span>
+        {% else %}<span class="muted">{{ t("kl.not_found") }}</span>{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  {% if kl.ips %}
+  <p>{{ t("kl.suggest") }} <b class="mono">{{ kl.ips | join(" ") }}</b>{% if kl.ips | length > 1 %} <span class="muted small">{{ t("kl.multi") }}</span>{% endif %}</p>
+  {% if not kl.all_gated %}
+  <p>{{ t("kl.howto") }}</p>
+  <pre>cat &gt; {{ kl.gate }} &lt;&lt;'EOF'
+{{ gate_script }}EOF
+chmod 755 {{ kl.gate }}
+echo '{{ kl.ips | join(" ") }}' &gt; {{ kl.allow_file }}
+grep -qxF /etc/dropbear/ /etc/sysupgrade.conf || echo /etc/dropbear/ &gt;&gt; /etc/sysupgrade.conf
+sed -i 's#^{{ kl.keytype }} {{ kl.keyb64 }}#{{ gate_opts }} &amp;#' /etc/dropbear/authorized_keys</pre>
+  <p class="muted small">{{ t("kl.safety") }}</p>
+  {% else %}
+  <p class="muted small">{{ t("kl.update") }}</p>
+  <pre>echo '{{ kl.ips | join(" ") }}' &gt; {{ kl.allow_file }}</pre>
+  {% endif %}
+  <p class="muted small">{{ t("kl.undo") }}</p>
+  <pre>sed -i 's#^command="{{ kl.gate }}",[^ ]* ##' /etc/dropbear/authorized_keys</pre>
+  {% endif %}
   {% set su = store.opts.get("ssh_user") or "root" %}{% set un = su if su != "root" else "owadmin" %}
   <h3>{{ t("setup.user_title") }}</h3>
   <p>{{ t("setup.user_text", user=un) }}</p>

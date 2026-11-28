@@ -50,6 +50,11 @@ class APState:
     # wifi-iface sekce z uci (vcetne vypnutych SSID), bez hesel
     wifi_ifaces: list[dict[str, Any]] = field(default_factory=list)
     pkg: str = ""  # "apk" / "opkg"
+    ssh_from: str = ""      # IP, ze ktere zarizeni vidi aplikaci ($SSH_CLIENT)
+    key_opts: str = ""      # volby pred klicem aplikace v authorized_keys ("" = bez omezeni, None nenalezen)
+    key_found: bool = False
+    gate_allow: list = field(default_factory=list)  # /etc/dropbear/owadmin-allow
+    gate_script: bool = False
     kind: str = "ap"  # "ap" / "router"
     # router: rozhrani z `ubus call network.interface dump`
     interfaces: list[dict[str, Any]] = field(default_factory=list)
@@ -194,15 +199,68 @@ def parse_wifi_ifaces(text: str) -> list[dict]:
     return sorted(out, key=lambda i: (i["ssid"], i["device"]))
 
 
-async def _read_system(conn, st: APState, timeout: float) -> None:
-    """Spolecne pro AP i router: model, verze, uptime, RAM, overlay, spravce balicku."""
-    board, info, df_out, pkg = await asyncio.gather(
+async def _noop() -> str:
+    return ""
+
+
+def key_b64(key) -> str:
+    try:
+        return key.export_public_key().decode().split()[1]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+GATE = "/etc/dropbear/owadmin-gate.sh"
+GATE_ALLOW = "/etc/dropbear/owadmin-allow"
+# Dropbear nezna v authorized_keys volbu from="IP" (radek by odmitl cely) – omezeni podle IP proto pres command=:
+# skript pusti puvodni prikaz jen z povolenych adres, jinak zapise do logu a skonci.
+GATE_SCRIPT = """#!/bin/sh
+# OpenWrt-Admin: klic aplikace jen z povolenych IP (/etc/dropbear/owadmin-allow, oddelene mezerou)
+ip="${SSH_CLIENT%% *}"
+for a in $(cat /etc/dropbear/owadmin-allow 2>/dev/null); do
+  [ "$a" = "$ip" ] && exec /bin/sh -c "$SSH_ORIGINAL_COMMAND"
+done
+logger -t openwrt-admin -p auth.warning "app key used from $ip - refused"
+echo "openwrt-admin: key not allowed from $ip" >&2
+exit 1
+"""
+GATE_OPTS = f'command="{GATE}",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty'
+
+
+def key_cmd(keyb64: str) -> str:
+    """Odkud aplikace prichazi a jak je jeji klic omezeny (jen cteni)."""
+    assert re.fullmatch(r"[A-Za-z0-9+/=]{20,}", keyb64)
+    return (f'echo "@@ip ${{SSH_CLIENT%% *}}"; echo "@@key $(grep -F -- {keyb64} /etc/dropbear/authorized_keys 2>/dev/null '
+            f'| head -n 1 | sed \'s/ssh-[a-z0-9-]* AAAA.*//; s/ecdsa-[a-z0-9-]* AAAA.*//; s/ *$//\')"; '
+            f'grep -qF -- {keyb64} /etc/dropbear/authorized_keys 2>/dev/null && echo @@found; '
+            f'echo "@@allow $(cat {GATE_ALLOW} 2>/dev/null | tr \'\\n\' \' \')"; [ -x {GATE} ] && echo @@gate; true')
+
+
+def parse_key(out: str, st: APState) -> None:
+    for line in (out or "").splitlines():
+        if line.startswith("@@ip "):
+            st.ssh_from = line[5:].strip()
+        elif line.startswith("@@key "):
+            st.key_opts = line[6:].strip()
+        elif line.strip() == "@@found":
+            st.key_found = True
+        elif line.startswith("@@allow "):
+            st.gate_allow = line[8:].split()
+        elif line.strip() == "@@gate":
+            st.gate_script = True
+
+
+async def _read_system(conn, st: APState, timeout: float, keyb64: str = "") -> None:
+    """Spolecne pro AP i router: model, verze, uptime, RAM, overlay, spravce balicku, omezeni klice aplikace."""
+    board, info, df_out, pkg, keyout = await asyncio.gather(
         _ubus(conn, "system", "board", timeout),
         _ubus(conn, "system", "info", timeout),
         _run(conn, "df -k /overlay 2>/dev/null | tail -n 1", timeout),
         _run(conn, "command -v apk >/dev/null && echo apk || (command -v opkg >/dev/null && echo opkg)", timeout),
+        _run(conn, key_cmd(keyb64), timeout) if keyb64 else _noop(),
     )
     st.pkg = pkg.strip()
+    parse_key(keyout, st)
 
     if board:
         st.hostname = board.get("hostname", "")
@@ -274,7 +332,7 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
                     _run(conn, PORTS_CMD, timeout),
                     _run(conn, RADIO_CMD, timeout),
                 ),
-                _read_system(conn, st, timeout),
+                _read_system(conn, st, timeout, key_b64(key)),
             )
             st.arl, st.arp, st.switch_vlans = parse_arl(arl), parse_arp(arp), switch_vlan_ports(ucinet)
             st.wifi_ifaces = parse_wifi_ifaces(uci_wl)
@@ -616,7 +674,7 @@ async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 1
                                     known_hosts=None, connect_timeout=timeout) as conn:
             hostkeys.verify(conn, cfg.host, cfg.port)
             _, dump, devstatus, ucinet, leases, ucidhcp, arp, swports = await asyncio.gather(
-                _read_system(conn, st, timeout),
+                _read_system(conn, st, timeout, key_b64(key)),
                 _ubus(conn, "network.interface", "dump", timeout),
                 _ubus(conn, "network.device", "status", timeout),
                 _run(conn, "uci -q show network", timeout),

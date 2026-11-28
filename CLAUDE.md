@@ -254,3 +254,7 @@ openwrt_admin/
   `Store._take_hash` uloží `cfg_hash[(zařízení, balík)]`; `add_svc_pending` dá do info `base` podle druhu (`uci`); `safe_apply`
   a `dhcp_apply` dají `guard(base)` na začátek skriptu → výstup `STALE` = `msg.stale`, nic se nezmění.
 - **Notifikace HA:** text ze sítě vždy přes `ha.md_escape` (Markdown); mobilní text `ha.md_plain`.
+- **Omezení klíče (`collector.key_cmd/parse_key`, `GATE_SCRIPT`, `Store.key_limits`):** dropbear NEZNÁ `from=` v authorized_keys
+  (řádek odmítne celý → aplikace se nepřihlásí). Omezení podle IP = `command="/etc/dropbear/owadmin-gate.sh"` (+ no-port-forwarding,
+  no-agent-forwarding, no-X11-forwarding, no-pty); dropbear v `command="…"` neodstraňuje `\"` → skript, ne inline. Uvnitř skriptu
+  `exec /bin/sh -c "$SSH_ORIGINAL_COMMAND"` – příkazy aplikace musí projít beze změny (víceřádkové, návratový kód).

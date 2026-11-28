@@ -26,6 +26,7 @@ from jinja2 import pass_context
 
 from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, zones as zonemod, vlans as vlanmod, netwiz, rules as rulemod, history as histmod, hostkeys, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
+from . import collector
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
 
@@ -1223,6 +1224,25 @@ class Store:
             except ValueError:
                 return (1, x["ip"])
         return sorted(out, key=ipkey)
+
+    def key_limits(self) -> dict:
+        """Omezeni klice aplikace na zarizenich (Nastaveni): odkud aplikace prichazi, co je na zarizeni, navrh."""
+        devs = [d for d in [*([self.router] if self.router else []), *self.aps] if d.kind != "switch"]
+        rows, ips = [], []
+        for d in devs:
+            gated = collector.GATE in (d.key_opts or "")
+            rows.append({"name": d.name, "online": d.online, "from": d.ssh_from, "found": d.key_found, "opts": d.key_opts,
+                         "gated": gated, "allow": d.gate_allow, "script": d.gate_script})
+            if d.online and d.ssh_from and d.ssh_from not in ips:
+                ips.append(d.ssh_from)
+        for r in rows:
+            for ip in r["allow"]:
+                if r["gated"] and ip not in ips:
+                    ips.append(ip)    # uz povolene adresy neztratit (napr. druhe rozhrani HA)
+        parts = self.pubkey.split()
+        return {"rows": rows, "ips": ips, "keytype": parts[0] if parts else "", "keyb64": parts[1] if len(parts) > 1 else "",
+                "all_gated": bool(rows) and all(r["gated"] for r in rows if r["online"]), "gate": collector.GATE,
+                "allow_file": collector.GATE_ALLOW}
 
     def hostkey_changes(self) -> dict[str, dict]:
         """Zarizeni, jejichz klic SSH se zmenil (spojeni odmitnuto) -> {host:port: {name, old, new, ...}}."""
@@ -3018,7 +3038,8 @@ async def api_stats():
 
 @app.get("/setup", response_class=HTMLResponse)
 async def setup_page(request: Request):
-    return render(request, "setup.html", page="setup", role_issues=role_entry_issues())
+    return render(request, "setup.html", page="setup", role_issues=role_entry_issues(),
+                  gate_script=collector.GATE_SCRIPT, gate_opts=collector.GATE_OPTS)
 
 
 @app.post("/refresh")

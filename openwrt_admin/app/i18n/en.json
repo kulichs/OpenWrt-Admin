@@ -1131,5 +1131,19 @@
   "hk.accept": "Accept new key",
   "hk.confirm": "Really accept the new SSH key of {dev}? Only do this if you know why it changed.",
   "hk.accepted": "New key of {dev} accepted, the app is reconnecting.",
-  "msg.stale": "The configuration on the device has changed since the preview (LuCI, another tab or user). Nothing was saved – reload the page and create the preview again."
+  "msg.stale": "The configuration on the device has changed since the preview (LuCI, another tab or user). Nothing was saved – reload the page and create the preview again.",
+  "kl.title": "Limit the app key by IP",
+  "kl.text": "The app key has root on all devices. If it leaked (e.g. from an HA backup), it could be used from any computer on the network. The limit lets it in only from the addresses Home Assistant connects from. OpenWrt's dropbear does not know the from=\"IP\" option (it would reject the whole line and the app could not connect), so a small script via command= does it. The key also loses port forwarding and terminal – the app does not need them.",
+  "kl.from": "App connects from",
+  "kl.state": "App key on the device",
+  "kl.gated": "limited to:",
+  "kl.open": "not limited",
+  "kl.not_found": "not found in /etc/dropbear/authorized_keys (other user or file)",
+  "kl.no_script": "script missing – the app cannot connect",
+  "kl.suggest": "Allow addresses:",
+  "kl.multi": "(several addresses: Home Assistant reaches different networks from different interfaces – allow all)",
+  "kl.howto": "On every device (router and APs) run – the same commands everywhere:",
+  "kl.safety": "Safely: keep your own SSH session open (your key and password do not change), then click Refresh at the top – all devices must stay online. Home Assistant needs a fixed IP. Refused attempts: logread -e openwrt-admin.",
+  "kl.update": "The key is limited everywhere. If the HA address changes or another one is added, update the allowed list:",
+  "kl.undo": "Remove the limit (on the device):"
 }

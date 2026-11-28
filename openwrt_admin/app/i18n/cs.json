@@ -1139,5 +1139,19 @@
   "hk.accept": "Přijmout nový klíč",
   "hk.confirm": "Opravdu přijmout nový klíč SSH zařízení {dev}? Udělej to jen tehdy, když víš, proč se změnil.",
   "hk.accepted": "Nový klíč {dev} přijat, aplikace se znovu připojuje.",
-  "msg.stale": "Konfigurace na zařízení se od náhledu změnila (LuCI, jiná záložka nebo jiný uživatel). Nic se neuložilo – načti stránku a vytvoř náhled znovu."
+  "msg.stale": "Konfigurace na zařízení se od náhledu změnila (LuCI, jiná záložka nebo jiný uživatel). Nic se neuložilo – načti stránku a vytvoř náhled znovu.",
+  "kl.title": "Omezení klíče aplikace podle IP",
+  "kl.text": "Klíč aplikace má root na všech zařízeních. Když unikne (třeba ze zálohy HA), šel by použít z kteréhokoli počítače v síti. Omezení ho pustí jen z adres, ze kterých se připojuje Home Assistant. Dropbear v OpenWrt nezná volbu from=\"IP\" (řádek s ní by odmítl celý a aplikace by se nepřipojila), proto se to dělá malým skriptem přes command=. Zároveň se klíči zakáže přesměrování portů a terminál – aplikace je nepotřebuje.",
+  "kl.from": "Aplikace přichází z",
+  "kl.state": "Klíč aplikace na zařízení",
+  "kl.gated": "omezen na:",
+  "kl.open": "bez omezení",
+  "kl.not_found": "nenalezen v /etc/dropbear/authorized_keys (jiný uživatel nebo soubor)",
+  "kl.no_script": "chybí skript – aplikace se nepřipojí",
+  "kl.suggest": "Povolit adresy:",
+  "kl.multi": "(víc adres: Home Assistant chodí do různých sítí z různých rozhraní – povol všechny)",
+  "kl.howto": "Na každém zařízení (router i AP) spusť – stejné příkazy všude:",
+  "kl.safety": "Bezpečně: nech si otevřené vlastní SSH spojení (tvůj klíč ani heslo se nemění), pak dej nahoře Obnovit – všechna zařízení musí zůstat online. Home Assistant musí mít pevnou IP. Odmítnuté pokusy: logread -e openwrt-admin.",
+  "kl.update": "Klíč je všude omezený. Když se adresa HA změní nebo přibude, uprav seznam povolených adres:",
+  "kl.undo": "Zrušení omezení (na zařízení):"
 }
