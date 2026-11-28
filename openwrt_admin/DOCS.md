@@ -272,7 +272,7 @@ With full access, existing rules and port forwards can be **turned on and off** 
 - Warnings in the preview: the device is already blocked, the MAC looks random (private) – phones may change it, a schedule starting now or later.
 - Saved with the safety net; it backs up and restores `/etc/crontabs/root` together with the firewall configuration, and `cron` is enabled and restarted when needed.
 
-**Safety net when saving.** Firewall changes (and later network and VLAN changes) are saved like LuCI's "apply with rollback": the device backs up the affected configuration to `/tmp/owadmin-rb/<token>/`, starts a 90 s countdown, applies the change in the background (so a dropped SSH session cannot interrupt it) and runs `fw4 check` – if the check fails, the backup is restored immediately. The app then opens a new SSH connection and confirms. If it cannot reconnect (the change cut it off), the device restores the backup and reloads after 90 s on its own and logs `rollback … not confirmed`. Before the first change of the day the configuration is backed up as with DHCP.
+**Safety net when saving.** Firewall changes (and later network and VLAN changes) are saved like LuCI's "apply with rollback": the device backs up the affected configuration to `/tmp/owadmin-rb/<token>/`, starts a 90 s countdown, applies the change in the background (so a dropped SSH session cannot interrupt it) and runs `fw4 check` – if the check fails, the backup is restored immediately. The app then opens a new SSH connection and confirms. If it cannot reconnect (the change cut it off), the device restores the backup and reloads after 90 s on its own and logs `rollback … not confirmed`. Before the first change of the day the configuration is backed up as with DHCP. While a change waits for confirmation, another change, a reboot or a package upgrade of the same device is refused with the remaining time (a rollback would otherwise undo it too).
 
 ### VLANs and networks
 
@@ -390,8 +390,8 @@ Login is handled by Home Assistant (Ingress); the app has no passwords of its ow
 | read-only | in `read_access` | overview, clients, SSIDs, AP details, list of updates and backups – no action buttons, no backup download |
 | no access | in neither list | "Access denied" page |
 
-- Use the HA **username** (Settings → People → Users) or the display name, case-insensitive.
-- **Both lists empty:** everyone who opens the panel has full access. The Settings page warns about it.
+- Use the HA **username** (Settings → People → Users, Username field) or the user ID shown on the Settings page, case-insensitive. The **display name is not used** – every user can change it in their profile. The Settings page lists entries that match no HA username (e.g. a display name from before 0.32.1) and suggests the username.
+- **Both lists empty:** HA **administrators** have full access, other users read-only. The app reads the HA user list every 5 minutes; if it cannot, non-listed users are read-only. The Settings page warns about it.
 - **Ingress sends no username:** read-only, never full access.
 - Permissions are enforced on the server, not only hidden in the UI. Actions are logged with the user name.
 - The panel is visible to all HA users (`panel_admin: false`). Hiding the panel alone would not be enough: HA does not block the ingress URL for regular users.
@@ -782,7 +782,7 @@ S plným přístupem jde existující pravidla a přesměrování **zapnout a vy
 - Upozornění v náhledu: zařízení už je blokované, MAC vypadá jako náhodná (soukromá) – telefony ji můžou změnit, rozvrh začíná hned nebo později.
 - Ukládá se s pojistkou; ta zálohuje a vrací i `/etc/crontabs/root` spolu s konfigurací firewallu a podle potřeby zapne a restartuje `cron`.
 
-**Pojistka při ukládání.** Změny firewallu (a později sítí a VLAN) se ukládají jako „apply with rollback“ v LuCI: zařízení si zazálohuje dotčenou konfiguraci do `/tmp/owadmin-rb/<token>/`, spustí odpočet 90 s, změnu provede na pozadí (aby ji nepřerušilo odpojení SSH) a spustí `fw4 check` – když kontrola selže, záloha se vrátí hned. Aplikace pak otevře nové SSH spojení a změnu potvrdí. Když se připojit nejde (změna ji odřízla), zařízení po 90 s samo vrátí zálohu, znovu načte a zapíše do logu `rollback … not confirmed`. Před první změnou dne se konfigurace zálohuje jako u DHCP.
+**Pojistka při ukládání.** Změny firewallu (a později sítí a VLAN) se ukládají jako „apply with rollback“ v LuCI: zařízení si zazálohuje dotčenou konfiguraci do `/tmp/owadmin-rb/<token>/`, spustí odpočet 90 s, změnu provede na pozadí (aby ji nepřerušilo odpojení SSH) a spustí `fw4 check` – když kontrola selže, záloha se vrátí hned. Aplikace pak otevře nové SSH spojení a změnu potvrdí. Když se připojit nejde (změna ji odřízla), zařízení po 90 s samo vrátí zálohu, znovu načte a zapíše do logu `rollback … not confirmed`. Před první změnou dne se konfigurace zálohuje jako u DHCP. Dokud změna čeká na potvrzení, další změna, restart nebo upgrade balíčků téhož zařízení se odmítne se zbývajícím časem (návrat by ji jinak vrátil taky).
 
 ### VLAN a sítě
 
@@ -900,8 +900,8 @@ Přihlášení řeší Home Assistant (Ingress), aplikace vlastní hesla nemá. 
 | jen čtení | je v `read_access` | přehled, klienti, SSID, detail AP, seznam aktualizací a záloh – bez tlačítek akcí, bez stažení záloh |
 | bez přístupu | není v žádném seznamu | stránka „Přístup odepřen“ |
 
-- Píše se **uživatelské jméno** HA (Nastavení → Lidé → Uživatelé) nebo zobrazované jméno, velikost písmen nehraje roli.
-- **Oba seznamy prázdné:** plný přístup má každý, kdo panel otevře. Stránka Nastavení na to upozorní.
+- Píše se **uživatelské jméno** HA (Nastavení → Lidé → Uživatelé, pole Uživatelské jméno) nebo ID uživatele ze stránky Nastavení, velikost písmen nehraje roli. **Zobrazované jméno se nebere** – každý uživatel si ho může změnit v profilu. Stránka Nastavení vypíše položky, které neodpovídají žádnému uživatelskému jménu v HA (např. zobrazované jméno z doby před 0.32.1), a navrhne uživatelské jméno.
+- **Oba seznamy prázdné:** plný přístup mají **administrátoři HA**, ostatní jen čtení. Aplikace čte seznam uživatelů HA každých 5 minut; když nejde načíst, mají neuvedení uživatelé jen čtení. Stránka Nastavení na to upozorní.
 - **Ingress nepošle jméno uživatele:** jen čtení, nikdy plný přístup.
 - Kontroluje se na serveru, ne jen v zobrazení. Akce se logují se jménem uživatele.
 - Panel vidí všichni uživatelé HA (`panel_admin: false`). Samotné schování panelu by nestačilo, HA ingress adresu u běžného uživatele neblokuje.

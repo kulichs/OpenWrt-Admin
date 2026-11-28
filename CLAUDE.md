@@ -241,3 +241,8 @@ openwrt_admin/
   začátek ≤ `last` + SLACK, jinak se zavře a založí nový (pozná A→B→A mezi čteními). Úseky AP, které neodpovědělo,
   se nezavírají; na ose končí po STALE (600 s) bez čtení. Přechod = další úsek do ROAM_GAP (90 s), skákání = návrat
   do PINGPONG (600 s). Demo: `:memory:` + `demo_fill` (24 h, poslední úsek = AP/pásmo z dema). Chyba DB nesmí shodit poll.
+- **Role (`identify` v main):** jen uživatelské jméno (`X-Remote-User-Name`) nebo ID (`X-Remote-User-Id`), nikdy zobrazované
+  jméno (uživatel si ho mění sám → povýšení práv, audit FND-01). Prázdné seznamy: `store.ha_users` z `config/auth/list`
+  (`ha.fetch_users`, každých 5 min) → admin (`system-admin` / owner) plný, ostatní čtení; bez SUPERVISOR_TOKEN (vývoj) plný.
+- **Pojistka a souběh (`armed_left`, `store.armed`):** dokud změna čeká na potvrzení / návrat, `safe_apply` i `ap_action`
+  (restart, apk) na stejném zařízení odmítnou (`safe.busy`) – návrat zálohy by vrátil i pozdější změnu (FND-04).

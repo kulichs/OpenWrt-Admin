@@ -2,6 +2,17 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.32.1
+- **Security – roles only by username:** `full_access` / `read_access` are matched against the HA **username** (or user ID), no longer the display name. Every HA user can change their own display name in the profile, so a read-only user could rename themselves to an admin's display name and get full access. **If you have display names in the lists, replace them with usernames** – the Settings page lists entries that match no HA username and suggests the right one; the "Access denied" page says why.
+- **Empty role lists:** full access only for **HA administrators**, other users read-only (before: everyone had full access). The app reads the HA user list (`config/auth/list`) every 5 minutes; if it cannot, non-listed users are read-only.
+- **Safety net:** while a change on a device waits for confirmation (up to 90 s), another change, reboot or package upgrade on the same device is refused with the remaining time – a rollback of the first change would otherwise also undo the second one.
+- Verified: display-name trick refused, username / user ID / case-insensitive, admin vs. non-admin with empty lists, unavailable user list, Settings warnings, second change during an armed safety net (simulated).
+---
+- **Bezpečnost – role jen podle uživatelského jména:** `full_access` / `read_access` se porovnávají s **uživatelským jménem** HA (nebo ID uživatele), už ne se zobrazovaným jménem. Zobrazované jméno si v profilu mění každý uživatel sám, takže uživatel jen pro čtení se mohl přejmenovat na zobrazované jméno správce a dostat plný přístup. **Kdo má v seznamech zobrazovaná jména, ať je nahradí uživatelskými** – stránka Nastavení vypíše položky, které neodpovídají žádnému uživatelskému jménu v HA, a navrhne správné; stránka „Přístup odepřen“ řekne proč.
+- **Prázdné seznamy rolí:** plný přístup jen **administrátoři HA**, ostatní jen čtení (dřív měl plný přístup každý). Aplikace čte seznam uživatelů HA (`config/auth/list`) každých 5 minut; když nejde načíst, mají neuvedení uživatelé jen čtení.
+- **Pojistka:** dokud změna na zařízení čeká na potvrzení (až 90 s), další změna, restart nebo upgrade balíčků na stejném zařízení se odmítne se zbývajícím časem – návrat první změny by jinak vrátil i tu druhou.
+- Ověřeno: trik se zobrazovaným jménem odmítnut, uživatelské jméno / ID / velikost písmen, admin a neadmin při prázdných seznamech, nedostupný seznam uživatelů, varování v Nastavení, druhá změna při běžící pojistce (simulace).
+
 ## 0.32.0
 - **Client history and roaming** (new page History): which AP and band each Wi-Fi client was on, as a timeline per device (colour = AP, taller bar = 5/6 GHz), for 24 h / 7 days / 30 days. Counts of AP roams and **ping-pong** (A → B → A within 10 minutes), share of time per AP, worst signal; a device's detail lists events (connected, AP roam with the signal before/after, band change, disconnected). "history" link at every client in the client tables.
 - Stored as sessions in `/data/client_history.sqlite`; the start comes from the client's connected time, so it is exact even with a 30 s read interval. Clients of an AP that could not be read are not ended. New option `client_history_days` (default 30, 0 = off); older records are removed once a day.

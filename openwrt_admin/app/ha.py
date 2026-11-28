@@ -77,6 +77,26 @@ async def fetch_names(timeout: float = 15.0) -> dict[str, str]:
     return parse_devices(devices or [])
 
 
+def parse_users(users: list[dict]) -> dict[str, dict]:
+    """config/auth/list -> {id: {username, name, admin}}; systemove ucty (Supervisor, aplikace) vynechat."""
+    out = {}
+    for u in users or []:
+        if not u.get("id") or u.get("system_generated"):
+            continue
+        out[u["id"]] = {"username": (u.get("username") or "").lower(), "name": u.get("name") or "",
+                        "admin": bool(u.get("is_owner")) or "system-admin" in (u.get("group_ids") or []),
+                        "active": u.get("is_active", True)}
+    return out
+
+
+async def fetch_users(timeout: float = 15.0) -> dict[str, dict] | None:
+    """Uzivatele HA (jen admin smi `config/auth/list`; aplikace jde pres Supervisor). Bez SUPERVISOR_TOKEN None."""
+    if not os.environ.get("SUPERVISOR_TOKEN"):
+        return None
+    (users,) = await _session([{"type": "config/auth/list"}], timeout)
+    return parse_users(users or [])
+
+
 async def ha_language() -> str:
     """Jazyk Home Assistantu (get_config -> language), napr. 'cs'. Pri chybe ''."""
     try:

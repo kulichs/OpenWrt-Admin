@@ -115,6 +115,9 @@ class Store:
                                        if self.router_item else None)
         self.last_poll = 0.0
         self.seen: dict[str, dict] = self._load_seen()
+        self.ha_users: dict[str, dict] | None = None   # uzivatele HA {id: {username, name, admin}} (role bez seznamu)
+        self.ha_users_err = ""
+        self.armed: dict[str, float] = {}               # zarizeni -> do kdy na nem bezi pojistka (odpocet navratu)
         days = int(self.opts.get("client_history_days", 30) or 0)
         try:
             self.history = histmod.History(None if self.opts.get("demo") else HISTFILE,
@@ -1188,6 +1191,16 @@ class Store:
                 return (1, x["ip"])
         return sorted(out, key=ipkey)
 
+    async def load_users(self):
+        """Uzivatele HA pro role: kdo je administrator (prazdne full_access/read_access) a kontrola jmen v seznamech."""
+        try:
+            users = await ha.fetch_users()
+            if users is not None:
+                self.ha_users, self.ha_users_err = users, ""
+        except Exception as e:  # noqa: BLE001 - bez seznamu: neadmin jen cteni
+            self.ha_users_err = f"{type(e).__name__}: {e}"
+            log.warning("Uzivatele HA nejde nacist: %s", self.ha_users_err)
+
     def all_clients(self) -> list[dict]:
         out = []
         for ap in self.aps:
@@ -1210,6 +1223,12 @@ async def poller():
         except Exception:  # noqa: BLE001 - poller nesmi umrit
             log.exception("Chyba pri sberu dat")
         await asyncio.sleep(max(10, int(store.opts.get("poll_interval", 30))))
+
+
+async def users_loop():
+    while True:
+        await store.load_users()
+        await asyncio.sleep(300 if store.ha_users is not None else 60)
 
 
 async def maintainer():
@@ -1256,7 +1275,7 @@ async def lifespan(app: FastAPI):
              ", ".join(f"{a['name']}={a['host']}" for a in store.ap_items) or "-",
              (f"{store.router_item['name']}={store.router_item['host']}" if store.router_item else "-"),
              store.opts.get("demo"))
-    tasks = [asyncio.create_task(poller()), asyncio.create_task(maintainer()),
+    tasks = [asyncio.create_task(poller()), asyncio.create_task(maintainer()), asyncio.create_task(users_loop()),
              asyncio.create_task(stats_loop()), asyncio.create_task(sensors_loop())]
     yield
     for task in tasks:
@@ -1276,23 +1295,49 @@ ROLE_KEYS = {"full": "role.full", "read": "role.read", "none": "role.none"}
 
 
 def identify(request: Request, t) -> dict:
+    """Role podle UZIVATELSKEHO JMENA (nebo ID) uzivatele HA. Zobrazovane jmeno si uzivatel meni sam v profilu,
+    proto se pro role nebere (jen se ukazuje). Prazdne seznamy: plny pristup jen administratori HA."""
     h = request.headers
     user = {"id": h.get(H_USER_ID, ""), "name": h.get(H_USER_NAME, "") or os.environ.get("OWADMIN_DEV_USER", ""),
             "display": h.get(H_USER_DISPLAY, "")}
     full = {u.strip().lower() for u in store.opts.get("full_access") or [] if u.strip()}
     read = {u.strip().lower() for u in store.opts.get("read_access") or [] if u.strip()}
-    names = {user["name"].lower(), user["display"].lower()} - {""}
+    names = {user["name"].lower(), user["id"].lower()} - {""}
+    hu = (store.ha_users or {}).get(user["id"]) if user["id"] else None
     if not full and not read:
-        role, why = "full", t("why.no_roles")
+        if hu is not None:
+            role, why = ("full", t("why.no_roles_admin")) if hu["admin"] else ("read", t("why.no_roles_user"))
+        elif store.ha_users is None and not os.environ.get("SUPERVISOR_TOKEN"):
+            role, why = "full", t("why.no_roles")          # mimo HA (vyvoj, demo na pocitaci) – neni koho se zeptat
+        else:
+            role, why = "read", t("why.no_roles_unknown")
     elif not names:
         role, why = "read", t("why.no_user")
     elif names & full:
         role, why = "full", t("why.in_full")
     elif names & read:
         role, why = "read", t("why.in_read")
+    elif user["display"].lower() in full | read:
+        role, why = "none", t("why.display_only", d=user["display"], u=user["name"] or user["id"])
     else:
         role, why = "none", t("why.not_listed")
     return {**user, "role": role, "why": why, "label": t(ROLE_KEYS[role])}
+
+
+def role_entry_issues() -> list[dict]:
+    """Polozky full_access / read_access, ktere neodpovidaji zadnemu uzivatelskemu jmenu ani ID v HA
+    (typicky zobrazovane jmeno z doby pred 0.32.1) -> [{entry, list, username}]."""
+    if not store.ha_users:
+        return []
+    known = {u["username"] for u in store.ha_users.values() if u["username"]} | {i.lower() for i in store.ha_users}
+    out = []
+    for lst in ("full_access", "read_access"):
+        for e in store.opts.get(lst) or []:
+            k = e.strip().lower()
+            if k and k not in known:
+                hit = next((u for u in store.ha_users.values() if u["name"].strip().lower() == k), None)
+                out.append({"entry": e.strip(), "list": lst, "username": (hit or {}).get("username", "")})
+    return out
 
 
 # ---------------------------------------------------------------- jazyk
@@ -1977,6 +2022,15 @@ async def _upstream_plan(t, form, m: dict, op: str):
     return cmds, shown, changes, warns, {"script": script, "servers": servers, "forwards": forwards}
 
 
+def armed_left(ap: str) -> int:
+    """Kolik sekund jeste na zarizeni bezi pojistka jine zmeny (0 = nic)."""
+    left = int(store.armed.get(ap, 0) - time.time())
+    if left <= 0:
+        store.armed.pop(ap, None)
+        return 0
+    return left
+
+
 async def safe_apply(ap: str, pkgs: list[str], cmds: list[str], reload: list[str], summary: str, t,
                      check: str | None = None, timeout: int = 90, files: list[str] | None = None) -> actions.Result:
     """Ulozit s pojistkou: zaloha dne, odpocet na zarizeni, zmena na pozadi, nove spojeni a potvrzeni.
@@ -1989,26 +2043,39 @@ async def safe_apply(ap: str, pkgs: list[str], cmds: list[str], reload: list[str
         out.append(t("dhcp.backup_done", file=msg) if ok else t("dhcp.backup_failed", err=msg))
         if not ok and msg != "busy":
             return actions.Result(False, "\n".join(out))
+    busy = armed_left(ap)
+    if busy:   # jina zmena ceka na potvrzeni: jeji navrat by vratil i tuhle (zaloha je pred ni)
+        return actions.Result(False, "\n".join([*out, t("safe.busy", s=busy)]))
     tok = safeapply.new_token()
+    store.armed[ap] = time.time() + 75     # do odpoctu na zarizeni (arm + potvrzeni), upresni se nize
     lock = store.ap_lock(ap)
-    async with lock:
-        r = await actions.run(store.cfg(ap), store.key, safeapply.arm_script(tok, pkgs, cmds, reload, timeout, check=check, files=files),
-                              timeout=60, t=t, summary=f"{summary} ({ap})")
-    if not r.ok or f"ARMED {tok}" not in r.output:
-        return actions.Result(False, "\n".join([*out, t("safe.failed"), r.output[-400:]]))
-    out.append(t("safe.armed", s=timeout))
-    await asyncio.sleep(4)
-    deadline = time.time() + timeout - 15
-    while time.time() < deadline:
-        c = await actions.run(store.cfg(ap), store.key, safeapply.confirm_cmd(tok), timeout=10, t=t, audit=False)
-        if c.ok and "CONFIRMED" in c.output:
-            out.append(t("safe.confirmed"))
-            return actions.Result(True, "\n".join(out))
-        if c.ok and "GONE" in c.output:
-            break
-        await asyncio.sleep(5)
-    out.append(t("safe.not_confirmed", s=timeout))
-    return actions.Result(False, "\n".join(out))
+    confirmed = armed_ok = False
+    try:
+        async with lock:
+            r = await actions.run(store.cfg(ap), store.key, safeapply.arm_script(tok, pkgs, cmds, reload, timeout, check=check, files=files),
+                                  timeout=60, t=t, summary=f"{summary} ({ap})")
+        if not r.ok or f"ARMED {tok}" not in r.output:
+            return actions.Result(False, "\n".join([*out, t("safe.failed"), r.output[-400:]]))
+        armed_ok = True
+        store.armed[ap] = time.time() + timeout + 10    # nepotvrzene: zarizeni se vrati nejpozdeji tehdy
+        out.append(t("safe.armed", s=timeout))
+        await asyncio.sleep(4)
+        deadline = time.time() + timeout - 15
+        while time.time() < deadline:
+            c = await actions.run(store.cfg(ap), store.key, safeapply.confirm_cmd(tok), timeout=10, t=t, audit=False)
+            if c.ok and "CONFIRMED" in c.output:
+                confirmed = True
+                out.append(t("safe.confirmed"))
+                return actions.Result(True, "\n".join(out))
+            if c.ok and "GONE" in c.output:
+                confirmed = True        # uz vraceno / smazano – na nic se neceka
+                break
+            await asyncio.sleep(5)
+        out.append(t("safe.not_confirmed", s=timeout))
+        return actions.Result(False, "\n".join(out))
+    finally:
+        if confirmed or not armed_ok:   # nepotvrzena zmena: drzet do navratu na zarizeni (expirace v store.armed)
+            store.armed.pop(ap, None)
 
 
 def _fw_ctx(ap: APState, block_mac: str = "") -> dict:
@@ -2901,7 +2968,7 @@ async def api_stats():
 
 @app.get("/setup", response_class=HTMLResponse)
 async def setup_page(request: Request):
-    return render(request, "setup.html", page="setup")
+    return render(request, "setup.html", page="setup", role_issues=role_entry_issues())
 
 
 @app.post("/refresh")
@@ -2945,6 +3012,9 @@ async def ap_action(request: Request, name: str, title: str, fn, demo_text: str)
     if request.state.user["role"] != "full":
         return result(request, title, actions.Result(False, t("msg.no_permission")))
     ap = store.ap(name)
+    busy = armed_left(name)
+    if busy:   # restart / upgrade by zrusil odpocet pojistky (/tmp) a nepotvrzena zmena by zustala
+        return result(request, title, actions.Result(False, t("safe.busy", s=busy)))
     lock = store.ap_lock(name)
     if lock.locked():
         return result(request, title, actions.Result(False, t("msg.busy")))

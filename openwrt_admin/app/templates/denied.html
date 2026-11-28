@@ -6,6 +6,7 @@
 <div class="panel">
   <h1>{{ t("denied.title") }}</h1>
   <p>{{ t("denied.text", user=(user.name or user.display or "?")) }}</p>
+  {% if user.why %}<p class="muted small">{{ user.why }}</p>{% endif %}
   <p class="muted small">{{ t("denied.hint") }}</p>
 </div>
 </main></body></html>

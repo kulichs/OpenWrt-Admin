@@ -91,6 +91,10 @@ logread -e dropbear | grep {{ un }}</pre>
   {% if not store.opts.full_access and not store.opts.read_access %}
   <p class="warn small">{{ t("setup.no_roles_warning") }}</p>
   {% endif %}
+  {% for x in role_issues %}
+  <p class="warn small">{{ t("setup.role_entry_bad", e=x.entry, l=x.list) }}{% if x.username %} {{ t("setup.role_entry_fix", u=x.username) }}{% endif %}</p>
+  {% endfor %}
+  {% if store.ha_users_err %}<p class="warn small">{{ t("setup.users_err", e=store.ha_users_err) }}</p>{% endif %}
   <p class="muted small">{{ t("setup.users_hint") }}</p>
 </div>
 <div class="panel">
