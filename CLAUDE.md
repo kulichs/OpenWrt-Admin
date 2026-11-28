@@ -209,6 +209,9 @@ openwrt_admin/
   při úpravě nejdřív smazat. Ochrana proti odříznutí: `@@me` = `$SSH_CLIENT` při čtení (IP klienta + port SSH
   routeru) → zóna; `lockout_rule/redirect/block` vrací rizika, náhled je pak `danger` s `crits`. Je to varování,
   ne zákaz – skutečná ochrana je pojistka (90 s). Bez `$SSH_CLIENT` se nehlásí nic.
+- **adblock cron (`services.adb_cron_*`):** jeden řádek se značkou `# owadmin adblock-reload` (sed na konec řádku),
+  příkaz `[ -f /tmp/owadmin-adb-resume ] || /etc/init.d/adblock reload`. Čte se `grep adblock /etc/crontabs/root`;
+  `blocks.parse_cron` tenhle řádek ignoruje (nemá on/off/until).
 - **Pravidla (`app/rules.py`):** `firewall.build` dává u pravidla `pos` (pořadí sekce pro `uci reorder`) a `extra`
   (volby, které formulář nezná → jen zapnout/posunout/smazat). Posun = reorder na pozici souseda. `covers(a, b)` je
   zjednodušené (zóna, cíl, protokol, porty, src IP); MAC / cílová IP / negace u `a` → neposuzuje. Demo: `uci_sim` umí reorder.

@@ -733,6 +733,10 @@ class Store:
             st["adb_paused_until"] = time.time() + m * 60 if m else -1
         elif op in ("adb_resume", "adb_reload"):
             st["adb_paused_until"] = 0
+        elif op == "adb_cron_set":
+            st["adb_cron"] = info["line"]
+        elif op == "adb_cron_del":
+            st["adb_cron"] = ""
         elif op in ("adb_list", "ban_list"):
             pre = "adb" if op == "adb_list" else "ban"
             lst, other = st[f"{pre}_{info['target']}"], st[f"{pre}_{'block' if info['target'] == 'allow' else 'allow'}"]
@@ -2427,6 +2431,19 @@ def _svc_plan(t, form) -> tuple[str, list[str], dict, list[str]] | str:
         return ap, svcmod.adb_reload_cmds(), info, [t("adb.do_reload")]
     if op == "ban_reload":
         return ap, ["/etc/init.d/banip reload"], info, [t("ban.do_reload")]
+    if op == "adb_cron_set":
+        m = re.match(r"^([01]?\d|2[0-3]):([0-5]\d)$", str(form.get("time") or "").strip())
+        days = [d for d in form.getlist("days") if d in svcmod.CRON_DOW]
+        if not m or not days:
+            return "adb.err_cron"
+        hh, mm = int(m.group(1)), int(m.group(2))
+        cmds = svcmod.adb_cron_cmds(hh, mm, days)
+        info.update(line=svcmod.adb_cron_line(hh, mm, days), crond=adb.get("crond", True),
+                    foreign=len([c for c in adb.get("cron", []) if not c["own"]]))
+        when = t("adb.cron_daily") if len(days) == 7 else " ".join(t("day." + d) for d in svcmod.CRON_DOW if d in days)
+        return ap, cmds, info, [t("adb.do_cron", time=f"{hh:02d}:{mm:02d}", when=when)]
+    if op == "adb_cron_del":
+        return ap, svcmod.adb_cron_del_cmds(), info, [t("adb.do_cron_del")]
     if op in ("adb_list", "ban_list"):
         kind = "adblock" if op == "adb_list" else "banip"
         target, action = str(form.get("target") or ""), str(form.get("action") or "add")
@@ -2460,7 +2477,14 @@ async def services_preview(request: Request):
     if info["op"] == "svc" and (store.svc.get(ap) or {}).get("services") and \
             svcmod.valid_service(info["name"], store.svc[ap]["services"]).get("protected"):
         note = t("svc.note_protected")
-    return render(request, "_svc_preview.html", ap=ap, cmds=cmds, changes=changes, token=token, note=note)
+    warns = []
+    if info["op"] == "adb_cron_set":
+        note = t("adb.cron_note")
+        if not info.get("crond", True):
+            warns.append(t("adb.w_crond"))
+        if info.get("foreign"):
+            warns.append(t("adb.w_cron_foreign", n=info["foreign"]))
+    return render(request, "_svc_preview.html", ap=ap, cmds=cmds, changes=changes, token=token, note=note, warns=warns)
 
 
 @app.post("/services/apply", response_class=HTMLResponse)

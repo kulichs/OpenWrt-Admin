@@ -1078,5 +1078,18 @@
   "rl.w_shadow": "Dřívější pravidlo „{name}“ s opačnou akcí sedí na všechno, na co toto – toto pravidlo nikdy nezabere. Dej ho výš.",
   "rl.w_shadows": "Toto pravidlo bude výš než „{name}“ s opačnou akcí a zastíní ho – „{name}“ pak nikdy nezabere. Dej toto pravidlo níž, nebo „{name}“ výš.",
   "rl.w_default": "„{name}“ je výchozí pravidlo OpenWrt – bez něj nemusí fungovat DHCP, ping nebo IPv6.",
-  "rl.w_move_matters": "„{name}“ a „{other}“ mají opačnou akci – na pořadí záleží, pokud sedí na stejný provoz."
+  "rl.w_move_matters": "„{name}“ a „{other}“ mají opačnou akci – na pořadí záleží, pokud sedí na stejný provoz.",
+  "adb.cron_title": "Obnovení seznamů",
+  "adb.cron_none": "není naplánované",
+  "adb.cron_daily": "denně",
+  "adb.cron_foreign": "nastaveno jinde",
+  "adb.crond_off": "cron neběží",
+  "adb.cron_at": "Obnovovat v",
+  "adb.cron_set": "Naplánovat – náhled",
+  "adb.do_cron": "obnovovat seznamy adblocku {when} v {time} (cron na routeru)",
+  "adb.do_cron_del": "zrušit plánované obnovení seznamů adblocku",
+  "adb.err_cron": "Zadej čas (HH:MM) a aspoň jeden den.",
+  "adb.cron_note": "Řádek v crontabu routeru se značkou „# owadmin adblock-reload“ (předchozí naplánování z aplikace nahradí). Spustí /etc/init.d/adblock reload – stáhne seznamy znovu; když je adblock z aplikace pozastavený, obnovení se přeskočí. Funguje i bez Home Assistantu.",
+  "adb.w_crond": "Cron na routeru teď neběží – aplikace ho zapne a spustí.",
+  "adb.w_cron_foreign": "V crontabu už je {n} jiný řádek s adblockem (LuCI / ručně) – seznamy by se obnovovaly vícekrát; zvaž jeho odstranění."
 }

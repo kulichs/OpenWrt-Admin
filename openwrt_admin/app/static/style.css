@@ -270,6 +270,7 @@ form.matrix-form[hidden] { display: none; }
 label.chk, .filters label.chk { display: inline-flex; flex-direction: row; align-items: center; gap: .3rem; align-self: flex-end; padding-bottom: .45rem; }
 label.chk input { width: auto; margin: 0; }
 form.nw-form .filters { margin-bottom: .4rem; }
+.adb-cron { margin: .6rem 0 .3rem; display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
 tr.row-bad td { background: color-mix(in srgb, var(--bad) 12%, transparent); }
 /* blokace (0.22.0) */
 .block-form { display: block; margin-top: .8rem; }

@@ -43,6 +43,22 @@
     {{ act(d.name, "adb_reload", t("adb.reload"), "secondary small") }}
   </div>
   {% endif %}
+  <div class="adb-cron small">
+    <b>{{ t("adb.cron_title") }}:</b>
+    {% for c in a.cron %}<span class="tag {{ '' if c.own else 'muted' }}" title="{{ c.line }}">{% if c.time %}{{ c.time }} {% if c.days %}{% for x in c.days %}{{ t("day." ~ x) }}{{ " " if not loop.last }}{% endfor %}{% else %}{{ t("adb.cron_daily") }}{% endif %}{% else %}<span class="mono">{{ c.line[:40] }}</span>{% endif %}{% if c.action and c.action != "reload" %} · {{ c.action }}{% endif %}{% if not c.own %} · {{ t("adb.cron_foreign") }}{% endif %}</span>
+      {% if c.own and can_edit %}{{ act(d.name, "adb_cron_del", "✕", "secondary small") }}{% endif %}
+    {% else %}<span class="muted">{{ t("adb.cron_none") }}</span>{% endfor %}
+    {% if not a.crond %}<span class="err"> · {{ t("adb.crond_off") }}</span>{% endif %}
+  </div>
+  {% if can_edit %}
+  <form class="filters edit adb-cron-form" hx-post="{{ base }}/services/preview" hx-target="previous .cmd-out">
+    <input type="hidden" name="ap" value="{{ d.name }}"><input type="hidden" name="op" value="adb_cron_set">
+    {% set own = a.cron | selectattr("own") | first %}
+    <label>{{ t("adb.cron_at") }} <input name="time" type="time" value="{{ own.time if own and own.time else '04:30' }}" style="width:7em"></label>
+    {% for x in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] %}<label class="chk"><input type="checkbox" name="days" value="{{ x }}" {{ 'checked' if not own or not own.days or x in own.days }}> {{ t("day." ~ x) }}</label>{% endfor %}
+    <button type="submit" class="secondary">{{ t("adb.cron_set") }}</button>
+  </form>
+  {% endif %}
   <form class="filters edit" hx-post="{{ base }}/services/search" hx-target="next .search-out" hx-disabled-elt="find button">
     <input type="hidden" name="ap" value="{{ d.name }}"><input type="hidden" name="kind" value="adblock">
     <label>{{ t("adb.domain") }} <input name="value" placeholder="doubleclick.net" required maxlength="253"></label>

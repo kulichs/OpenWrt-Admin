@@ -1070,5 +1070,18 @@
   "rl.w_shadow": "The earlier rule \"{name}\" with the opposite action matches everything this one does – this rule never applies. Move it up.",
   "rl.w_shadows": "This rule will be above \"{name}\" with the opposite action and shadow it – \"{name}\" never applies then. Put this rule lower, or \"{name}\" higher.",
   "rl.w_default": "\"{name}\" is a default OpenWrt rule – without it DHCP, ping or IPv6 may not work.",
-  "rl.w_move_matters": "\"{name}\" and \"{other}\" have opposite actions – the order matters if they match the same traffic."
+  "rl.w_move_matters": "\"{name}\" and \"{other}\" have opposite actions – the order matters if they match the same traffic.",
+  "adb.cron_title": "List refresh",
+  "adb.cron_none": "not scheduled",
+  "adb.cron_daily": "daily",
+  "adb.cron_foreign": "set elsewhere",
+  "adb.crond_off": "cron is not running",
+  "adb.cron_at": "Refresh at",
+  "adb.cron_set": "Schedule – preview",
+  "adb.do_cron": "refresh adblock lists {when} at {time} (cron on the router)",
+  "adb.do_cron_del": "cancel the scheduled adblock list refresh",
+  "adb.err_cron": "Enter a time (HH:MM) and at least one day.",
+  "adb.cron_note": "A line in the router's crontab tagged \"# owadmin adblock-reload\" (replaces an earlier schedule from the app). It runs /etc/init.d/adblock reload – downloads the lists again; if adblock is paused from the app, the refresh is skipped. Works without Home Assistant too.",
+  "adb.w_crond": "Cron is not running on the router – the app enables and starts it.",
+  "adb.w_cron_foreign": "The crontab already has {n} other line with adblock (LuCI / by hand) – lists would refresh several times; consider removing it."
 }

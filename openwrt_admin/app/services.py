@@ -41,6 +41,8 @@ if [ -x /etc/init.d/adblock ]; then
  [ -n "$f" ] && echo "list $f $(wc -c < "$f") $(wc -l < "$f")"
  [ -f %(mark)s ] && echo "resume_at $(cat %(mark)s)"
  echo "now $(date +%%s)"
+ pidof crond >/dev/null 2>&1 && echo "crond 1" || echo "crond 0"
+ echo @@adb_cron; grep 'adblock' /etc/crontabs/root 2>/dev/null
  echo @@adb_allow; grep -v '^[[:space:]]*#' %(aa)s 2>/dev/null | head -500
  echo @@adb_block; grep -v '^[[:space:]]*#' %(ab)s 2>/dev/null | head -500
 fi
@@ -184,6 +186,7 @@ def parse_adblock(sec: dict[str, str]) -> dict | None:
             "resume_at": resume_at, "resume_in": (resume_at - now) if resume_at else None, "marked": has_mark,
             "searchcmd": meta.get("searchcmd") or "search",
             "allow": parse_list(sec.get("adb_allow", "")), "block": parse_list(sec.get("adb_block", "")),
+            "cron": parse_cron(sec.get("adb_cron", "")), "crond": meta.get("crond", "1") == "1",
             "raw": st}
 
 
@@ -273,6 +276,49 @@ def adb_resume_cmds() -> list[str]:
     return [f"rm -f {MARK}", "/etc/init.d/adblock resume"]
 
 
+CRON_TAG = "# owadmin adblock-reload"
+CRON_DOW = {"mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6, "sun": 0}
+DOW_NAME = {v: k for k, v in CRON_DOW.items()} | {7: "sun"}
+
+
+def parse_cron(text: str) -> list[dict]:
+    """Radky crontabu s adblockem (nase i cizi – LuCI timer, rucne) -> cas a dny, kdyz jsou jednoduche."""
+    out = []
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        f = line.split(None, 5)
+        e = {"line": line, "own": line.endswith(CRON_TAG), "time": "", "days": None, "action": ""}
+        if len(f) == 6 and f[0].isdigit() and f[1].isdigit() and f[2] == "*" and f[3] == "*":
+            e["time"] = f"{int(f[1]):02d}:{int(f[0]):02d}"
+            if f[4] != "*":
+                try:
+                    e["days"] = [DOW_NAME[int(x)] for x in f[4].split(",")]
+                except (ValueError, KeyError):
+                    e["time"] = ""
+        m = re.search(r"/etc/init\.d/adblock\s+(\w+)", line)
+        e["action"] = m.group(1) if m else ""
+        out.append(e)
+    return out
+
+
+def adb_cron_line(hh: int, mm: int, days: list[str]) -> str:
+    dow = "*" if not days or len(days) == 7 else ",".join(str(CRON_DOW[d]) for d in sorted(days, key=list(CRON_DOW).index))
+    return f"{mm} {hh} * * {dow} [ -f {MARK} ] || /etc/init.d/adblock reload {CRON_TAG}"
+
+
+def adb_cron_cmds(hh: int, mm: int, days: list[str]) -> list[str]:
+    """Plan obnoveni seznamu: jeden nas radek v crontabu (nahradi predchozi). Pauzu z aplikace respektuje."""
+    line = adb_cron_line(hh, mm, days)
+    return ["touch /etc/crontabs/root", f"sed -i '/{CRON_TAG}$/d' /etc/crontabs/root",
+            f"echo {shlex.quote(line)} >> /etc/crontabs/root", "/etc/init.d/cron enable", "/etc/init.d/cron restart"]
+
+
+def adb_cron_del_cmds() -> list[str]:
+    return [f"sed -i '/{CRON_TAG}$/d' /etc/crontabs/root", "/etc/init.d/cron restart"]
+
+
 def adb_reload_cmds() -> list[str]:
     return [f"rm -f {MARK}", "/etc/init.d/adblock reload"]
 
@@ -344,7 +390,7 @@ def demo_text(name: str, router: bool, state: dict | None = None) -> str:
   + active_feeds    : adguard, disconnect, yoyo
   + dns_backend     : dnsmasq (2.93-r2), /tmp/dnsmasq.d, 2.17 MB
   + last_run        : mode: start, date / time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now - 7200))}, duration: 0m 18s, memory: 891.50 MB available"""
-    meta = [f"enabled 1", "searchcmd search", f"list /tmp/dnsmasq.d/adb_list.overall {lines * 24} {lines}", f"now {now}"]
+    meta = [f"enabled 1", "searchcmd search", f"list /tmp/dnsmasq.d/adb_list.overall {lines * 24} {lines}", f"now {now}", "crond 1"]
     if state.get("adb_paused_until", 0) > now:
         meta.append(f"resume_at {int(state['adb_paused_until'])}")
     elif state.get("adb_paused_until") == -1:
@@ -352,7 +398,7 @@ def demo_text(name: str, router: bool, state: dict | None = None) -> str:
     ban_allow = state.get("ban_allow", ["203.0.113.10"])
     ban_block = state.get("ban_block", ["198.51.100.0/24"])
     return ("@@services\n" + json.dumps(svc) + _demo_rc(en) + "\n@@adblock\n" + adb +
-            "\n@@adb_meta\n" + "\n".join(meta) + "\n@@adb_allow\n" + "\n".join(allow) + "\n@@adb_block\n" + "\n".join(block) +
+            "\n@@adb_meta\n" + "\n".join(meta) + "\n@@adb_cron\n" + (state.get("adb_cron") or "") + "\n@@adb_allow\n" + "\n".join(allow) + "\n@@adb_block\n" + "\n".join(block) +
             "\n@@banip\n::: no banIP runtime information available\n@@ban_meta\nenabled 0\n@@ban_allow\n" +
             "\n".join(ban_allow) + "\n@@ban_block\n" + "\n".join(ban_block) + "\n@@end\n")
 

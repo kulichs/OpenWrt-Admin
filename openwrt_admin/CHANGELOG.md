@@ -2,6 +2,13 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.31.0
+- adblock: **scheduled list refresh** on the Services tab – time and days, one tagged line in the router's crontab (`# owadmin adblock-reload`), skipped while adblock is paused from the app; other adblock cron lines (LuCI timer, manual) are shown as set elsewhere. The services read now includes the adblock crontab lines and whether crond runs.
+- Verified: crontab commands in a real shell (replace, delete, block lines untouched), parsing of own / foreign / complex lines, demo schedule → cancel. Not yet on the real network.
+---
+- adblock: **plánované obnovení seznamů** na záložce Služby – čas a dny, jeden označený řádek v crontabu routeru (`# owadmin adblock-reload`), při pozastavení z aplikace se přeskočí; jiné řádky cronu s adblockem (LuCI timer, ručně) se ukážou jako nastavené jinde. Čtení služeb nově bere i řádky crontabu s adblockem a jestli běží crond.
+- Ověřeno: příkazy pro crontab ve skutečném shellu (nahrazení, smazání, řádky blokací nedotčené), čtení vlastních / cizích / složitých řádků, demo naplánovat → zrušit. Na skutečné síti zatím ne.
+
 ## 0.30.0
 - **Firewall rules**: new rule (from zone / IPs / MACs, to router / zone / IPs, protocol, ports, allow / reject / drop), edit, delete and **order** (new rule at the end, at the start or before a chosen rule; ↑ ↓ to move existing ones). Rules with options the form does not know can be toggled, moved and deleted only.
 - Checks: opening the router or a zone to the internet and cutting the app's SSH in red; a rule without effect, a rule shadowed by an earlier one with the opposite action, a rule that shadows a later exception, deleting a default OpenWrt rule.
