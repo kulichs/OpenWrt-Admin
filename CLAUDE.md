@@ -184,6 +184,7 @@ openwrt_admin/
     zones.py                 # mapa zon klikanim: input/forward zony, forwarding (owa_zf_<id>), rizika
     vlans.py                 # prehled VLAN router + AP (swconfig, DSA, 8021q, 19.07) a kontroly konzistence
     netwiz.py                # nova sit na routeru (VLAN+rozhrani+DHCP+zona) a smazani s uklidem; uci_sim pro demo
+    history.py               # historie Wi-Fi klientu: useky v SQLite, prechody, skakani, demo
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/
@@ -235,3 +236,8 @@ openwrt_admin/
   zvlášť `safe_apply(network)`, po chybě konec. Mazání přes `del_plan(raw, {}, {}, jméno)`; ne nativní/správcovská/se SSID.
 - **SSID podle VLAN (`_net_options`, `_resolve_net` v main):** hodnota sítě `vlan:<klíč>` → jméno rozhraní na každém AP
   z `store.vl` (HOST / host). `SsidChange.network` = přesun SSID. Demo: změny Wi-Fi jdou do `demo_ap_cmds` a `uci_sim(..., "wireless")`.
+- **Historie klientů (`app/history.py`):** SQLite `/data/client_history.sqlite`, tabulka `seg` (úsek = MAC na AP+ifname).
+  `observe()` po každém `poll()` (v threadu): začátek = teď − `connected`; úsek pokračuje, jen když je stejné AP+ifname a
+  začátek ≤ `last` + SLACK, jinak se zavře a založí nový (pozná A→B→A mezi čteními). Úseky AP, které neodpovědělo,
+  se nezavírají; na ose končí po STALE (600 s) bez čtení. Přechod = další úsek do ROAM_GAP (90 s), skákání = návrat
+  do PINGPONG (600 s). Demo: `:memory:` + `demo_fill` (24 h, poslední úsek = AP/pásmo z dema). Chyba DB nesmí shodit poll.

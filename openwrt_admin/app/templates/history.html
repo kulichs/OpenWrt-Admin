@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+{% if not enabled %}
+<p class="muted">{{ t("hist.off") }}</p>
+{% else %}
+<p class="muted small">{{ t("hist.intro", days=days) }}{% if oldest %} {{ t("hist.oldest", t=(oldest | clock)) }}{% endif %}</p>
+<form class="filters" method="get" action="{{ base }}/history">
+  <span class="seg">{% for p in periods %}<a class="btn-seg {{ 'active' if p == period }}" href="?period={{ p }}{% if mac %}&mac={{ mac | urlencode }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% if ap %}&ap={{ ap | urlencode }}{% endif %}{% if roam %}&roam=1{% endif %}">{{ t("hist.p_" ~ p) }}</a>{% endfor %}</span>
+  <input type="hidden" name="period" value="{{ period }}">
+  {% if mac %}<input type="hidden" name="mac" value="{{ mac }}">{% endif %}
+  <input type="search" name="q" value="{{ q }}" placeholder="{{ t('clients.search') }}">
+  <select name="ap"><option value="">{{ t("clients.all_aps") }}</option>
+    {% for a in colors %}<option {{ 'selected' if a == ap }}>{{ a }}</option>{% endfor %}</select>
+  <label class="chk"><input type="checkbox" name="roam" value="1" {{ 'checked' if roam }}> {{ t("hist.only_roam") }}</label>
+  <button type="submit">{{ t("clients.filter") }}</button>
+  {% if mac %}<a href="?period={{ period }}">{{ t("hist.all") }}</a>{% endif %}
+  <span class="muted">{{ t("clients.count", n=(rows | length)) }}</span>
+</form>
+<p class="hist-legend">{% for a, c in colors.items() %}<span><i style="background: {{ c }}"></i>{{ a }}</span>{% endfor %}
+  <span class="muted small">{{ t("hist.legend_band") }}</span></p>
+
+<table class="list hist">
+  <thead><tr><th>{{ t("col.device") }}</th>
+    <th class="hist-axis"><svg viewBox="0 0 1000 14" preserveAspectRatio="none" class="hist-ticks">
+      {% for k in ticks %}<line x1="{{ k.x }}" x2="{{ k.x }}" y1="8" y2="14"/>{% endfor %}</svg>
+      <div class="hist-labels">{% for k in ticks %}<span style="left: {{ k.x / 10 }}%">{{ k.t | clock("%H:%M" if step < 86400 else "%d.%m.") }}</span>{% endfor %}</div></th>
+    <th class="num" title="{{ t('hist.roams_title') }}">{{ t("hist.roams") }}</th>
+    <th class="num" title="{{ t('hist.pingpong_title') }}">{{ t("hist.pingpong") }}</th>
+    <th>{{ t("hist.share") }}</th><th class="num">{{ t("hist.worst") }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr class="{{ 'sel' if r.mac == mac }}">
+    <td><a href="?period={{ period }}&mac={{ r.mac | urlencode }}">{{ r.name or r.mac }}</a>{% if r.name %}<br><span class="mono muted small">{{ r.mac }}</span>{% endif %}</td>
+    <td class="hist-bar"><svg viewBox="0 0 1000 18" preserveAspectRatio="none">
+      {% for k in ticks %}<line class="grid" x1="{{ k.x }}" x2="{{ k.x }}" y1="0" y2="18"/>{% endfor %}
+      {% for b in r.bars %}<rect x="{{ b.x }}" y="{{ 3 if b.band == '5 GHz' or b.band == '6 GHz' else 7 }}" width="{{ b.w }}" height="{{ 12 if b.band == '5 GHz' or b.band == '6 GHz' else 8 }}" fill="{{ b.color }}"{% if b.open %} class="open"{% endif %}><title>{{ b.ap }} · {{ b.ssid }} · {{ (b.band | band) or "–" }}
+{{ b.start | clock }} – {{ t("hist.now") if b.open else (b.end | clock) }} ({{ b.dur | duration }})
+{{ t("col.signal") }}: {{ b.sig_min if b.sig_min is not none else "–" }} … {{ b.sig_max if b.sig_max is not none else "–" }} dBm</title></rect>{% endfor %}
+    </svg></td>
+    <td class="num">{{ r.sum.roams }}</td>
+    <td class="num">{% if r.sum.pingpong %}<span class="tag tag-pp" title="{{ t('hist.pingpong_title') }}">{{ r.sum.pingpong }}</span>{% else %}0{% endif %}</td>
+    <td class="small">{% for a, f in r.sum.share[:3] %}<span class="hist-share"><i style="background: {{ colors.get(a, '#888') }}"></i>{{ a }} {{ (f * 100) | round | int }} %</span> {% endfor %}</td>
+    <td class="num"><span class="sig {{ r.sum.worst | sigclass }}">{{ r.sum.worst if r.sum.worst is not none else "–" }}</span></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="empty">{{ t("hist.none") }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if mac %}
+<h3>{{ t("hist.events") }} – {{ (rows[0].name if rows else "") or mac }}</h3>
+<table class="list">
+  <thead><tr><th>{{ t("hist.when") }}</th><th>{{ t("hist.what") }}</th><th>{{ t("hist.detail") }}</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+  <tr><td class="mono">{{ e.t | clock("%d.%m. %H:%M:%S") }}</td>
+    <td><span class="tag ev-{{ e.kind }}">{{ t("hist.ev_" ~ e.kind) }}</span></td>
+    <td>{% if e.kind == "connect" %}{{ e.to.ap }} · {{ e.to.ssid }} · {{ (e.to.band | band) or "–" }}{% if e.to.sig_first is not none %} · {{ e.to.sig_first }} dBm{% endif %}
+      {% elif e.kind == "disconnect" %}{{ e.from.ap }} · {{ t("hist.lasted", d=((e.from.end - e.from.start) | duration)) }}{% if e.from.sig_last is not none %} · {{ t("hist.last_sig", s=e.from.sig_last) }}{% endif %}
+      {% else %}{{ e.from.ap }} {{ (e.from.band | band) }}{% if e.from.sig_last is not none %} ({{ e.from.sig_last }} dBm){% endif %} → {{ e.to.ap }} {{ (e.to.band | band) }}{% if e.to.sig_first is not none %} ({{ e.to.sig_first }} dBm){% endif %}{% endif %}</td></tr>
+  {% else %}
+  <tr><td colspan="3" class="empty">{{ t("hist.none") }}</td></tr>
+  {% endfor %}
+  {% if events_more %}<tr><td colspan="3" class="muted small">{{ t("hist.more", n=events_more) }}</td></tr>{% endif %}
+  </tbody>
+</table>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -45,6 +45,7 @@ notify_new_devices: true     # notification in HA when a never-seen device joins
 notify_service: ""           # optional, e.g. notify.mobile_app_phone (also to your phone)
 notify_random_mac: true      # false = no notifications for random (private) MACs of phones
 new_device_hours: 24         # h, 0 = off: how long a device has the "new" tag
+client_history_days: 30      # days, 0 = off: Wi-Fi client history and roaming (History page)
 radio_scan: false            # true = Scan button on the Radios page (neighbouring networks)
 update_check_hours: 12       # h, 0 = off: check packages to update and new OpenWrt releases
 backup_interval_days: 7      # days, 0 = off: automatic configuration backup of every device
@@ -345,6 +346,16 @@ When a device (MAC address) the app has never seen appears on the network – on
 - Phones use a **random (private) MAC** per Wi-Fi network; such addresses are marked in the notification. `notify_random_mac: false` skips them.
 - APs and the router themselves are never reported.
 
+### Client history and roaming
+
+The **History** page shows where the Wi-Fi clients were connected: one row per device, a timeline coloured by AP (taller bar = 5/6 GHz, shorter = 2.4 GHz; hover for SSID, time and signal range). Period 24 h, 7 days or 30 days; filter by name / IP / MAC, by AP, or only clients that roamed.
+
+- **Roams** = moves to another AP without being offline for more than 90 s. **Ping-pong** = A → B → A within 10 minutes – the client can't decide; usually a sign of weak overlap or a similar signal from both APs (lower the TX power of one, or set a minimum signal).
+- Clicking a device shows its events: connected, AP roam (signal before → after), band change on the same AP, disconnected (with duration and last signal).
+- The "history" link at every client in the client tables opens its detail.
+- Recorded on every AP read (`poll_interval`) into `/data/client_history.sqlite` as sessions (MAC, AP, interface, SSID, band, from–to, signal min/max). The start is taken from the client's connected time, so it is exact; a reconnect between reads is recognised. Clients of an AP that did not answer are not ended (they continue when it answers again). Nothing new is read from the APs.
+- `client_history_days` (default 30, 0–365, 0 = off, the page disappears). Older sessions are deleted once a day. Delete the file to start over.
+
 ### Updates
 
 Every `update_check_hours` (default 12) the app runs `apk update` + `apk list --upgradable` (older devices `opkg update` + `opkg list-upgradable`) on each device, one after another. The overview shows the number of packages to update (tile and on every card), the device page lists them with the installed and new version. The **Check for updates** button refreshes the list right away; after **Upgrade packages** it is checked again.
@@ -544,6 +555,7 @@ notify_new_devices: true     # upozornění v HA, když se v síti objeví zař�
 notify_service: ""           # volitelně, např. notify.mobile_app_telefon (i do mobilu)
 notify_random_mac: true      # false = neupozorňovat na náhodné (soukromé) MAC telefonů
 new_device_hours: 24         # h, 0 = vypnuto: jak dlouho má zařízení štítek „nové“
+client_history_days: 30      # dny, 0 = vypnuto: historie Wi-Fi klientů a roaming (stránka Historie)
 radio_scan: false            # true = tlačítko Skenovat na stránce Rádia (okolní sítě)
 update_check_hours: 12       # h, 0 = vypnuto: kontrola balíčků k aktualizaci a nové verze OpenWrt
 backup_interval_days: 7      # dny, 0 = vypnuto: automatická záloha konfigurace každého zařízení
@@ -843,6 +855,16 @@ Když se v síti objeví zařízení (MAC adresa), které aplikace ještě nikdy
 - Zařízení poprvé viděná za posledních `new_device_hours` hodin (výchozí 24, 0 = vypnuto) mají v tabulkách klientů a na stránce routeru štítek **nové**.
 - Telefony používají pro každou Wi-Fi **náhodnou (soukromou) MAC**; takové adresy jsou v upozornění označené. `notify_random_mac: false` je vynechá.
 - Samotné AP a router se nehlásí.
+
+### Historie klientů a roaming
+
+Stránka **Historie** ukazuje, kde byli Wi-Fi klienti připojení: řádek na zařízení, časová osa obarvená podle AP (vyšší pruh = 5/6 GHz, nižší = 2,4 GHz; najetím myší SSID, čas a rozsah signálu). Období 24 h, 7 dní nebo 30 dní; filtr podle jména / IP / MAC, podle AP nebo jen klienti s přechody.
+
+- **Přechody** = přesun na jiné AP bez výpadku delšího než 90 s. **Skákání** = A → B → A do 10 minut – klient se nemůže rozhodnout; obvykle slabé překrytí nebo podobný signál z obou AP (snížit výkon jednoho AP nebo nastavit minimální signál).
+- Kliknutím na zařízení se ukážou jeho události: připojení, přechod AP (signál před → po), změna pásma na stejném AP, odpojení (s dobou trvání a posledním signálem).
+- Odkaz „historie“ u každého klienta v tabulkách klientů otevře jeho detail.
+- Zapisuje se při každém čtení AP (`poll_interval`) do `/data/client_history.sqlite` po úsecích (MAC, AP, rozhraní, SSID, pásmo, od–do, signál min/max). Začátek se bere z doby připojení klienta, takže je přesný; nové připojení mezi čteními se pozná. Klienti AP, které neodpovědělo, se neukončují (pokračují, až zase odpoví). Z AP se nečte nic navíc.
+- `client_history_days` (výchozí 30, 0–365, 0 = vypnuto, stránka zmizí). Starší úseky se mažou jednou denně. Smazáním souboru se začne znovu.
 
 ### Aktualizace
 

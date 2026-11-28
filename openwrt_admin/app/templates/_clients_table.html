@@ -9,7 +9,7 @@
   <tr>
     <td>{{ c.hostname or "–" }}{% if c.src in ('ha', 'manual') %} <span class="tag src-{{ c.src }}" title="{{ t('src.' ~ c.src ~ '_title') }}">{{ t('src.' ~ c.src) }}</span>{% endif %}{% if c.first_seen is recent %} <span class="tag tag-new" title="{{ t('new.title', ago=(c.first_seen | ago)) }}">{{ t("new.tag") }}</span>{% endif %}</td>
     <td class="mono">{{ c.ip or "–" }}</td>
-    <td class="mono">{{ c.mac }}</td>
+    <td class="mono">{{ c.mac }}{% if store.history.enabled %} <a class="small histlink" href="{{ base }}/history?mac={{ c.mac | urlencode }}" title="{{ t('hist.link_title') }}">{{ t("hist.link") }}</a>{% endif %}</td>
     {% if show_ap %}<td><a href="{{ base }}/ap/{{ c.ap | urlencode }}">{{ c.ap }}</a></td>{% endif %}
     <td>{{ c.ssid }} <span class="muted small">{{ c.network }}</span></td>
     <td><span class="tag band-{{ '5' if c.band == '5 GHz' else ('6' if c.band == '6 GHz' else '24') }}">{{ (c.band | band) or "–" }}</span></td>

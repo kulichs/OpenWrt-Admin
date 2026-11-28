@@ -277,3 +277,26 @@ tr.row-bad td { background: color-mix(in srgb, var(--bad) 12%, transparent); }
 .block-form summary { font-weight: 600; }
 .block-modes { align-items: center; }
 .block-modes label.day { margin-right: .2rem; }
+
+/* historie klientu */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.btn-seg { padding: .3rem .7rem; color: var(--muted); }
+.btn-seg.active { background: var(--accent); color: #fff; }
+.hist-legend { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin: .3rem 0 .6rem; }
+.hist-legend i, .hist-share i { display: inline-block; width: .8em; height: .8em; border-radius: 2px; margin-right: .3em; vertical-align: -1px; }
+.hist-share { white-space: nowrap; }
+table.hist th.hist-axis { width: 55%; position: relative; padding-bottom: 1.1rem; }
+table.hist .hist-ticks { width: 100%; height: 14px; display: block; }
+table.hist .hist-ticks line, table.hist .hist-bar line.grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hist-labels { position: absolute; left: .5rem; right: .5rem; bottom: .1rem; height: 1rem; }
+.hist-labels span { position: absolute; transform: translateX(-50%); font-size: .75em; font-weight: 400; color: var(--muted); white-space: nowrap; }
+table.hist td.hist-bar { padding-top: .2rem; padding-bottom: .2rem; }
+table.hist td.hist-bar svg { width: 100%; height: 18px; display: block; background: color-mix(in srgb, var(--line) 35%, transparent); border-radius: 3px; }
+table.hist rect.open { opacity: .85; }
+table.hist tr.sel td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.tag.tag-pp { border-color: var(--bad); color: var(--bad); }
+.tag.ev-roam { border-color: var(--accent); color: var(--accent); }
+.tag.ev-band { border-color: var(--ok); color: var(--ok); }
+.tag.ev-connect { border-color: var(--good); color: var(--good); }
+.tag.ev-disconnect { color: var(--muted); }
+.histlink { margin-left: .3rem; }

@@ -31,6 +31,7 @@ try {
   <nav>
     <a href="{{ base }}/" class="{{ 'active' if page == 'dashboard' }}">{{ t("nav.overview") }}</a>
     <a href="{{ base }}/clients" class="{{ 'active' if page == 'clients' }}">{{ t("nav.clients") }}</a>
+    {% if store.history.enabled %}<a href="{{ base }}/history" class="{{ 'active' if page == 'history' }}">{{ t("nav.history") }}</a>{% endif %}
     <a href="{{ base }}/ssids" class="{{ 'active' if page == 'ssids' }}">{{ t("nav.ssid") }}</a>
     <a href="{{ base }}/map" class="{{ 'active' if page == 'map' }}">{{ t("nav.map") }}</a>
     <a href="{{ base }}/radios" class="{{ 'active' if page == 'radios' }}">{{ t("nav.radios") }}</a>

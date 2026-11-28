@@ -44,6 +44,9 @@ configuration:
   new_device_hours:
     name: "\"New\" tag (h)"
     description: "How long after it was first seen a device has the new tag in the tables, in hours (0–720). 0 = no tag."
+  client_history_days:
+    name: Client history (days)
+    description: "How long to keep the Wi-Fi client history (which AP and band they were on, roaming between APs), in days (0–365). 0 = no history."
   radio_scan:
     name: Scan neighbouring networks
     description: "Enables the Scan button on the Radios page (iwinfo scan): neighbouring networks, channel occupancy and a less busy channel suggestion. During a scan the radio hops between channels for a few seconds and clients may notice a short drop. Full access only."

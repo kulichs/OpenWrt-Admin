@@ -44,6 +44,9 @@ configuration:
   new_device_hours:
     name: Štítek „nové“ (h)
     description: "Jak dlouho od prvního výskytu má zařízení v tabulkách štítek nové, v hodinách (0–720). 0 = štítek se nezobrazuje."
+  client_history_days:
+    name: Historie klientů (dny)
+    description: "Jak dlouho zpětně uchovávat historii Wi-Fi klientů (na kterém AP a pásmu byli, přechody mezi AP), ve dnech (0–365). 0 = historie se nevede."
   radio_scan:
     name: Sken okolních sítí
     description: "Na stránce Rádia povolí tlačítko Skenovat (iwinfo scan): okolní sítě, obsazenost kanálů a doporučení volnějšího kanálu. Rádio při skenu na pár sekund přeskakuje po kanálech, klienti můžou zaznamenat krátký výpadek. Jen plný přístup."

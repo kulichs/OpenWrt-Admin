@@ -2,6 +2,15 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.32.0
+- **Client history and roaming** (new page History): which AP and band each Wi-Fi client was on, as a timeline per device (colour = AP, taller bar = 5/6 GHz), for 24 h / 7 days / 30 days. Counts of AP roams and **ping-pong** (A → B → A within 10 minutes), share of time per AP, worst signal; a device's detail lists events (connected, AP roam with the signal before/after, band change, disconnected). "history" link at every client in the client tables.
+- Stored as sessions in `/data/client_history.sqlite`; the start comes from the client's connected time, so it is exact even with a 30 s read interval. Clients of an AP that could not be read are not ended. New option `client_history_days` (default 30, 0 = off); older records are removed once a day.
+- Verified: session tracking (stay, roam, return, AP offline, disconnect, reconnect), persistence across restart, demo with synthetic roaming. Not yet on the real network.
+---
+- **Historie klientů a roaming** (nová stránka Historie): na kterém AP a pásmu byl každý Wi-Fi klient, jako časová osa po zařízeních (barva = AP, vyšší pruh = 5/6 GHz), za 24 h / 7 dní / 30 dní. Počet přechodů mezi AP a **skákání** (A → B → A do 10 minut), podíl času na AP, nejhorší signál; detail zařízení vypíše události (připojení, přechod AP se signálem před/po, změna pásma, odpojení). Odkaz „historie“ u každého klienta v tabulkách klientů.
+- Ukládá se po úsecích do `/data/client_history.sqlite`; začátek se bere z doby připojení klienta, takže je přesný i při čtení jednou za 30 s. Klienti AP, které se nepodařilo přečíst, se neukončují. Nová volba `client_history_days` (výchozí 30, 0 = vypnuto); starší záznamy se jednou denně mažou.
+- Ověřeno: sledování úseků (zůstává, přechod, návrat, AP offline, odpojení, nové připojení), uchování přes restart, demo s vymyšleným roamingem. Na skutečné síti zatím ne.
+
 ## 0.31.0
 - adblock: **scheduled list refresh** on the Services tab – time and days, one tagged line in the router's crontab (`# owadmin adblock-reload`), skipped while adblock is paused from the app; other adblock cron lines (LuCI timer, manual) are shown as set elsewhere. The services read now includes the adblock crontab lines and whether crond runs.
 - Verified: crontab commands in a real shell (replace, delete, block lines untouched), parsing of own / foreign / complex lines, demo schedule → cancel. Not yet on the real network.

@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, zones as zonemod, vlans as vlanmod, netwiz, rules as rulemod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, zones as zonemod, vlans as vlanmod, netwiz, rules as rulemod, history as histmod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
@@ -32,6 +32,7 @@ from .snmp import SnmpError
 DATA = Path(os.environ.get("OWADMIN_DATA", "/data"))
 OPTIONS = DATA / "options.json"
 KEYFILE = DATA / "id_ed25519"
+HISTFILE = DATA / "client_history.sqlite"   # historie Wi-Fi klientu (useky na AP)
 SEENFILE = DATA / "wired_seen.json"   # posledni zname misto kabelovych zarizeni (AP + port)
 KNOWNFILE = DATA / "known_devices.json"  # MAC, ktere add-on uz videl (upozorneni na nova zarizeni)
 UPDATESFILE = DATA / "updates.json"   # posledni kontrola aktualizaci
@@ -60,7 +61,7 @@ def load_options() -> dict:
             "update_check_hours": 12, "backup_interval_days": 7, "backup_keep": 10, "switches": [],
             "stats": True, "stats_interval": 5, "ping_targets": list(DEFAULT_PING), "ping_devices": True,
             "traffic_source": "auto", "top_clients": 10, "ha_sensors": False, "ha_sensors_interval": 30,
-            "new_device_hours": 24, "radio_scan": False}
+            "new_device_hours": 24, "radio_scan": False, "client_history_days": 30}
     if OPTIONS.exists():
         opts.update(json.loads(OPTIONS.read_text()))
     return opts
@@ -114,6 +115,14 @@ class Store:
                                        if self.router_item else None)
         self.last_poll = 0.0
         self.seen: dict[str, dict] = self._load_seen()
+        days = int(self.opts.get("client_history_days", 30) or 0)
+        try:
+            self.history = histmod.History(None if self.opts.get("demo") else HISTFILE,
+                                           max(days, 1) if self.opts.get("demo") else days)
+        except Exception as e:  # noqa: BLE001 - bez historie, ale aplikace bezi
+            log.warning("Historie klientu nejde otevrit (%s) - vypnuta", e)
+            self.history = histmod.History(None, 0)
+        self.history_demo_filled = False
         self.wired_state: dict | None = None
         # jmena a IP zarizeni: {mac: {ip, hostname, src, lease}} – viz build_info()
         self.info: dict[str, dict] = {}
@@ -245,6 +254,10 @@ class Store:
                 self.wired_state = wiredmod.locate(self.l2(), self.router, self.info, self.seen, known=self._known())
                 self.stats.update_wifi(time.time(), self.aps)
                 self.stats.update_radios(time.time(), self.aps)
+                if not self.history_demo_filled:      # demo: 24 h vymyslene historie klientu (cteni se nezapisuje)
+                    self.history_demo_filled = True
+                    histmod.demo_fill(self.history, time.time(), [a.name for a in self.aps if a.online],
+                                      [c for a in self.aps for c in a.clients])
                 for ap in self.aps:  # demo: hodina historie vytizeni kanalu
                     for r in ap.radios:
                         sv = r.get("survey")
@@ -291,6 +304,13 @@ class Store:
             self.wired_state = wiredmod.locate(self.l2(), self.router, self.info, self.seen, known=self._known())
             self.stats.update_wifi(time.time(), self.aps)
             self.stats.update_radios(time.time(), self.aps)
+            if self.history.enabled:
+                try:
+                    await asyncio.to_thread(self.history.observe, time.time(),
+                                            [c for a in self.aps if a.online for c in a.clients],
+                                            {a.name for a in self.aps if a.online})
+                except Exception as e:  # noqa: BLE001 - historie nesmi shodit cteni
+                    log.warning("Historie klientu: %s", e)
             self._save_seen()
             self.last_poll = time.time()
         await self.track_new()
@@ -1373,6 +1393,10 @@ def signal_class(sig) -> str:
     return "good" if sig >= -60 else "ok" if sig >= -72 else "bad"
 
 
+def fmt_clock(ts, fmt: str = "%d.%m. %H:%M") -> str:
+    return time.strftime(fmt, time.localtime(ts)) if ts else "–"
+
+
 @pass_context
 def ago(ctx, ts) -> str:
     t = ctx.get("t") or i18n.translator(i18n.DEFAULT)
@@ -1396,7 +1420,7 @@ def fmt_band(ctx, b) -> str:
 
 
 templates.env.filters.update(band=fmt_band, bytes=fmt_bytes, duration=fmt_duration, rate=fmt_rate, interval=fmt_interval,
-                             sigclass=signal_class, ago=ago)
+                             sigclass=signal_class, ago=ago, clock=fmt_clock)
 templates.env.filters["speed"] = lambda mbps: (f"{mbps / 1000:g} Gb/s" if mbps >= 1000 else f"{mbps} Mb/s") if mbps else "–"
 templates.env.filters["left"] = lambda ts: max(0, int(ts - time.time()))  # zbyva sekund
 templates.env.filters["bps"] = statsmod.fmt_bps
@@ -1465,6 +1489,55 @@ async def clients_page(request: Request, q: str = "", ssid: str = "", ap: str = 
     return render(request, "clients.html", page="clients", clients=clients,
                   q=q, ssid=ssid, ap=ap, band=band, ssids=ssids,
                   bands=sorted({c.get("band") for a in store.aps for c in a.clients if c.get("band")}))
+
+
+HIST_PERIODS = {"24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400}
+HIST_COLORS = ["#2a7de1", "#e8833a", "#2fa36b", "#b05cc8", "#d64545", "#1fa5a5", "#8a8f2a", "#6b6f80"]
+
+
+@app.get("/history", response_class=HTMLResponse)
+async def history_page(request: Request, period: str = "24h", mac: str = "", q: str = "", ap: str = "", roam: str = ""):
+    h = store.history
+    now = time.time()
+    period = period if period in HIST_PERIODS else "24h"
+    since = now - HIST_PERIODS[period]
+    segs = await asyncio.to_thread(h.segments, since, now, mac or None) if h.enabled else {}
+    aps = [a.name for a in store.aps if a.kind == "ap"]
+    for m in segs.values():
+        for x in m:
+            if x["ap"] not in aps:
+                aps.append(x["ap"])
+    colors = {a: HIST_COLORS[i % len(HIST_COLORS)] for i, a in enumerate(aps)}
+    span = now - since
+    rows = []
+    for m, ss in segs.items():
+        e = store.info.get(m) or store.leases.get(m, {})
+        name = e.get("hostname", "")
+        if q and q.lower() not in (m + " " + name + " " + e.get("ip", "")).lower():
+            continue
+        if ap and not any(x["ap"] == ap for x in ss):
+            continue
+        sm = histmod.summary(ss, since, now)
+        if roam and not sm["roams"]:
+            continue
+        bars = []
+        for x in ss:
+            a, b = max(x["start"], since), min(x["end"], now)
+            if b <= a:
+                continue
+            bars.append({**x, "x": (a - since) / span * 1000, "w": max((b - a) / span * 1000, 0.8),
+                         "color": colors.get(x["ap"], "#888"), "dur": b - a})
+        rows.append({"mac": m, "name": name, "ip": e.get("ip", ""), "sum": sm, "bars": bars})
+    rows.sort(key=lambda r: (-r["sum"]["roams"], (r["name"] or "~" + r["mac"]).lower()))
+    ticks = []
+    step = 3 * 3600 if period == "24h" else 86400 if period == "7d" else 5 * 86400
+    t0 = (int(since) // step + 1) * step
+    for tt in range(t0, int(now), step):
+        ticks.append({"x": (tt - since) / span * 1000, "t": tt})
+    evs = histmod.events(segs.get(mac.lower(), [])) if mac else []
+    return render(request, "history.html", page="history", rows=rows, period=period, periods=list(HIST_PERIODS),
+                  mac=mac.lower(), q=q, ap=ap, roam=roam, colors=colors, ticks=ticks, events=evs[:100], events_more=max(0, len(evs) - 100),
+                  enabled=h.enabled, days=h.days, oldest=h.oldest(), since=since, step=step)
 
 
 @app.get("/ap/{name}", response_class=HTMLResponse)
