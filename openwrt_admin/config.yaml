@@ -1,5 +1,5 @@
 name: OpenWrt-Admin
-version: "0.32.1"
+version: "0.32.2"
 slug: openwrt_admin
 description: Manage OpenWrt access points and Wi-Fi clients over SSH (overview, SSIDs, radios, network map, statistics, switches via SNMP, updates, backups)
 arch:

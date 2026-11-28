@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import asyncssh
 
 from .collector import APConfig
+from . import hostkeys
 
 log = logging.getLogger("openwrt_admin.actions")
 
@@ -51,6 +52,7 @@ async def run(cfg: APConfig, key: asyncssh.SSHKey, cmd: str, timeout: float = 60
     try:
         async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=10) as conn:
+            hostkeys.verify(conn, cfg.host, cfg.port)
             res = await asyncio.wait_for(conn.run(cmd, check=False, stderr=asyncssh.STDOUT), timeout)
             out = res.stdout if isinstance(res.stdout, str) else (res.stdout or b"").decode(errors="replace")
             return Result(res.exit_status == 0, out.strip() or (t("msg.no_output") if t else "(no output)"))

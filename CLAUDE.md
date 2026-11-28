@@ -185,6 +185,7 @@ openwrt_admin/
     vlans.py                 # prehled VLAN router + AP (swconfig, DSA, 8021q, 19.07) a kontroly konzistence
     netwiz.py                # nova sit na routeru (VLAN+rozhrani+DHCP+zona) a smazani s uklidem; uci_sim pro demo
     history.py               # historie Wi-Fi klientu: useky v SQLite, prechody, skakani, demo
+    hostkeys.py              # overeni klicu SSH serveru (TOFU, /data/known_hosts.json), prijeti noveho klice
     demo.py                  # demo data
     i18n.py, i18n/{cs,en}.json
     templates/, static/
@@ -246,3 +247,10 @@ openwrt_admin/
   (`ha.fetch_users`, každých 5 min) → admin (`system-admin` / owner) plný, ostatní čtení; bez SUPERVISOR_TOKEN (vývoj) plný.
 - **Pojistka a souběh (`armed_left`, `store.armed`):** dokud změna čeká na potvrzení / návrat, `safe_apply` i `ap_action`
   (restart, apk) na stejném zařízení odmítnou (`safe.busy`) – návrat zálohy by vrátil i pozdější změnu (FND-04).
+- **Klíče SSH (`app/hostkeys.py`):** `known_hosts=None` u asyncssh zůstává, ale HNED po connect musí být
+  `hostkeys.verify(conn, host, port)` – před prvním příkazem (nové místo připojení = přidat volání!). Změna klíče →
+  `HostKeyChanged` (OSError), spojení zavřeno; pruh v base.html + `/hostkey/accept`. Demo / testy: init(None) nebo bez init.
+- **Zastaralý náhled (`safeapply.hash_cmd/split_hash/guard`):** load_fw/dhcp/vlans připojí ke čtení `hash_cmd` a
+  `Store._take_hash` uloží `cfg_hash[(zařízení, balík)]`; `add_svc_pending` dá do info `base` podle druhu (`uci`); `safe_apply`
+  a `dhcp_apply` dají `guard(base)` na začátek skriptu → výstup `STALE` = `msg.stale`, nic se nezmění.
+- **Notifikace HA:** text ze sítě vždy přes `ha.md_escape` (Markdown); mobilní text `ha.md_plain`.

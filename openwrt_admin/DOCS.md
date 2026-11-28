@@ -117,6 +117,12 @@ logread -e openwrt-admin     # what was done and by which HA user
 logread -e dropbear          # logins (with a dedicated user you see "owadmin" instead of "root")
 ```
 
+#### Device key check (known hosts)
+
+On the first connection the app stores the fingerprint of each device's SSH key in `/data/known_hosts.json` (trust on first use). If the key changes later, the app **refuses the connection before sending any command** (no Wi-Fi password or configuration leaves) and shows a red banner on every page with the old and new fingerprint. After a reinstall or `sysupgrade -n` this is expected: check the fingerprint on the device (`dropbearkey -y -f /etc/dropbear/dropbear_ed25519_host_key`, line *Fingerprint*) and click **Accept new key** (full access only). Otherwise someone on the network may be impersonating the device.
+
+**Tip:** limit where the app key can be used – in `/etc/dropbear/authorized_keys` put `from="<IP of Home Assistant>" ` in front of the key line.
+
 ### What it can do
 
 | Action | Where | Command on the AP |
@@ -272,7 +278,7 @@ With full access, existing rules and port forwards can be **turned on and off** 
 - Warnings in the preview: the device is already blocked, the MAC looks random (private) – phones may change it, a schedule starting now or later.
 - Saved with the safety net; it backs up and restores `/etc/crontabs/root` together with the firewall configuration, and `cron` is enabled and restarted when needed.
 
-**Safety net when saving.** Firewall changes (and later network and VLAN changes) are saved like LuCI's "apply with rollback": the device backs up the affected configuration to `/tmp/owadmin-rb/<token>/`, starts a 90 s countdown, applies the change in the background (so a dropped SSH session cannot interrupt it) and runs `fw4 check` – if the check fails, the backup is restored immediately. The app then opens a new SSH connection and confirms. If it cannot reconnect (the change cut it off), the device restores the backup and reloads after 90 s on its own and logs `rollback … not confirmed`. Before the first change of the day the configuration is backed up as with DHCP. While a change waits for confirmation, another change, a reboot or a package upgrade of the same device is refused with the remaining time (a rollback would otherwise undo it too).
+**Safety net when saving.** Firewall changes (and later network and VLAN changes) are saved like LuCI's "apply with rollback": the device backs up the affected configuration to `/tmp/owadmin-rb/<token>/`, starts a 90 s countdown, applies the change in the background (so a dropped SSH session cannot interrupt it) and runs `fw4 check` – if the check fails, the backup is restored immediately. The app then opens a new SSH connection and confirms. If it cannot reconnect (the change cut it off), the device restores the backup and reloads after 90 s on its own and logs `rollback … not confirmed`. Before the first change of the day the configuration is backed up as with DHCP. While a change waits for confirmation, another change, a reboot or a package upgrade of the same device is refused with the remaining time (a rollback would otherwise undo it too). If the configuration on the device changed between the preview and **Apply** (LuCI, another tab or user), nothing is saved and the app asks for a new preview – the preview remembers a fingerprint of the configuration it was built from (`uci show <package> | md5sum`, read together with the data).
 
 ### VLANs and networks
 
@@ -473,6 +479,7 @@ A **change preview** opens directly below the button, form or table row it was r
 | switch port traffic | SNMP `ifHCInOctets`, `ifHCOutOctets` |
 | radios: real channel, width, power, noise; channel utilisation | `iwinfo`, `iw dev <if> survey dump` |
 | neighbouring networks (only on Scan, `radio_scan`) | `iwinfo <if> scan` |
+| configuration fingerprint (with the firewall / DHCP / VLAN reads, for the stale-preview check) | `uci -q show <package> \| md5sum` |
 | services, adblock, banIP (only when the Services tab opens) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, allow/block list files |
 | DHCP and DNS (only when the DHCP or DNS tab opens; lookup test: `nslookup <name> 127.0.0.1`) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `resolv.conf.auto`, `ls /etc/config/*.apk-new` |
 | firewall (only when the Firewall tab opens) | `uci -X show firewall`, `fw4 print` (zone order per interface), `netstat -tulpn` / `ss -tulpn`, `ip route` + `ip addr` (WAN), `ls /etc/nftables.d`, owadmin lines in `/etc/crontabs/root`, `date` |
@@ -626,6 +633,12 @@ Každou akci spuštěnou z aplikace (restart, změna SSID, nové SSID, nastaven�
 logread -e openwrt-admin     # co se dělalo a kterým uživatelem HA
 logread -e dropbear          # přihlášení (s vlastním uživatelem uvidíš „owadmin“ místo „root“)
 ```
+
+#### Kontrola klíče zařízení (known hosts)
+
+Při prvním připojení si aplikace uloží otisk klíče SSH každého zařízení do `/data/known_hosts.json` (důvěra při prvním použití). Když se klíč později změní, aplikace **spojení odmítne dřív, než pošle jakýkoli příkaz** (neodejde heslo Wi-Fi ani konfigurace), a na každé stránce ukáže červený pruh se starým a novým otiskem. Po reinstalaci nebo `sysupgrade -n` je to v pořádku: otisk ověř na zařízení (`dropbearkey -y -f /etc/dropbear/dropbear_ed25519_host_key`, řádek *Fingerprint*) a klikni na **Přijmout nový klíč** (jen plný přístup). Jinak se může za zařízení vydávat někdo jiný v síti.
+
+**Tip:** omez, odkud jde klíč aplikace použít – v `/etc/dropbear/authorized_keys` dej před řádek s klíčem `from="<IP Home Assistantu>" `.
 
 ### Co umí
 
@@ -782,7 +795,7 @@ S plným přístupem jde existující pravidla a přesměrování **zapnout a vy
 - Upozornění v náhledu: zařízení už je blokované, MAC vypadá jako náhodná (soukromá) – telefony ji můžou změnit, rozvrh začíná hned nebo později.
 - Ukládá se s pojistkou; ta zálohuje a vrací i `/etc/crontabs/root` spolu s konfigurací firewallu a podle potřeby zapne a restartuje `cron`.
 
-**Pojistka při ukládání.** Změny firewallu (a později sítí a VLAN) se ukládají jako „apply with rollback“ v LuCI: zařízení si zazálohuje dotčenou konfiguraci do `/tmp/owadmin-rb/<token>/`, spustí odpočet 90 s, změnu provede na pozadí (aby ji nepřerušilo odpojení SSH) a spustí `fw4 check` – když kontrola selže, záloha se vrátí hned. Aplikace pak otevře nové SSH spojení a změnu potvrdí. Když se připojit nejde (změna ji odřízla), zařízení po 90 s samo vrátí zálohu, znovu načte a zapíše do logu `rollback … not confirmed`. Před první změnou dne se konfigurace zálohuje jako u DHCP. Dokud změna čeká na potvrzení, další změna, restart nebo upgrade balíčků téhož zařízení se odmítne se zbývajícím časem (návrat by ji jinak vrátil taky).
+**Pojistka při ukládání.** Změny firewallu (a později sítí a VLAN) se ukládají jako „apply with rollback“ v LuCI: zařízení si zazálohuje dotčenou konfiguraci do `/tmp/owadmin-rb/<token>/`, spustí odpočet 90 s, změnu provede na pozadí (aby ji nepřerušilo odpojení SSH) a spustí `fw4 check` – když kontrola selže, záloha se vrátí hned. Aplikace pak otevře nové SSH spojení a změnu potvrdí. Když se připojit nejde (změna ji odřízla), zařízení po 90 s samo vrátí zálohu, znovu načte a zapíše do logu `rollback … not confirmed`. Před první změnou dne se konfigurace zálohuje jako u DHCP. Dokud změna čeká na potvrzení, další změna, restart nebo upgrade balíčků téhož zařízení se odmítne se zbývajícím časem (návrat by ji jinak vrátil taky). Když se konfigurace na zařízení mezi náhledem a **Použít** změnila (LuCI, jiná záložka nebo uživatel), nic se neuloží a aplikace požádá o nový náhled – náhled si pamatuje otisk konfigurace, ze které vznikl (`uci show <balík> | md5sum`, čte se spolu s daty).
 
 ### VLAN a sítě
 
@@ -983,6 +996,7 @@ Otevřené stránky se obnovují po `refresh_interval` sekundách (0 = vypnuto).
 | provoz na portech switche | SNMP `ifHCInOctets`, `ifHCOutOctets` |
 | rádia: skutečný kanál, šířka, výkon, šum; vytížení kanálu | `iwinfo`, `iw dev <if> survey dump` |
 | okolní sítě (jen po Skenovat, `radio_scan`) | `iwinfo <if> scan` |
+| otisk konfigurace (se čtením firewallu / DHCP / VLAN, pro kontrolu zastaralého náhledu) | `uci -q show <balík> \| md5sum` |
 | služby, adblock, banIP (jen při otevření záložky Služby) | `ubus call service list`, `ls /etc/init.d /etc/rc.d`, `/etc/init.d/adblock status`, `/etc/init.d/banip status`, soubory povolených/blokovaných |
 | DHCP a DNS (jen při otevření záložky DHCP nebo DNS; test překladu: `nslookup <jméno> 127.0.0.1`) | `uci -X show dhcp`, `uci show network` (proto/ipaddr/netmask), `/tmp/dhcp.leases`, `resolv.conf.auto`, `ls /etc/config/*.apk-new` |
 | firewall (jen při otevření záložky Firewall) | `uci -X show firewall`, `fw4 print` (pořadí zón na rozhraních), `netstat -tulpn` / `ss -tulpn`, `ip route` + `ip addr` (WAN), `ls /etc/nftables.d`, řádky owadmin v `/etc/crontabs/root`, `date` |

@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, zones as zonemod, vlans as vlanmod, netwiz, rules as rulemod, history as histmod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, zones as zonemod, vlans as vlanmod, netwiz, rules as rulemod, history as histmod, hostkeys, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
@@ -33,6 +33,7 @@ DATA = Path(os.environ.get("OWADMIN_DATA", "/data"))
 OPTIONS = DATA / "options.json"
 KEYFILE = DATA / "id_ed25519"
 HISTFILE = DATA / "client_history.sqlite"   # historie Wi-Fi klientu (useky na AP)
+HOSTKEYFILE = DATA / "known_hosts.json"      # otisky klicu SSH serveru (TOFU, hostkeys.py)
 SEENFILE = DATA / "wired_seen.json"   # posledni zname misto kabelovych zarizeni (AP + port)
 KNOWNFILE = DATA / "known_devices.json"  # MAC, ktere add-on uz videl (upozorneni na nova zarizeni)
 UPDATESFILE = DATA / "updates.json"   # posledni kontrola aktualizaci
@@ -118,6 +119,8 @@ class Store:
         self.ha_users: dict[str, dict] | None = None   # uzivatele HA {id: {username, name, admin}} (role bez seznamu)
         self.ha_users_err = ""
         self.armed: dict[str, float] = {}               # zarizeni -> do kdy na nem bezi pojistka (odpocet navratu)
+        self.cfg_hash: dict[tuple[str, str], str] = {}  # (zarizeni, balik uci) -> md5 `uci show` z posledniho cteni
+        hostkeys.init(None if self.opts.get("demo") else HOSTKEYFILE)
         days = int(self.opts.get("client_history_days", 30) or 0)
         try:
             self.history = histmod.History(None if self.opts.get("demo") else HISTFILE,
@@ -383,8 +386,10 @@ class Store:
 
     async def _stats_conn(self, rc: APConfig) -> asyncssh.SSHClientConnection:
         if self.stats_conn is None:
-            self.stats_conn = await asyncssh.connect(rc.host, port=rc.port, username=rc.user, client_keys=[self.key],
-                                                     known_hosts=None, connect_timeout=10, keepalive_interval=30)
+            conn = await asyncssh.connect(rc.host, port=rc.port, username=rc.user, client_keys=[self.key],
+                                          known_hosts=None, connect_timeout=10, keepalive_interval=30)
+            hostkeys.verify(conn, rc.host, rc.port)
+            self.stats_conn = conn
         return self.stats_conn
 
     def _stats_close(self):
@@ -642,6 +647,18 @@ class Store:
             self.svc[d.name] = res
         await asyncio.gather(*(one(d) for d in self.svc_devices()))
 
+    def _take_hash(self, dev: str, out: str) -> str:
+        """Odriznout otisky konfigurace z vystupu cteni a zapamatovat si je (kontrola zastaraleho nahledu)."""
+        out, hashes = safeapply.split_hash(out)
+        for pkg in ("network", "dhcp", "firewall"):
+            if pkg in hashes:
+                self.cfg_hash[(dev, pkg)] = hashes[pkg]
+        return out
+
+    def cfg_base(self, dev: str, pkgs: list[str]) -> dict[str, str]:
+        """Otisky balicku zarizeni z posledniho cteni (ze kterych nahled vznikl); neznamy balik se nekontroluje."""
+        return {p: self.cfg_hash[(dev, p)] for p in pkgs if (dev, p) in self.cfg_hash}
+
     async def load_dhcp(self, max_age: float = 60.0, force: bool = False):
         """DHCP routeru (jen cteni, bez zapisu do logu routeru)."""
         r = self.router
@@ -655,8 +672,10 @@ class Store:
         if not r.online:
             self.dhcp = {"ts": time.time(), "error": r.error or "offline"}
             return
-        res = await actions.run(self.cfg(r.name), self.key, dhcpmod.READ_CMD, timeout=30, audit=False)
-        m = dhcpmod.build(res.output)
+        res = await actions.run(self.cfg(r.name), self.key, dhcpmod.READ_CMD + "\n" + safeapply.hash_cmd(["dhcp"]),
+                                timeout=30, audit=False)
+        out = self._take_hash(r.name, res.output)
+        m = dhcpmod.build(out)
         if m["error"] and not res.ok:
             m["error"] = res.output[-300:]
         self.dhcp = m
@@ -691,8 +710,10 @@ class Store:
         if not r.online:
             self.fw = {"ts": time.time(), "error": r.error or "offline"}
             return
-        res = await actions.run(self.cfg(r.name), self.key, fwmod.READ_CMD, timeout=30, audit=False)
-        m = fwmod.build(res.output)
+        res = await actions.run(self.cfg(r.name), self.key, fwmod.READ_CMD + "\n" + safeapply.hash_cmd(["firewall"]),
+                                timeout=30, audit=False)
+        out = self._take_hash(r.name, res.output)
+        m = fwmod.build(out)
         if m["error"] and not res.ok:
             m["error"] = res.output[-300:]
         self.fw = m
@@ -717,8 +738,9 @@ class Store:
                 return vlanmod.build_device(d.name, text, is_router)
             if not d.online:
                 return {**vlanmod.build_device(d.name, "", is_router), "error": d.error or "offline"}
-            res = await actions.run(self.cfg(d.name), self.key, vlanmod.READ_CMD, timeout=25, audit=False)
-            dv = vlanmod.build_device(d.name, res.output, is_router)
+            res = await actions.run(self.cfg(d.name), self.key, vlanmod.READ_CMD + "\n" + safeapply.hash_cmd(["network"]),
+                                    timeout=25, audit=False)
+            dv = vlanmod.build_device(d.name, self._take_hash(d.name, res.output), is_router)
             if dv["error"] and not res.ok:
                 dv["error"] = res.output[-300:]
             return dv
@@ -738,6 +760,15 @@ class Store:
 
     def add_svc_pending(self, ap: str, cmds: list[str], info: dict) -> str:
         now = time.time()
+        kind = info.get("uci")   # otisk konfigurace, ze ktere nahled vznikl -> pri Pouzit se overi na zarizeni
+        if kind == "firewall":
+            info["base"] = {ap: self.cfg_base(ap, ["firewall"])}
+        elif kind == "dhcp":
+            info["base"] = {ap: self.cfg_base(ap, ["dhcp"])}
+        elif kind == "net":
+            info["base"] = {ap: self.cfg_base(ap, ["network", "dhcp", "firewall"])}
+        elif kind == "apnet":
+            info["base"] = {n: self.cfg_base(n, ["network"]) for n in info.get("per_ap") or {}}
         self.svc_pending = {k: v for k, v in self.svc_pending.items() if now - v[0] < 600}
         token = secrets.token_urlsafe(16)
         self.svc_pending[token] = (now, ap, cmds, info)
@@ -832,10 +863,11 @@ class Store:
         return i18n.translator(lang)
 
     def where(self, l: dict, t) -> str:
+        e = ha.md_escape
         if l.get("ap"):
-            return t("notify.where_wifi", ap=l["ap"], ssid=l.get("ssid", ""))
+            return t("notify.where_wifi", ap=e(l["ap"]), ssid=e(l.get("ssid", "")))
         if l.get("cable_ap"):
-            return t("notify.where_port", ap=l["cable_ap"], port=l.get("cable_port", "?"))
+            return t("notify.where_port", ap=e(l["cable_ap"]), port=e(l.get("cable_port", "?")))
         return t("notify.where_router")
 
     async def track_new(self):
@@ -862,7 +894,8 @@ class Store:
             l = leases.get(m, {"mac": m})
             net = ("LAN" if l.get("vlan") is None else f"VLAN {l['vlan']}") + (f" ({l['iface']})" if l.get("iface") else "") \
                 if l.get("known_net") else ""
-            parts = [f"**{l.get('hostname') or t('notify.unknown')}**", f"`{m}`", l.get("ip", ""), net, self.where(l, t)]
+            parts = [f"**{ha.md_escape(l.get('hostname') or t('notify.unknown'))}**", f"`{m}`", ha.md_escape(l.get("ip", "")),
+                     ha.md_escape(net), self.where(l, t)]
             if maint.is_random_mac(m):
                 parts.append(t("notify.random_mac"))
             lines.append(" · ".join(p for p in parts if p))
@@ -1190,6 +1223,14 @@ class Store:
             except ValueError:
                 return (1, x["ip"])
         return sorted(out, key=ipkey)
+
+    def hostkey_changes(self) -> dict[str, dict]:
+        """Zarizeni, jejichz klic SSH se zmenil (spojeni odmitnuto) -> {host:port: {name, old, new, ...}}."""
+        if hostkeys.STORE is None or not hostkeys.STORE.changed:
+            return {}
+        names = {hostkeys.hostport(c["host"], int(c.get("port") or 22)): c["name"]
+                 for c in [*self.ap_items, *([self.router_item] if self.router_item else [])]}
+        return {hp: {**c, "name": names.get(hp, hp)} for hp, c in hostkeys.STORE.changed.items()}
 
     async def load_users(self):
         """Uzivatele HA pro role: kdo je administrator (prazdne full_access/read_access) a kontrola jmen v seznamech."""
@@ -1836,7 +1877,8 @@ async def device_services_body(request: Request, name: str):
     return render(request, "_services_body.html", ap=ap, d=_svc_data(ap))
 
 
-async def dhcp_apply(ap: str, cmds: list[str], summary: str, t, script: str | None = None) -> actions.Result:
+async def dhcp_apply(ap: str, cmds: list[str], summary: str, t, script: str | None = None,
+                     base: dict[str, str] | None = None) -> actions.Result:
     """Zmena DHCP: pred prvni zmenou dne zaloha konfigurace routeru, pak uci + commit + reload dnsmasq."""
     dev = store.ap(ap)
     out = []
@@ -1848,8 +1890,11 @@ async def dhcp_apply(ap: str, cmds: list[str], summary: str, t, script: str | No
             return actions.Result(False, "\n".join(out))
     lock = store.ap_lock(ap)
     async with lock:
-        r = await actions.run(store.cfg(ap), store.key, script or dhcpmod.apply_script(cmds, t("msg.reverted")),
+        r = await actions.run(store.cfg(ap), store.key,
+                              safeapply.guard(base) + (script or dhcpmod.apply_script(cmds, t("msg.reverted"))),
                               timeout=120 if script else 60, t=t, summary=f"{summary} ({ap})")
+    if "STALE" in r.output.splitlines()[-1:]:
+        r.output = t("msg.stale")
     r.output = "\n".join([*out, r.output])
     return r
 
@@ -2032,7 +2077,8 @@ def armed_left(ap: str) -> int:
 
 
 async def safe_apply(ap: str, pkgs: list[str], cmds: list[str], reload: list[str], summary: str, t,
-                     check: str | None = None, timeout: int = 90, files: list[str] | None = None) -> actions.Result:
+                     check: str | None = None, timeout: int = 90, files: list[str] | None = None,
+                     base: dict[str, str] | None = None) -> actions.Result:
     """Ulozit s pojistkou: zaloha dne, odpocet na zarizeni, zmena na pozadi, nove spojeni a potvrzeni.
     Kdyz se aplikace po zmene nepripoji, zarizeni se po `timeout` s samo vrati."""
     dev = store.ap(ap)
@@ -2052,8 +2098,11 @@ async def safe_apply(ap: str, pkgs: list[str], cmds: list[str], reload: list[str
     confirmed = armed_ok = False
     try:
         async with lock:
-            r = await actions.run(store.cfg(ap), store.key, safeapply.arm_script(tok, pkgs, cmds, reload, timeout, check=check, files=files),
+            r = await actions.run(store.cfg(ap), store.key, safeapply.arm_script(tok, pkgs, cmds, reload, timeout, check=check, files=files,
+                                                                                   cfg_base=base),
                                   timeout=60, t=t, summary=f"{summary} ({ap})")
+        if "STALE" in r.output.splitlines()[-1:]:
+            return actions.Result(False, "\n".join([*out, t("msg.stale")]))
         if not r.ok or f"ARMED {tok}" not in r.output:
             return actions.Result(False, "\n".join([*out, t("safe.failed"), r.output[-400:]]))
         armed_ok = True
@@ -2682,12 +2731,13 @@ async def services_apply(request: Request, token: str = Form(...)):
             store.demo_svc_apply(ap, info)
         r = actions.Result(True, f"{ap}: OK (demo)")
     elif info.get("uci") == "dhcp":
-        r = await dhcp_apply(ap, cmds, summary, t, info.get("script"))
+        r = await dhcp_apply(ap, cmds, summary, t, info.get("script"), base=(info.get("base") or {}).get(ap))
     elif info.get("uci") == "apnet":
         outs, ok = [], True
         names = list(info["per_ap"])
         for idx, n in enumerate(names):     # kazde AP zvlast, kazde se svou pojistkou; po chybe dal ne
-            ri = await safe_apply(n, ["network"], info["per_ap"][n], ["/etc/init.d/network reload"], summary, t)
+            ri = await safe_apply(n, ["network"], info["per_ap"][n], ["/etc/init.d/network reload"], summary, t,
+                                  base=(info.get("base") or {}).get(n))
             outs.append(f"{n}: " + ("OK" if ri.ok else t("ap.failed")) + ("\n" + ri.output if ri.output else ""))
             if not ri.ok:
                 ok = False
@@ -2697,11 +2747,11 @@ async def services_apply(request: Request, token: str = Form(...)):
         r = actions.Result(ok, "\n".join(outs))
     elif info.get("uci") == "net":
         r = await safe_apply(ap, ["network", "dhcp", "firewall"], cmds, netwiz.reload_cmds(bool(info.get("dhcp"))),
-                             summary, t, check=fwmod.CHECK)
+                             summary, t, check=fwmod.CHECK, base=(info.get("base") or {}).get(ap))
     elif info.get("uci") == "firewall":
         cron = bool(info.get("cron"))
         r = await safe_apply(ap, ["firewall"], cmds, blockmod.reload_cmds(cron), summary, t, check=fwmod.CHECK,
-                             files=[blockmod.CRONTAB] if cron else None)
+                             files=[blockmod.CRONTAB] if cron else None, base=(info.get("base") or {}).get(ap))
     else:
         lock = store.ap_lock(ap)
         if lock.locked():
@@ -3102,6 +3152,21 @@ async def backup_download(request: Request, name: str, file: str):
         raise HTTPException(404)
     log.info("%s: stazena zaloha %s", who(request), file)
     return FileResponse(path, media_type="application/gzip", filename=file)
+
+
+@app.post("/hostkey/accept", response_class=HTMLResponse)
+async def hostkey_accept(request: Request, hostport: str = Form("")):
+    """Prijmout novy klic SSH zarizeni (po sysupgrade -n / reinstalaci). Jen plny pristup."""
+    require_htmx(request)
+    t = request.state.t
+    if request.state.user["role"] != "full":
+        return result(request, t("hk.accept"), actions.Result(False, t("msg.no_permission")))
+    name = store.hostkey_changes().get(hostport, {}).get("name", hostport)
+    ok = hostkeys.STORE is not None and hostkeys.STORE.accept(hostport)
+    log.warning("%s: novy klic SSH %s (%s) %s", who(request), name, hostport, "prijat" if ok else "- nic k prijeti")
+    if ok:
+        asyncio.create_task(store.poll())
+    return result(request, t("hk.accept"), actions.Result(ok, t("hk.accepted", dev=name) if ok else t("msg.bad_request")))
 
 
 @app.post("/clients/kick", response_class=HTMLResponse)

@@ -106,6 +106,21 @@ async def ha_language() -> str:
         return ""
 
 
+MD_SPECIAL = "\\`*_[]()<>#|~!"
+
+
+def md_escape(s) -> str:
+    """Text ze site (jmena zarizeni, SSID) do Markdownu notifikace: zadne odkazy, obrazky ani formatovani."""
+    return "".join("\\" + ch if ch in MD_SPECIAL else ch for ch in str(s or "")).replace("\n", " ")
+
+
+def md_plain(s: str) -> str:
+    """Markdown notifikace -> prosty text pro mobil (bez ** a `, bez escapovani)."""
+    import re
+    s = s.replace("**", "").replace("`", "")
+    return re.sub(r"\\(.)", r"\1", s)
+
+
 def service_call(service: str, data: dict) -> dict | None:
     """'notify.mobile_app_x' -> websocket call_service; None pri spatnem tvaru."""
     domain, _, name = (service or "").strip().partition(".")
@@ -118,7 +133,7 @@ async def notify(title: str, message: str, notification_id: str = "", service: s
     """Trvala notifikace v HA (zvonecek) a volitelne i sluzba notify.* (napr. mobilni aplikace)."""
     reqs = [{"type": "call_service", "domain": "persistent_notification", "service": "create",
              "service_data": {"title": title, "message": message, **({"notification_id": notification_id} if notification_id else {})}}]
-    plain = message.replace("**", "").replace("`", "")  # mobilni notifikace markdown nezobrazi
+    plain = md_plain(message)  # mobilni notifikace markdown nezobrazi
     extra = service_call(service, {"title": title, "message": plain})
     if extra:
         reqs.append(extra)

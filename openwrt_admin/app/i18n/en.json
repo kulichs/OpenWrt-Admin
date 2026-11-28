@@ -1122,5 +1122,14 @@
   "safe.busy": "The safety net of a previous change is still running on the device (waiting for confirmation or rollback). Try again in {s} s.",
   "setup.role_entry_bad": "\"{e}\" ({l}) is not the username of any HA user – since 0.32.1 display names are not used.",
   "setup.role_entry_fix": "Use the username \"{u}\".",
-  "setup.users_err": "Could not load the HA user list: {e}"
+  "setup.users_err": "Could not load the HA user list: {e}",
+  "hk.title": "The SSH key of {dev} has changed – connection refused.",
+  "hk.text": "The app will not connect to {hp} until you confirm the change. That is fine after a reinstall or a sysupgrade without keeping settings; otherwise someone else on the network may be impersonating the device.",
+  "hk.old": "stored:",
+  "hk.new": "new:",
+  "hk.howto": "Check the fingerprint on the device: dropbearkey -y -f /etc/dropbear/dropbear_ed25519_host_key (RSA: dropbear_rsa_host_key), Fingerprint line.",
+  "hk.accept": "Accept new key",
+  "hk.confirm": "Really accept the new SSH key of {dev}? Only do this if you know why it changed.",
+  "hk.accepted": "New key of {dev} accepted, the app is reconnecting.",
+  "msg.stale": "The configuration on the device has changed since the preview (LuCI, another tab or user). Nothing was saved – reload the page and create the preview again."
 }

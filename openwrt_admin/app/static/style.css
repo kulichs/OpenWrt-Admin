@@ -300,3 +300,5 @@ table.hist tr.sel td { background: color-mix(in srgb, var(--accent) 8%, transpar
 .tag.ev-connect { border-color: var(--good); color: var(--good); }
 .tag.ev-disconnect { color: var(--muted); }
 .histlink { margin-left: .3rem; }
+
+.banner.banner-bad { background: color-mix(in srgb, var(--bad) 14%, var(--card)); color: var(--fg); border: 1px solid var(--bad); }

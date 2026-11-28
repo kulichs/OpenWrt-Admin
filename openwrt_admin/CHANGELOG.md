@@ -2,6 +2,19 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.32.2
+- **Security – SSH host key check:** the fingerprint of each device's SSH key is stored on the first connection (`/data/known_hosts.json`). A changed key means the connection is refused before any command is sent, and a red banner shows the old and new fingerprint with **Accept new key** (full access; expected after reinstall / `sysupgrade -n`). Before, the app connected to anything answering on the device address.
+- **Stale preview:** **Apply** first checks on the device that the configuration is still the one the preview was built from (firewall, DHCP, networks, VLANs on APs); if LuCI or someone else changed it meanwhile, nothing is saved and the app asks for a new preview. The fingerprint is read together with the data, no extra connection.
+- New-device notifications: device names and places are escaped for Markdown (a name cannot turn into a link or formatting).
+- DOCS: tip to limit the app key with `from="<HA IP>"` in `authorized_keys`.
+- Verified: fake SSH server with a changed key (no command reaches it, refusal survives a restart, accept), banner and roles, the configuration check in a shell with a fake `uci` (unchanged → saved, changed → STALE and nothing written), parsers unaffected, Markdown escaping.
+---
+- **Bezpečnost – kontrola klíče SSH zařízení:** otisk klíče SSH každého zařízení se uloží při prvním spojení (`/data/known_hosts.json`). Změněný klíč = spojení se odmítne dřív, než se pošle jakýkoli příkaz, a červený pruh ukáže starý a nový otisk s tlačítkem **Přijmout nový klíč** (plný přístup; po reinstalaci / `sysupgrade -n` je to v pořádku). Dřív se aplikace připojila k čemukoli, co na adrese zařízení odpovědělo.
+- **Zastaralý náhled:** **Použít** nejdřív na zařízení ověří, že konfigurace je pořád ta, ze které náhled vznikl (firewall, DHCP, sítě, VLAN na AP); když ji mezitím změnilo LuCI nebo někdo jiný, nic se neuloží a aplikace požádá o nový náhled. Otisk se čte spolu s daty, žádné spojení navíc.
+- Upozornění na nová zařízení: jména a místa jsou ošetřená pro Markdown (jméno se nemůže změnit v odkaz ani formátování).
+- DOCS: tip omezit klíč aplikace přes `from="<IP HA>"` v `authorized_keys`.
+- Ověřeno: falešný SSH server se změněným klíčem (nedostane žádný příkaz, odmítnutí přežije restart, přijetí), pruh a role, kontrola konfigurace v shellu s falešným `uci` (beze změny → uloženo, změna → STALE a nic nezapsáno), parsery beze změny, escapování Markdownu.
+
 ## 0.32.1
 - **Security – roles only by username:** `full_access` / `read_access` are matched against the HA **username** (or user ID), no longer the display name. Every HA user can change their own display name in the profile, so a read-only user could rename themselves to an admin's display name and get full access. **If you have display names in the lists, replace them with usernames** – the Settings page lists entries that match no HA username and suggests the right one; the "Access denied" page says why.
 - **Empty role lists:** full access only for **HA administrators**, other users read-only (before: everyone had full access). The app reads the HA user list (`config/auth/list`) every 5 minutes; if it cannot, non-listed users are read-only.

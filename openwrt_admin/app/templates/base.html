@@ -60,6 +60,16 @@ try {
       {% if autorefresh and refresh %}hx-get="{{ base }}{{ request.url.path }}{{ ('?' ~ request.url.query) if request.url.query }}"
       hx-trigger="every {{ refresh }}s" hx-select="#content" hx-target="#content" hx-swap="outerHTML" hx-disinherit="*"{% endif %}>
 {% if store.opts.demo %}<div class="banner">{{ t("banner.demo") }}</div>{% endif %}
+{% for hp, c in store.hostkey_changes().items() %}
+<div class="banner banner-bad" id="hk-{{ loop.index }}">
+  <b>{{ t("hk.title", dev=c.name) }}</b> {{ t("hk.text", hp=hp) }}<br>
+  <span class="mono small">{{ t("hk.old") }} {{ c.old_type }} {{ c.old }}<br>{{ t("hk.new") }} {{ c.type }} {{ c.new }}</span><br>
+  <span class="small">{{ t("hk.howto") }}</span>
+  {% if can_edit %}<form hx-post="{{ base }}/hostkey/accept" hx-target="#hk-{{ loop.index }}" hx-swap="outerHTML"
+      hx-confirm="{{ t('hk.confirm', dev=c.name) }}" style="margin-top:.4rem">
+    <input type="hidden" name="hostport" value="{{ hp }}"><button type="submit">{{ t("hk.accept") }}</button></form>{% endif %}
+</div>
+{% endfor %}
 {% block content %}{% endblock %}
 </main>
 <script>

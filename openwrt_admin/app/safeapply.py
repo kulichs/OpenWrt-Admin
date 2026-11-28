@@ -16,13 +16,45 @@ BASE = "/tmp/owadmin-rb"
 PKG_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 
 
+HASH_MARK = "@@cfghash"
+HEX32 = re.compile(r"^[0-9a-f]{32}$")
+
+
+def hash_cmd(pkgs: list[str]) -> str:
+    """Pripojit za cteni konfigurace: otisk kazdeho balicku (uci show | md5sum) -> radky '<balik> <md5>'."""
+    assert all(PKG_RE.match(p) for p in pkgs)
+    return f"echo {HASH_MARK}; for p in {' '.join(pkgs)}; do echo \"$p $(uci -q show $p | md5sum | cut -c1-32)\"; done"
+
+
+def split_hash(out: str) -> tuple[str, dict[str, str]]:
+    """Vystup cteni -> (puvodni vystup, {balik: md5})."""
+    head, mark, tail = (out or "").rpartition(HASH_MARK + "\n")
+    if not mark:
+        return out, {}
+    hashes = {}
+    for line in tail.splitlines():
+        p, _, h = line.strip().partition(" ")
+        if PKG_RE.match(p) and HEX32.match(h):
+            hashes[p] = h
+    return head.rstrip("\n"), hashes
+
+
+def guard(base: dict[str, str] | None) -> str:
+    """Na zacatek zmeny: kdyz se konfigurace od nahledu zmenila (LuCI, jina zalozka), skoncit 'STALE' a nic nemenit."""
+    if not base:
+        return ""
+    assert all(PKG_RE.match(p) and HEX32.match(h) for p, h in base.items())
+    checks = " && ".join(f'[ "$(uci -q show {p} | md5sum | cut -c1-32)" = "{h}" ]' for p, h in sorted(base.items()))
+    return f"{{ {checks}; }} || {{ echo STALE; exit 1; }}; "
+
+
 def new_token() -> str:
     return secrets.token_hex(6)
 
 
 def arm_script(token: str, pkgs: list[str], cmds: list[str], reload: list[str], timeout: int = 90,
                confdir: str = "/etc/config", base: str = BASE, check: str | None = None,
-               files: list[str] | None = None) -> str:
+               files: list[str] | None = None, cfg_base: dict[str, str] | None = None) -> str:
     """files = dalsi soubory mimo uci (napr. /etc/crontabs/root) – zalohuji se a vraceji spolu s konfiguraci."""
     """Skript pro zarizeni: zaloha, odpocet s navratem, zmena. Konci 'ARMED <token>' nebo chybou (nic nezmeneno)."""
     assert all(PKG_RE.match(p) for p in pkgs) and re.fullmatch(r"[0-9a-f]{6,32}", token)
@@ -46,7 +78,7 @@ def arm_script(token: str, pkgs: list[str], cmds: list[str], reload: list[str], 
     change = (f"{{ {' && '.join(cmds)} && {commits}{chk}; }} || {{ {reverts}; {restore}; rm -rf {d}; echo FAILED; "
               f"exit 1; }}")
     apply_bg = f"( sleep 1; {rel} ) >{d}/reload.log 2>&1 </dev/null &"
-    return (f"mkdir -p {d} && {backup} || {{ rm -rf {d}; echo FAILED; exit 1; }}; {change}; "
+    return (f"{guard(cfg_base)}mkdir -p {d} && {backup} || {{ rm -rf {d}; echo FAILED; exit 1; }}; {change}; "
             f"echo armed > {d}/state; {timer} {apply_bg} echo ARMED {token}")
 
 

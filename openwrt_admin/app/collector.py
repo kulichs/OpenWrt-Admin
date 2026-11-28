@@ -12,6 +12,7 @@ from typing import Any
 
 import asyncssh
 
+from . import hostkeys
 from .radios import RADIO_CMD, parse_iwinfo, parse_lists, parse_survey, split_lists, split_radio_output
 
 log = logging.getLogger("openwrt_admin.collector")
@@ -256,9 +257,10 @@ async def collect_ap(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 10.0)
             port=cfg.port,
             username=cfg.user,
             client_keys=[key],
-            known_hosts=None,  # host klice se meni pri sysupgrade -n; jen LAN a jen cteni
+            known_hosts=None,  # overuje hostkeys.verify (TOFU) – pri sysupgrade -n se klic meni, prijima se v aplikaci
             connect_timeout=timeout,
         ) as conn:
+            hostkeys.verify(conn, cfg.host, cfg.port)
             (wstatus, hostapd_list, uci_wl, ifdump, devstatus, ucinet, arl, arp, swports, radio_out), _ = await asyncio.gather(
                 asyncio.gather(
                     _ubus(conn, "network.wireless", "status", timeout),
@@ -612,6 +614,7 @@ async def collect_router(cfg: APConfig, key: asyncssh.SSHKey, timeout: float = 1
     try:
         async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=timeout) as conn:
+            hostkeys.verify(conn, cfg.host, cfg.port)
             _, dump, devstatus, ucinet, leases, ucidhcp, arp, swports = await asyncio.gather(
                 _read_system(conn, st, timeout),
                 _ubus(conn, "network.interface", "dump", timeout),

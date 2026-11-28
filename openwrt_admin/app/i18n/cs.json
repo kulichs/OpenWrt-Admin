@@ -1130,5 +1130,14 @@
   "safe.busy": "Na zařízení ještě běží pojistka předchozí změny (čeká na potvrzení nebo návrat). Zkus to znovu za {s} s.",
   "setup.role_entry_bad": "„{e}“ ({l}) není uživatelské jméno žádného uživatele HA – od verze 0.32.1 se zobrazované jméno nebere.",
   "setup.role_entry_fix": "Použij uživatelské jméno „{u}“.",
-  "setup.users_err": "Seznam uživatelů HA se nepodařilo načíst: {e}"
+  "setup.users_err": "Seznam uživatelů HA se nepodařilo načíst: {e}",
+  "hk.title": "Klíč SSH zařízení {dev} se změnil – spojení odmítnuto.",
+  "hk.text": "Aplikace se k {hp} nepřipojí, dokud změnu nepotvrdíš. Je to v pořádku po reinstalaci nebo sysupgrade bez zachování nastavení; jinak se může za zařízení vydávat někdo jiný v síti.",
+  "hk.old": "uložený:",
+  "hk.new": "nový:",
+  "hk.howto": "Otisk ověříš na zařízení: dropbearkey -y -f /etc/dropbear/dropbear_ed25519_host_key (u RSA dropbear_rsa_host_key), řádek Fingerprint.",
+  "hk.accept": "Přijmout nový klíč",
+  "hk.confirm": "Opravdu přijmout nový klíč SSH zařízení {dev}? Udělej to jen tehdy, když víš, proč se změnil.",
+  "hk.accepted": "Nový klíč {dev} přijat, aplikace se znovu připojuje.",
+  "msg.stale": "Konfigurace na zařízení se od náhledu změnila (LuCI, jiná záložka nebo jiný uživatel). Nic se neuložilo – načti stránku a vytvoř náhled znovu."
 }

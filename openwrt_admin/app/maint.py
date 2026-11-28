@@ -19,6 +19,7 @@ from pathlib import Path
 import asyncssh
 
 from .collector import APConfig
+from . import hostkeys
 
 log = logging.getLogger("openwrt_admin.maint")
 
@@ -96,6 +97,7 @@ async def check_updates(cfg: APConfig, key, pkg: str, timeout: float = 180.0) ->
     try:
         async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=10) as conn:
+            hostkeys.verify(conn, cfg.host, cfg.port)
             r = await asyncio.wait_for(conn.run(check_cmd(pkg), check=False), timeout)
             out = r.stdout if isinstance(r.stdout, str) else (r.stdout or b"").decode(errors="replace")
             res["pkgs"] = parse_upgradable(out)
@@ -144,6 +146,7 @@ async def backup(cfg: APConfig, key, root: Path, device: str, keep: int, timeout
     try:
         async with asyncssh.connect(cfg.host, port=cfg.port, username=cfg.user, client_keys=[key],
                                     known_hosts=None, connect_timeout=10) as conn:
+            hostkeys.verify(conn, cfg.host, cfg.port)
             from .actions import audit_prefix  # zaznam do syslogu, kdyz zalohu spustil uzivatel (Zalohovat ted)
             r = await asyncio.wait_for(conn.run(audit_prefix("sysupgrade -b (backup)") + BACKUP_CMD, check=False,
                                                 encoding=None), timeout)
