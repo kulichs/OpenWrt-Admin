@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, zones as zonemod, vlans as vlanmod, netwiz, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
+from . import actions, ha, i18n, maint, dhcp as dhcpmod, dns as dnsmod, firewall as fwmod, blocks as blockmod, portfwd as fwdmod, zones as zonemod, vlans as vlanmod, netwiz, rules as rulemod, safeapply, radios as radiomod, services as svcmod, stats as statsmod, switch as switchmod, topology, wired as wiredmod
 from .collector import APConfig, APState, band_of, collect_ap, collect_router, norm_band, parse_host_port
 from .demo import demo_router, demo_scan, demo_states, demo_switch
 from .snmp import SnmpError
@@ -157,6 +157,7 @@ class Store:
         self.vl: dict | None = None                     # prehled VLAN (router + AP)
         self.demo_net_cmds: list[str] = []              # demo: uci prikazy pruvodce siti (network/dhcp/firewall)
         self.demo_ap_cmds: dict[str, list[str]] = {}    # demo: VLAN pridane / odebrane na AP
+        self.demo_rule_cmds: list[str] = []             # demo: pravidla firewallu (nove, uprava, smazani, poradi)
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -654,6 +655,8 @@ class Store:
             text = zonemod.demo_text(fwdmod.demo_lines(self.fw_demo_fwd, fwmod.DEMO), self.fw_demo_zops)
             if self.demo_net_cmds:
                 text = netwiz.uci_sim(text, self.demo_net_cmds, "firewall")
+            if self.demo_rule_cmds:
+                text = netwiz.uci_sim(text, self.demo_rule_cmds, "firewall")
             text = text.replace("@@dispatch", extra + "@@dispatch").replace(
                 "@@end", "@@cron\n" + "\n".join(cron) + f"\n@@now\n{now}\n@@end")
             m = fwmod.build(text)
@@ -2086,6 +2089,8 @@ async def firewall_preview(request: Request, op: str = Form(""), id: str = Form(
         return await _fwd_preview(request, t, m, op)
     if op == "matrix":
         return await _matrix_preview(request, t, m)
+    if op in ("rule_add", "rule_edit", "rule_del", "rule_move"):
+        return await _rule_preview(request, t, m, op)
     if op != "toggle":
         return result(request, title, actions.Result(False, t("msg.bad_request")))
     it = next((x for x in m["rules"] + m["redirects"] if x["id"] == id), None)
@@ -2108,6 +2113,83 @@ async def firewall_preview(request: Request, op: str = Form(""), id: str = Form(
     shown = [*cmds, "uci commit firewall", fwmod.CHECK, *fwmod.RELOAD, t("safe.shown")]
     return render(request, "_svc_preview.html", ap=r.name, cmds=shown, changes=changes, token=token,
                   note=t("fw.note"), warns=warns, crits=crits, danger=bool(crits))
+
+
+DEFAULT_RULES = {"Allow-DHCP-Renew", "Allow-Ping", "Allow-IGMP", "Allow-DHCPv6", "Allow-MLD", "Allow-ICMPv6-Input",
+                 "Allow-ICMPv6-Forward", "Allow-IPSec-ESP", "Allow-ISAKMP"}
+
+
+def _rule_desc(t, d: dict) -> str:
+    """Lidsky popis pravidla: odkud [IP/MAC] → kam [IP], protokol port: akce."""
+    src = (t("rl.any_zone") if d["src"] == "*" else d["src"]) + (f" [{', '.join(d['src_ip'] + d['src_mac'])}]"
+                                                                  if d["src_ip"] or d["src_mac"] else "")
+    dest = (t("fw.router") if not d["dest"] else t("rl.any_zone") if d["dest"] == "*" else d["dest"]) + \
+        (f" [{', '.join(d['dest_ip'])}]" if d["dest_ip"] else "")
+    what = ("/".join(d["proto"]) if d["proto"] and d["proto"] != ["all"] else t("rl.any_proto")) + \
+        (f" {d['dest_port']}" if d["dest_port"] else "")
+    return f"{src} → {dest}, {what}: {d['target']}"
+
+
+async def _rule_preview(request: Request, t, m: dict, op: str):
+    """Pravidla firewallu: nove (s pozici), uprava, smazani, posun. Vse s pojistkou."""
+    title = t("preview.title")
+    form = await request.form()
+    r = store.router
+    rid = str(form.get("id") or "")
+    old = next((x for x in m["rules"] if x["id"] == rid), None)
+    if op != "rule_add" and (not old or not rulemod.SID_RE.match(rid)):
+        return result(request, title, actions.Result(False, t("msg.bad_request")))
+    crit_k, warn_k = [], []
+    if op == "rule_del":
+        cmds = [f"uci delete firewall.{rid}"]
+        changes = [t("rl.do_del", name=old["name"], desc=_rule_desc(t, old))]
+        if old["target"] == "ACCEPT":
+            crit_k += fwdmod.lockout_rule(m, old, None)
+        if old["name"] in DEFAULT_RULES:
+            warn_k.append(("rl.w_default", {"name": old["name"]}))
+    elif op == "rule_move":
+        direction = str(form.get("dir") or "")
+        nb = rulemod.neighbour(m, rid, direction)
+        if direction not in ("up", "down") or not nb:
+            return result(request, title, actions.Result(False, t("msg.bad_request")))
+        cmds = [rulemod.reorder_cmd(rid, nb["pos"])]
+        changes = [t("rl.do_up" if direction == "up" else "rl.do_down", name=old["name"], other=nb["name"])]
+        if (nb["target"] == "ACCEPT") != (old["target"] == "ACCEPT"):
+            warn_k.append(("rl.w_move_matters", {"name": old["name"], "other": nb["name"]}))
+    else:
+        if op == "rule_edit" and old["extra"]:
+            return result(request, title, actions.Result(False, t("rl.err_extra", opts=", ".join(old["extra"]))))
+        data_in = {k: str(form.get(k) or "") for k in ("name", "src", "dest", "proto", "target", "src_ip", "dest_ip",
+                                                       "src_mac", "dest_port")}
+        errs, crit_k, warn_k, d = rulemod.check(m, data_in, old if op == "rule_edit" else None)
+        if errs:
+            return result(request, title, actions.Result(False, "\n".join(t(k, **a) for k, a in errs)))
+        if op == "rule_add":
+            sid = rulemod.new_sid()
+            cmds = rulemod.set_cmds(sid, d, new=True)
+            where = str(form.get("position") or "end")
+            first = m["rules"][0] if m["rules"] else None
+            before = first if where == "start" else next((x for x in m["rules"] if x["id"] == where), None)
+            if where not in ("end", "start") and not before:
+                return result(request, title, actions.Result(False, t("msg.bad_request")))
+            pos = before["pos"] - 0.5 if before else 10 ** 9
+            if before:
+                cmds.append(rulemod.reorder_cmd(sid, before["pos"]))
+            changes = [t("rl.do_add", desc=_rule_desc(t, d), name=d["name"]),
+                       t("rl.at_end") if not before else t("rl.before", name=before["name"])]
+            warn_k += rulemod.order_issues(m, d, pos)
+        else:
+            cmds = rulemod.set_cmds(rid, d, new=False)
+            changes = [t("rl.do_edit", name=old["name"], old=_rule_desc(t, old), new=_rule_desc(t, d))]
+            warn_k += rulemod.order_issues(m, d, old["pos"], own_id=rid)
+            if not old["enabled"]:
+                warn_k.append(("fwd.w_still_off", {}))
+    crits = [t(k, **a) for k, a in crit_k]
+    warns = [t(k, **a) for k, a in warn_k]
+    token = store.add_svc_pending(r.name, cmds, {"op": op, "uci": "firewall", "changes": changes})
+    shown = [*cmds, "uci commit firewall", fwmod.CHECK, *fwmod.RELOAD, t("safe.shown")]
+    return render(request, "_svc_preview.html", ap=r.name, cmds=shown, changes=changes, token=token, note=t("rl.note"),
+                  warns=warns, crits=crits, danger=bool(crits) or op == "rule_del")
 
 
 async def _matrix_preview(request: Request, t, m: dict):
@@ -2411,6 +2493,8 @@ async def services_apply(request: Request, token: str = Form(...)):
             store.fw_demo_fwd[info["id"]] = {**info["data"], "enabled": info["enabled"]}
         elif info.get("op") == "matrix":
             store.fw_demo_zops += zonemod.demo_ops(cmds)
+        elif str(info.get("op", "")).startswith("rule_"):
+            store.demo_rule_cmds += cmds
         elif info.get("uci") == "apnet":
             for n, c in info["per_ap"].items():
                 store.demo_ap_cmds.setdefault(n, []).extend(c)

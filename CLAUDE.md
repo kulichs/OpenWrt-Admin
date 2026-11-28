@@ -180,6 +180,7 @@ openwrt_admin/
     safeapply.py             # pojistka: zaloha + odpocet na zarizeni, zmena na pozadi, potvrzeni novym spojenim
     blocks.py                # blokovani zarizeni: pravidlo owa_blk_<id> + cron na routeru (rozvrh, docasne)
     portfwd.py               # presmerovani portu (owa_fwd_<id>, kontroly) + pojistka proti odriznuti spravy
+    rules.py                 # pravidla firewallu (owa_rule_<id>): kontroly, poradi (uci reorder), zastineni
     zones.py                 # mapa zon klikanim: input/forward zony, forwarding (owa_zf_<id>), rizika
     vlans.py                 # prehled VLAN router + AP (swconfig, DSA, 8021q, 19.07) a kontroly konzistence
     netwiz.py                # nova sit na routeru (VLAN+rozhrani+DHCP+zona) a smazani s uklidem; uci_sim pro demo
@@ -208,6 +209,9 @@ openwrt_admin/
   při úpravě nejdřív smazat. Ochrana proti odříznutí: `@@me` = `$SSH_CLIENT` při čtení (IP klienta + port SSH
   routeru) → zóna; `lockout_rule/redirect/block` vrací rizika, náhled je pak `danger` s `crits`. Je to varování,
   ne zákaz – skutečná ochrana je pojistka (90 s). Bez `$SSH_CLIENT` se nehlásí nic.
+- **Pravidla (`app/rules.py`):** `firewall.build` dává u pravidla `pos` (pořadí sekce pro `uci reorder`) a `extra`
+  (volby, které formulář nezná → jen zapnout/posunout/smazat). Posun = reorder na pozici souseda. `covers(a, b)` je
+  zjednodušené (zóna, cíl, protokol, porty, src IP); MAC / cílová IP / negace u `a` → neposuzuje. Demo: `uci_sim` umí reorder.
 - **Mapa zón (`app/zones.py`):** změny z matice jako `input|zona|1`, `zfwd|zona|0`, `fwd|odkud|kam|1`, všechny v jednom
   náhledu a jedné pojistce. JS (`owCell`) v `_firewall_body.html` jen značí políčka a skládá skryté inputy `ch`.
   WAN zóna = `wan_zones` + `wan_zone` (i zóna, kde je WAN s dalšími sítěmi – pak `zm.w_mixed`).

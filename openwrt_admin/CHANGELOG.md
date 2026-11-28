@@ -2,6 +2,15 @@
 
 Each version in English, then Czech. / Každá verze anglicky, pak česky.
 
+## 0.30.0
+- **Firewall rules**: new rule (from zone / IPs / MACs, to router / zone / IPs, protocol, ports, allow / reject / drop), edit, delete and **order** (new rule at the end, at the start or before a chosen rule; ↑ ↓ to move existing ones). Rules with options the form does not know can be toggled, moved and deleted only.
+- Checks: opening the router or a zone to the internet and cutting the app's SSH in red; a rule without effect, a rule shadowed by an earlier one with the opposite action, a rule that shadows a later exception, deleting a default OpenWrt rule.
+- Verified: "IoT without internet except one device" in both orders (shadowing detected, correct order clean), move, edit, delete, lockout and WAN checks, `uci reorder` semantics in the demo simulator. Not yet on the real network.
+---
+- **Pravidla firewallu**: nové pravidlo (odkud zóna / IP / MAC, kam router / zóna / IP, protokol, porty, povolit / odmítnout / zahodit), úprava, smazání a **pořadí** (nové na konec, na začátek nebo před zvolené pravidlo; existující ↑ ↓). Pravidla s volbami, které formulář nezná, jde jen zapnout, posunout a smazat.
+- Kontroly: otevření routeru nebo zóny z internetu a přerušení SSH aplikace červeně; pravidlo bez účinku, pravidlo zastíněné dřívějším s opačnou akcí, pravidlo, které zastíní pozdější výjimku, smazání výchozího pravidla OpenWrt.
+- Ověřeno: „IoT bez internetu kromě jednoho zařízení“ v obou pořadích (zastínění odhaleno, správné pořadí bez varování), posun, úprava, smazání, kontroly odříznutí a WAN, chování `uci reorder` v demo simulátoru. Na skutečné síti zatím ne.
+
 ## 0.29.1
 - Firewall tab: the intro text no longer says that only turning rules on and off is possible (blocking, port forwards and the zone map have been there since 0.22–0.24).
 ---

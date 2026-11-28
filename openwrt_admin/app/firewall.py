@@ -134,7 +134,9 @@ def build(text: str) -> dict:
     forwards = [{"id": sid, "src": _first(o.get("src")), "dest": _first(o.get("dest")),
                  "enabled": str(o.get("enabled", "1")) != "0"} for sid, o in order if o["_type"] == "forwarding"]
     rules, redirects = [], []
-    for sid, o in order:
+    editable = {"_type", "_order", "name", "src", "dest", "proto", "dest_port", "src_ip", "dest_ip", "src_mac", "family",
+                "target", "enabled"}
+    for pos, (sid, o) in enumerate(order):
         if o["_type"] == "rule":
             r = {"id": sid, "name": _first(o.get("name")) or sid, "src": _first(o.get("src")), "dest": _first(o.get("dest")),
                  "proto": _list(o.get("proto")), "dest_port": " ".join(_list(o.get("dest_port"))),
@@ -144,6 +146,8 @@ def build(text: str) -> dict:
                  "time": {k: _first(o.get(k)) for k in ("start_time", "stop_time", "weekdays", "start_date", "stop_date",
                                                           "monthdays", "utc_time") if o.get(k)}}
             r["kind"] = "block" if r["target"] in ("DROP", "REJECT") and (r["src_mac"] or r["src_ip"]) and r["dest"] else ""
+            r["pos"] = pos                                   # poradi sekce v /etc/config/firewall (pro uci reorder)
+            r["extra"] = sorted(k for k in o if k not in editable)   # volby, ktere formular aplikace neumi
             rules.append(r)
         elif o["_type"] == "redirect":
             redirects.append({"id": sid, "name": _first(o.get("name")) or sid, "src": _first(o.get("src")) or "wan",

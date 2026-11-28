@@ -314,6 +314,17 @@ def uci_sim(text: str, cmds: list[str], pkg: str) -> str:
 
     for c in cmds:
         c = c.strip().strip("{}").replace("|| true;", "").replace("|| true", "").strip().rstrip(";").strip()
+        mr = re.match(r"^uci reorder (\w+)\.(\w+)=(\d+)$", c)
+        if mr and mr.group(1) == pkg:
+            sec_key = f"{pkg}.{mr.group(2)}"
+            block = [l for l in lines if l.split("=", 1)[0] == sec_key or l.startswith(sec_key + ".")]
+            rest = [l for l in lines if l not in block]
+            heads = [k for k, l in enumerate(rest) if l.startswith(pkg + ".") and l.split("=", 1)[0].count(".") == 1]
+            n = int(mr.group(3))
+            at = heads[n] if n < len(heads) else ((max(k for k, l in enumerate(rest) if l.startswith(pkg + ".")) + 1)
+                                                   if any(l.startswith(pkg + ".") for l in rest) else len(rest))
+            lines = rest[:at] + block + rest[at:]
+            continue
         m = re.match(r"^uci (?:-q )?(set|add_list|del_list|delete) (\S+?)(?:=(.*))?$", c)
         if not m or not m.group(2).startswith(pkg + "."):
             continue

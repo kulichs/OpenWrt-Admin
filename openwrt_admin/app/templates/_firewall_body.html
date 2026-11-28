@@ -16,6 +16,30 @@
   <button type="submit">{{ t("ssid.preview") }}</button>
 </form>
 {%- endmacro %}
+{% macro ruleform(r=None) -%}
+{% set pk = 'any' %}{% if r and r.proto %}{% set ps = r.proto | sort | join(',') %}{% set pk = {'tcp': 'tcp', 'udp': 'udp', 'tcp,udp': 'tcpudp', 'icmp': 'icmp'}.get(ps, 'any') %}{% endif %}
+<form class="rule-form" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out">
+  <input type="hidden" name="op" value="{{ 'rule_edit' if r else 'rule_add' }}">{% if r %}<input type="hidden" name="id" value="{{ r.id }}">{% endif %}
+  <div class="filters edit">
+    <label>{{ t("fw.name") }} <input name="name" required maxlength="50" value="{{ r.name if r else '' }}" placeholder="{{ t('rl.name_ph') }}"></label>
+    <label>{{ t("fw.action") }} <select name="target">{% for x in ["ACCEPT", "REJECT", "DROP"] %}<option value="{{ x }}" {{ 'selected' if (r and r.target == x) or (not r and x == 'REJECT') }}>{{ t("rl.t_" ~ x) }}</option>{% endfor %}</select></label>
+    {% if not r %}<label>{{ t("rl.position") }} <select name="position"><option value="end">{{ t("rl.pos_end") }}</option><option value="start">{{ t("rl.pos_start") }}</option>
+      {% for x in fw.rules %}<option value="{{ x.id }}">{{ t("rl.pos_before", name=x.name) }}</option>{% endfor %}</select></label>{% endif %}
+  </div>
+  <div class="filters edit">
+    <label>{{ t("rl.from") }} <select name="src">{% for z in fw.zones %}<option {{ 'selected' if r and r.src == z.name }}>{{ z.name }}</option>{% endfor %}<option value="*" {{ 'selected' if r and r.src == '*' }}>{{ t("rl.any_zone") }}</option></select></label>
+    <label>{{ t("rl.src_ip") }} <input name="src_ip" class="mono" style="width:12em" value="{{ (r.src_ip | join(' ')) if r else '' }}" placeholder="10.10.20.0/24"></label>
+    <label>{{ t("rl.src_mac") }} <input name="src_mac" class="mono" style="width:11em" value="{{ (r.src_mac | join(' ')) if r else '' }}" placeholder="aa:bb:cc:dd:ee:ff"></label>
+  </div>
+  <div class="filters edit">
+    <label>{{ t("rl.to") }} <select name="dest"><option value="" {{ 'selected' if r and not r.dest }}>{{ t("fw.router") }}</option>{% for z in fw.zones %}<option {{ 'selected' if (r and r.dest == z.name) or (not r and z.name == fw.wan_zone) }}>{{ z.name }}</option>{% endfor %}<option value="*" {{ 'selected' if r and r.dest == '*' }}>{{ t("rl.any_zone") }}</option></select></label>
+    <label>{{ t("rl.dest_ip") }} <input name="dest_ip" class="mono" style="width:12em" value="{{ (r.dest_ip | join(' ')) if r else '' }}" placeholder="{{ t('rl.anyone') }}"></label>
+    <label>{{ t("fwd.proto") }} <select name="proto">{% for k, lbl in [("any", t("rl.any_proto")), ("tcp", "TCP"), ("udp", "UDP"), ("tcpudp", "TCP+UDP"), ("icmp", "ICMP")] %}<option value="{{ k }}" {{ 'selected' if k == pk }}>{{ lbl }}</option>{% endfor %}</select></label>
+    <label>{{ t("rl.port") }} <input name="dest_port" class="mono" style="width:8em" value="{{ r.dest_port if r else '' }}" placeholder="443 8000-8100"></label>
+    <button type="submit">{{ t("ssid.preview") }}</button>
+  </div>
+</form>
+{%- endmacro %}
 <div id="fw-body">
 {% if fw.error and not fw.zones %}<p class="err">{{ fw.error }}</p>{% else %}
 <p class="muted">{{ t("fw.intro") }}</p>
@@ -171,10 +195,21 @@
         {% if r.time %}<br>⏱ {{ r.time.get("start_time", "") }}–{{ r.time.get("stop_time", "") }} {{ r.time.get("weekdays", "") }} {{ r.time.get("stop_date", "") }}{% endif %}
         {% if r.family %} <span class="muted">{{ r.family }}</span>{% endif %}</td>
       <td><span class="tag {{ 'svc-running' if r.target == 'ACCEPT' else 'svc-failed' }}">{{ r.target }}</span></td>
-      <td class="btns">{% if not r.enabled %}<span class="muted small">{{ t("fw.off") }}</span> {% endif %}{{ toggle(r) }}</td>
+      <td class="btns">{% if not r.enabled %}<span class="muted small">{{ t("fw.off") }}</span> {% endif %}{{ toggle(r) }}
+        {% if can_edit and fw.fwver == "fw4" %}
+        {% if not loop.first %}<button type="button" class="secondary small" title="{{ t('rl.up') }}" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out" hx-vals='{{ {"op": "rule_move", "id": r.id, "dir": "up"} | tojson }}'>↑</button>{% endif %}
+        {% if not loop.last %}<button type="button" class="secondary small" title="{{ t('rl.down') }}" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out" hx-vals='{{ {"op": "rule_move", "id": r.id, "dir": "down"} | tojson }}'>↓</button>{% endif %}
+        {% if not r.extra %}<details class="inline-edit"><summary class="small">{{ t("dhcp.edit") }}</summary>{{ ruleform(r) }}</details>
+        {% else %}<span class="small muted" title="{{ r.extra | join(', ') }}">{{ t("rl.luci_only") }}</span>{% endif %}
+        <button type="button" class="secondary small" title="{{ t('rl.delete') }}" hx-post="{{ base }}/firewall/preview" hx-target="previous .cmd-out" hx-vals='{{ {"op": "rule_del", "id": r.id} | tojson }}'>✕</button>
+        {% endif %}</td>
     </tr>
     {% endfor %}
   </table>
+  {% if can_edit and fw.fwver == "fw4" %}
+  <details class="inline-edit" id="rule-new"><summary>{{ t("rl.new") }}</summary>{{ ruleform() }}</details>
+  <p class="muted small">{{ t("rl.hint") }}</p>
+  {% endif %}
   <p class="muted small">{{ t("fw.rules_hint") }}</p>
 </div>
 
